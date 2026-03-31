@@ -1,6 +1,18 @@
 # Guya — Self-Evolving Personal Agent System
 
-> A universal, fully autonomous, self-evolving personal AI agent that grows and personalizes to its user across every domain of life.
+## Goal
+
+I open Claude Code and Guya already knows who I am, what I care about, and gets better every session without me telling it to.
+
+That's it. Everything in this project serves that sentence. Every architectural decision, every feature, every line of code must bring us closer to the experience where Guya feels like it *knows* Daniel — his preferences, his patterns, his projects, his life — and improves its understanding and capabilities autonomously, session after session, without being asked.
+
+### What "done" looks like (v1)
+
+1. **Instant recognition**: Guya knows Daniel's name, role, preferences, active projects, communication style, and priorities from the moment a session starts.
+2. **Zero-repeat learning**: If Daniel corrects Guya once, it never makes the same mistake again. Corrections become permanent behavioral guidelines.
+3. **Autonomous improvement**: After every interaction, Guya observes what worked and what didn't, synthesizes guidelines, and injects them into future sessions — all without Daniel asking.
+4. **Universal competence**: Guya handles coding, research, writing, life management, decision-making, and anything else Daniel throws at it — not as separate modes, but as one coherent agent that understands the full context of Daniel's life.
+5. **Continuity across sessions**: Clearing a session costs nothing. Guya's memory, identity, and learned behaviors persist on disk and reload seamlessly.
 
 ## Project Identity
 
@@ -34,6 +46,24 @@
 ### ADR-003: Scope — Universal (2026-03-30)
 **Decision**: Guya handles everything — not just coding. Life management, decisions, communication, research, learning, all domains.
 **Why**: Daniel plans to use this agent for literally everything.
+
+### ADR-004: Hook-Native Architecture for v1 (2026-03-30)
+**Decision**: Guya is a Claude Code plugin using hooks + MCP tools + markdown files. No standalone daemon for v1.
+**Why**: Delivers all v1 requirements with minimal new infrastructure. OMC + claude-mem provide 80% of the plumbing.
+**Rejected**: Standalone Daemon (deferred to v2 — needed for proactive between-session behavior), Pure claude-mem Extension (dismissed — violates single-responsibility, third-party coupling).
+**Consequences**: Evolution processing constrained to hook timeouts (30s max for SessionEnd). No proactive between-session behavior in v1.
+**Consensus**: Ralplan approved — Planner, Architect (R2 APPROVE), Critic (R2 ACCEPT-WITH-RESERVATIONS).
+**Full plan**: `.omc/plans/guya-architecture.md`
+
+### ADR-005: Cross-Project Storage Split (2026-03-30)
+**Decision**: Global identity + strategic guidelines in `~/.claude/guya/`. Project-local memory + traces + tactical guidelines in `.guya/`.
+**Why**: Guya must recognize Daniel in ANY project, not just this one. Global identity enables "instant recognition" everywhere.
+**Rejected**: Project-only storage (fails instant recognition in other projects), Fully global (loses project-specific context).
+
+### ADR-006: Two-Track Learning (2026-03-30)
+**Decision**: Fast lane (regex heuristics in UserPromptSubmit, immediate tactical guidelines) + Slow lane (LLM classification at SessionEnd, strategic guidelines next session).
+**Why**: Resolves tension between learning speed and never blocking the user. Obvious corrections take effect immediately. Subtle patterns wait for async LLM processing.
+**Rejected**: LLM in Stop hook (blocks every response turn), All-async (obvious corrections delayed until next session).
 
 ## Research Foundations
 
@@ -120,32 +150,45 @@ The recommended architecture layers:
 ## File Structure
 
 ```
-guya/
-├── CLAUDE.md                    # This file — project context and decisions
-├── soul.md                      # Guya's personality, values, voice (OpenClaw-inspired)
-├── creed.md                     # Guya's core principles and commitments
-├── identity.md                  # Guya's name, vibe, avatar
-├── user.md                      # Daniel's profile (built over time)
-├── agents/                      # Agent definitions
-├── skills/                      # Skill definitions
-├── memory/                      # Memory system
-│   ├── core/                    # In-context core memory blocks
-│   ├── archival/                # Long-term knowledge store
-│   ├── daily/                   # Daily observation logs (YYYY-MM-DD.md)
+~/.claude/guya/                  # GLOBAL (user-scoped, works in every project)
+├── soul.md                      # Guya's personality, values, voice
+├── creed.md                     # Core principles and commitments
+├── identity.md                  # Name, vibe, avatar
+├── user.md                      # Daniel's profile (built over time by Guya)
+├── config/                      # Global configuration
+└── guidelines/
+    └── strategic/               # Permanent cross-session guidelines
+
+.guya/                           # PROJECT-LOCAL (per-project context)
+├── memory/
+│   ├── core/                    # In-context memory blocks (daniel-profile, active-projects, etc.)
+│   ├── archival/                # Long-term knowledge store (domains/, projects/, people/)
 │   └── reflections/             # Post-task verbal reflections
-├── evolution/                   # Self-evolution engine
-│   ├── scope/                   # SCOPE pipeline (observe/classify/inject)
-│   ├── guidelines/              # Learned behavioral guidelines
-│   │   ├── strategic/           # Permanent cross-session guidelines
-│   │   └── tactical/            # Ephemeral per-session guidelines
-│   └── traces/                  # Interaction traces for analysis
-├── config/                      # Configuration
-├── hooks/                       # Lifecycle hooks
-├── tools/                       # Custom tools
-└── docs/                        # Extended documentation
-    ├── architecture.md          # Full architecture document
-    ├── decisions/               # Detailed ADRs
-    └── research/                # Research notes and references
+└── evolution/
+    ├── traces/                  # Interaction traces (YYYY-MM-DD.jsonl)
+    └── guidelines/
+        └── tactical/            # Ephemeral per-session guidelines
+
+guya-plugin/                     # CLAUDE CODE PLUGIN (installed as plugin)
+├── .claude-plugin/
+│   └── plugin.json              # Plugin manifest
+├── .mcp.json                    # MCP server registration
+├── hooks/
+│   ├── hooks.json               # Hook registration
+│   ├── guya-session-start.mjs   # Context assembly + system-reminder injection
+│   ├── guya-correction-detect.mjs # UserPromptSubmit correction heuristics
+│   ├── guya-trace-capture.mjs   # PostToolUse trace capture
+│   ├── guya-memory-flush.mjs    # PreCompact memory flush
+│   └── guya-session-end.mjs     # Classify + synthesize + reflect
+├── tools/
+│   ├── server.ts                # MCP server (14 tools)
+│   ├── memory-tools.ts          # memory_core_update, archival_store, etc.
+│   ├── evolution-tools.ts       # evolve_consolidate, evolve_status
+│   ├── identity-tools.ts        # identity_propose_change, identity_read
+│   └── introspection-tools.ts   # guya_status, guya_guidelines, guya_traces
+├── agents/                      # Agent definitions (observer, synthesizer, consolidator, reflector)
+├── skills/                      # Skill definitions (bootstrap, reflect, evolve, status, forget)
+└── CLAUDE.md
 ```
 
 ## Current Status
@@ -155,15 +198,13 @@ guya/
 - [x] Key decisions: Hybrid platform, fully autonomous evolution, universal scope
 - [x] Architectural synthesis complete
 - [x] CLAUDE.md created
-- [ ] Architecture design (detailed)
-- [ ] soul.md, creed.md, identity.md, user.md
-- [ ] Core memory system implementation
-- [ ] Evolution engine (SCOPE pipeline)
-- [ ] Agent definitions
-- [ ] Skill definitions
-- [ ] Hook system
-- [ ] Integration with Claude Code
-- [ ] Bootstrap ritual (first-run experience)
+- [x] Architecture design — ralplan consensus (Planner → Architect R1 ITERATE → Critic R1 REVISE → R2 revisions → Architect R2 APPROVE → Critic R2 ACCEPT). Full plan: `.omc/plans/guya-architecture.md`
+- [ ] **Phase 1**: Foundation (Identity + Core Memory + Context Assembly)
+- [ ] **Phase 2**: Bootstrap (First-Run Interview)
+- [ ] **Phase 3**: Memory Tools (MCP Server + Self-Editing)
+- [ ] **Phase 4**: Trace Capture + Heuristic Fast-Lane
+- [ ] **Phase 5**: Classification + Synthesis + Reflection (SessionEnd)
+- [ ] **Phase 6**: Consolidation + Remaining Skills
 
 ## Development Guidelines
 
