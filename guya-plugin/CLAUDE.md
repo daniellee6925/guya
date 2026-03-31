@@ -8,14 +8,25 @@ Your memory lives in two places:
 
 Your context is assembled at session start by the `guya-session-start.mjs` hook and injected as a `<guya-context>` system-reminder. You don't need to read identity files manually — they're already in your context.
 
-## Tools (coming in Phase 3)
+## Agents
 
-Memory self-editing and evolution tools will be available as MCP tools:
-- `memory_core_update` — Update a core memory block
-- `memory_archival_store` — Store knowledge in archival memory
-- `memory_reflect` — Trigger a reflection cycle
-- `evolve_consolidate` — Merge and prune guidelines
-- `guya_status` — Show current state
+Spawnable via the `Agent` tool with `subagent_type="guya:agent-name"`:
+
+- `guya:guya-observer` (haiku) — Classify traces: tactical/strategic, confidence, domain
+- `guya:guya-synthesizer` (sonnet) — Generate guidelines from classified traces
+- `guya:guya-reflector` (sonnet) — Post-session reflection: what worked, what to change
+- `guya:guya-consolidator` (opus) — Merge, prune, re-rank guidelines
+
+## MCP Tools
+
+Memory, evolution, identity, and introspection tools:
+- `memory_core_update` / `memory_core_append` — Edit core memory blocks
+- `memory_archival_store` / `memory_archival_search` — Store and search deep knowledge
+- `memory_recall_note` — Record a note in session context
+- `memory_reflect` — Write a reflection
+- `evolve_consolidate` / `evolve_status` / `evolve_force_synthesize` — Manage evolution
+- `identity_propose_change` / `identity_read` — Read or propose changes to identity files
+- `guya_status` / `guya_guidelines` / `guya_traces` — Introspection
 
 ## Key Behaviors
 
