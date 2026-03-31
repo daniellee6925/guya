@@ -23,21 +23,6 @@ const SERVER_VERSION = "0.1.0";
 
 const server = new McpServer({ name: SERVER_NAME, version: SERVER_VERSION });
 
-// --- Core status tool ---
-server.tool(
-  "guya_status",
-  "Returns the current status and version of the Guya plugin MCP server.",
-  {},
-  async () => ({
-    content: [
-      {
-        type: "text",
-        text: JSON.stringify({ status: "ok", version: SERVER_VERSION }),
-      },
-    ],
-  })
-);
-
 // --- Conditionally load memory-tools ---
 try {
   const { registerMemoryTools } = await import("./memory-tools.js");

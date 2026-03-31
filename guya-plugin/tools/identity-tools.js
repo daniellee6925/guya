@@ -15,6 +15,7 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
+import { z } from "zod";
 
 // --- helpers ---
 
@@ -50,18 +51,9 @@ export function registerIdentityTools(server) {
     "identity_propose_change",
     "Propose a change to a core identity file (soul.md, creed.md, identity.md). Writes a proposal file for Daniel's review — does not modify the identity file directly.",
     {
-      file: {
-        type: "string",
-        description: "Identity file to propose changing. Must be one of: soul.md, creed.md, identity.md",
-      },
-      proposedContent: {
-        type: "string",
-        description: "The full proposed new content for the file",
-      },
-      reason: {
-        type: "string",
-        description: "Why this change is being proposed",
-      },
+      file: z.string().describe("Identity file to propose changing. Must be one of: soul.md, creed.md, identity.md"),
+      proposedContent: z.string().describe("The full proposed new content for the file"),
+      reason: z.string().describe("Why this change is being proposed"),
     },
     async ({ file, proposedContent, reason }) => {
       if (!ALLOWED_PROPOSE_FILES.has(file)) {
@@ -115,10 +107,7 @@ export function registerIdentityTools(server) {
     "identity_read",
     "Read a core identity file from ~/.claude/guya/. Allowed files: soul.md, creed.md, identity.md, user.md",
     {
-      file: {
-        type: "string",
-        description: "Identity file to read. Must be one of: soul.md, creed.md, identity.md, user.md",
-      },
+      file: z.string().describe("Identity file to read. Must be one of: soul.md, creed.md, identity.md, user.md"),
     },
     async ({ file }) => {
       if (!ALLOWED_READ_FILES.has(file)) {

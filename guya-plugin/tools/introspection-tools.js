@@ -15,6 +15,7 @@ import { readFileSync, readdirSync, existsSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
 import matter from "gray-matter";
+import { z } from "zod";
 
 // --- helpers ---
 
@@ -162,7 +163,7 @@ export function registerIntrospectionTools(server) {
     "guya_traces",
     "Show the last 20 trace entries for a given date (defaults to today).",
     {
-      date: { type: "string", description: "Date in YYYY-MM-DD format (optional, defaults to today)" },
+      date: z.string().optional().describe("Date in YYYY-MM-DD format (optional, defaults to today)"),
     },
     async ({ date } = {}) => {
       const targetDate = date || todayYMD();

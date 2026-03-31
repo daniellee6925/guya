@@ -24,6 +24,7 @@ import {
 import { join } from "path";
 import { homedir } from "os";
 import matter from "gray-matter";
+import { z } from "zod";
 
 // --- helpers ---
 
@@ -237,10 +238,7 @@ export function registerEvolutionTools(server) {
     "evolve_consolidate",
     "Consolidate guidelines: merge overlapping, prune stale low-confidence, promote high-confidence tactical to strategic, re-rank by score.",
     {
-      dryRun: {
-        type: "boolean",
-        description: "If true, return what would happen without modifying files. Defaults to false.",
-      },
+      dryRun: z.boolean().optional().describe("If true, return what would happen without modifying files. Defaults to false."),
     },
     async ({ dryRun = false } = {}) => {
       const strategicFiles = collectMdFiles(strategicDir());

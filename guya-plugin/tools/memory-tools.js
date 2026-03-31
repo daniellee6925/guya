@@ -18,6 +18,7 @@ import { readFileSync, writeFileSync, appendFileSync, mkdirSync, readdirSync, re
 import { join, dirname } from "path";
 import { tmpdir } from "os";
 import { randomBytes } from "crypto";
+import { z } from "zod";
 
 // --- helpers ---
 
@@ -68,8 +69,8 @@ export function registerMemoryTools(server) {
     "memory_core_update",
     "Overwrite a core memory block with new content (atomic write).",
     {
-      block: { type: "string", description: "Block name, e.g. 'active-projects'" },
-      content: { type: "string", description: "New full content for the block" },
+      block: z.string().describe("Block name, e.g. 'active-projects'"),
+      content: z.string().describe("New full content for the block"),
     },
     async ({ block, content }) => {
       const filePath = join(guyaDir(), "memory", "core", `${block}.md`);
@@ -83,8 +84,8 @@ export function registerMemoryTools(server) {
     "memory_core_append",
     "Append content to a core memory block, creating it if it does not exist.",
     {
-      block: { type: "string", description: "Block name, e.g. 'active-projects'" },
-      content: { type: "string", description: "Content to append" },
+      block: z.string().describe("Block name, e.g. 'active-projects'"),
+      content: z.string().describe("Content to append"),
     },
     async ({ block, content }) => {
       const filePath = join(guyaDir(), "memory", "core", `${block}.md`);
@@ -99,7 +100,7 @@ export function registerMemoryTools(server) {
     "memory_recall_note",
     "Append a timestamped note to the session-context core block.",
     {
-      note: { type: "string", description: "The note to record" },
+      note: z.string().describe("The note to record"),
     },
     async ({ note }) => {
       const filePath = join(guyaDir(), "memory", "core", "session-context.md");
@@ -115,9 +116,9 @@ export function registerMemoryTools(server) {
     "memory_archival_store",
     "Store a titled section in an archival domain file.",
     {
-      domain: { type: "string", description: "Domain name, e.g. 'typescript-patterns'" },
-      title: { type: "string", description: "Section title" },
-      content: { type: "string", description: "Section content" },
+      domain: z.string().describe("Domain name, e.g. 'typescript-patterns'"),
+      title: z.string().describe("Section title"),
+      content: z.string().describe("Section content"),
     },
     async ({ domain, title, content }) => {
       const filePath = join(guyaDir(), "memory", "archival", `${domain}.md`);
@@ -133,7 +134,7 @@ export function registerMemoryTools(server) {
     "memory_archival_search",
     "Search all archival memory files for a substring (case-insensitive). Returns up to 20 matching lines with file and line number.",
     {
-      query: { type: "string", description: "Search term" },
+      query: z.string().describe("Search term"),
     },
     async ({ query }) => {
       const archivalDir = join(guyaDir(), "memory", "archival");
@@ -170,7 +171,7 @@ export function registerMemoryTools(server) {
     "memory_reflect",
     "Write a timestamped reflection file to the reflections directory.",
     {
-      reflection: { type: "string", description: "The reflection text" },
+      reflection: z.string().describe("The reflection text"),
     },
     async ({ reflection }) => {
       const ts = Date.now();
