@@ -21,6 +21,11 @@
             "type": "command",
             "command": "node \"$CLAUDE_PLUGIN_ROOT\"/hooks/guya-correction-detect.mjs",
             "timeout": 1
+          },
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PLUGIN_ROOT\"/hooks/guya-intent-detect.mjs",
+            "timeout": 1
           }
         ]
       }
