@@ -320,8 +320,8 @@ async function main() {
   let directory = process.cwd();
   try {
     const input = JSON.parse(stdinData);
-    if (input.sessionId) sessionId = input.sessionId;
-    if (input.directory) directory = input.directory;
+    sessionId = input.session_id || input.sessionId || sessionId;
+    directory = input.cwd || input.directory || directory;
   } catch {}
 
   const apiKey = process.env.ANTHROPIC_API_KEY;

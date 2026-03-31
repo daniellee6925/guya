@@ -63,7 +63,11 @@ async function main() {
     let input = {};
     try { input = JSON.parse(stdinData); } catch {}
 
-    const { toolName = 'unknown', toolInput, toolOutput, sessionId = '', directory = process.cwd() } = input;
+    const toolName = input.tool_name || input.toolName || 'unknown';
+    const toolInput = input.tool_input || input.toolInput || '';
+    const toolOutput = input.tool_response || input.toolOutput || '';
+    const sessionId = input.session_id || input.sessionId || '';
+    const directory = input.cwd || input.directory || process.cwd();
 
     const tracesDir = join(directory, '.guya', 'evolution', 'traces');
     ensureTracesDir(tracesDir);

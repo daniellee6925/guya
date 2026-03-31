@@ -76,7 +76,9 @@ async function main() {
     let input = {};
     try { input = JSON.parse(stdinData); } catch {}
 
-    const { prompt = '', sessionId = '', directory = process.cwd() } = input;
+    const prompt = input.prompt || input.message || '';
+    const sessionId = input.session_id || input.sessionId || '';
+    const directory = input.cwd || input.directory || process.cwd();
 
     const correctionType = detectCorrection(prompt);
 

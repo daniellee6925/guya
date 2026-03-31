@@ -246,7 +246,7 @@ async function main() {
     let cwd = process.cwd();
     try {
       const input = JSON.parse(stdinData);
-      if (input.directory) cwd = input.directory;
+      cwd = input.cwd || input.directory || cwd;
     } catch {}
 
     // Check if global identity exists — if not, suggest bootstrap
