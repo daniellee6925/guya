@@ -1,0 +1,7 @@
+# Traces are large, ephemeral, append-only JSONL — don't commit
+evolution/traces/*.jsonl
+
+# Tactical guidelines are session-scoped and ephemeral
+evolution/guidelines/tactical/*.md
+
+# Keep everything else (memory, archival, reflections)

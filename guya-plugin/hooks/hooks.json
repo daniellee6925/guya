@@ -1,0 +1,17 @@
+{
+  "description": "Guya lifecycle hooks — context assembly, trace capture, correction detection, session-end evolution",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PLUGIN_ROOT\"/hooks/guya-session-start.mjs",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}

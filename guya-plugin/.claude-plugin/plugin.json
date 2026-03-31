@@ -1,0 +1,18 @@
+{
+  "name": "guya",
+  "version": "0.1.0",
+  "description": "Self-evolving personal agent — knows who you are, learns from every interaction, gets better every session",
+  "author": {
+    "name": "Daniel"
+  },
+  "license": "UNLICENSED",
+  "keywords": [
+    "claude-code",
+    "plugin",
+    "personal-agent",
+    "self-evolving",
+    "memory",
+    "identity"
+  ],
+  "hooks": "hooks/hooks.json"
+}

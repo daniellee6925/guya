@@ -1,0 +1,84 @@
+{
+  "title": "Guya Phase 1: Foundation",
+  "description": "Identity files, core memory structure, context assembly hook, and Claude Code plugin structure",
+  "stories": [
+    {
+      "id": "US-001",
+      "title": "Global identity directory and files",
+      "description": "Create ~/.claude/guya/ with soul.md, creed.md, identity.md, and user.md. These define who Guya is and who Daniel is.",
+      "priority": 1,
+      "passes": true,
+      "acceptanceCriteria": [
+        "Directory ~/.claude/guya/ exists",
+        "~/.claude/guya/soul.md exists and contains Guya's personality rooted in the teddy bear origin — unconditional support + hard truth + teaching",
+        "~/.claude/guya/creed.md exists and contains non-negotiable commitments: challenge first support second, never fake-positive, always teach the why, force convergence",
+        "~/.claude/guya/identity.md exists with name (Guya), creature type, vibe, emoji",
+        "~/.claude/guya/user.md exists with Daniel's full profile from the interview (role, thinking style, strengths, weaknesses, interaction preferences)",
+        "All files are valid markdown with no syntax errors"
+      ]
+    },
+    {
+      "id": "US-002",
+      "title": "Global guidelines directory",
+      "description": "Create ~/.claude/guya/guidelines/strategic/ for persistent cross-session behavioral guidelines",
+      "priority": 2,
+      "passes": true,
+      "acceptanceCriteria": [
+        "Directory ~/.claude/guya/guidelines/strategic/ exists",
+        "A seed guideline exists (e.g., teaching-first.md) with proper frontmatter (id, domain, confidence, created, rank)"
+      ]
+    },
+    {
+      "id": "US-003",
+      "title": "Project-local memory structure",
+      "description": "Create .guya/ directory tree for project-local memory, traces, and tactical guidelines",
+      "priority": 3,
+      "passes": true,
+      "acceptanceCriteria": [
+        "Directory .guya/memory/core/ exists",
+        ".guya/memory/core/daniel-profile.md exists with a summary of Daniel's profile",
+        ".guya/memory/core/active-projects.md exists (can be initially empty with template)",
+        ".guya/memory/core/active-guidelines.md exists (initially empty with template)",
+        ".guya/memory/core/session-context.md exists (initially empty with template)",
+        "Directory .guya/memory/archival/ exists",
+        "Directory .guya/memory/reflections/ exists",
+        "Directory .guya/evolution/traces/ exists",
+        "Directory .guya/evolution/guidelines/tactical/ exists",
+        ".gitignore in .guya/ excludes traces/*.jsonl (large, ephemeral) but includes memory/**"
+      ]
+    },
+    {
+      "id": "US-004",
+      "title": "Claude Code plugin structure",
+      "description": "Create the plugin manifest and hook registration so Guya can be installed as a Claude Code plugin",
+      "priority": 4,
+      "passes": true,
+      "acceptanceCriteria": [
+        "guya-plugin/.claude-plugin/plugin.json exists with valid plugin manifest (name, version, description)",
+        "guya-plugin/hooks/hooks.json exists with SessionStart hook registered",
+        "guya-plugin/CLAUDE.md exists with Guya's system prompt context",
+        "Plugin structure matches OMC/claude-mem pattern (verified by comparing with ~/.claude/plugins/cache/omc/oh-my-claudecode/4.9.1/.claude-plugin/)"
+      ]
+    },
+    {
+      "id": "US-005",
+      "title": "Context assembly hook (SessionStart)",
+      "description": "Implement guya-session-start.mjs that reads identity + core memory + guidelines and emits a <guya-context> system-reminder",
+      "priority": 5,
+      "passes": true,
+      "acceptanceCriteria": [
+        "guya-plugin/hooks/guya-session-start.mjs exists and is valid JavaScript/ESM",
+        "Hook reads from ~/.claude/guya/ (identity files) — handles missing files gracefully",
+        "Hook reads from .guya/memory/core/ (core memory blocks) — handles missing dir gracefully",
+        "Hook reads from ~/.claude/guya/guidelines/strategic/ (top 20 by rank) — handles empty dir",
+        "Hook reads from .guya/evolution/guidelines/tactical/ — handles empty dir",
+        "Hook reads .guya/memory/core/session-context.md for last session continuity",
+        "Hook assembles all content into a <guya-context> system-reminder block",
+        "Hook enforces ~4600 token budget (chars/4 approximation) with truncation",
+        "Hook creates .guya/ directory structure if missing (lazy init)",
+        "Running the hook script directly with test data produces valid system-reminder output on stdout",
+        "Hook completes in under 5 seconds"
+      ]
+    }
+  ]
+}
