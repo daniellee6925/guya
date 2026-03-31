@@ -212,12 +212,12 @@ guya-plugin/                     # CLAUDE CODE PLUGIN (installed as plugin)
 - [x] Architectural synthesis complete
 - [x] CLAUDE.md created
 - [x] Architecture design — ralplan consensus (Planner → Architect R1 ITERATE → Critic R1 REVISE → R2 revisions → Architect R2 APPROVE → Critic R2 ACCEPT). Full plan: `.omc/plans/guya-architecture.md`
-- [ ] **Phase 1**: Foundation (Identity + Core Memory + Context Assembly)
-- [ ] **Phase 2**: Bootstrap (First-Run Interview)
-- [ ] **Phase 3**: Memory Tools (MCP Server + Self-Editing)
-- [ ] **Phase 4**: Trace Capture + Heuristic Fast-Lane
-- [ ] **Phase 5**: Classification + Synthesis + Reflection (SessionEnd)
-- [ ] **Phase 6**: Consolidation + Remaining Skills
+- [x] **Phase 1**: Foundation (Identity + Core Memory + Context Assembly) — commit c26821e
+- [x] **Phase 2**: Bootstrap (First-Run Interview) — guya-bootstrap skill
+- [x] **Phase 3**: Memory Tools (MCP Server + Self-Editing) — 14 MCP tools, server.js, @modelcontextprotocol/sdk
+- [x] **Phase 4**: Trace Capture + Heuristic Fast-Lane — PostToolUse traces + UserPromptSubmit corrections
+- [x] **Phase 5**: Classification + Synthesis + Reflection (SessionEnd) — Anthropic API integration, haiku classify + sonnet synthesize
+- [x] **Phase 6**: Consolidation + Remaining Skills — evolution tools, identity tools, 4 skills, 4 agent definitions
 
 ## Development Guidelines
 

@@ -1,0 +1,12 @@
+{
+  "name": "guya-plugin",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Guya self-evolving personal agent - Claude Code plugin",
+  "main": "tools/server.js",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.36.0",
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "gray-matter": "^4.0.3"
+  }
+}
