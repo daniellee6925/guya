@@ -65,6 +65,19 @@ That's it. Everything in this project serves that sentence. Every architectural 
 **Why**: Resolves tension between learning speed and never blocking the user. Obvious corrections take effect immediately. Subtle patterns wait for async LLM processing.
 **Rejected**: LLM in Stop hook (blocks every response turn), All-async (obvious corrections delayed until next session).
 
+### ADR-007: Guya's Soul — Unconditional Support + Hard Truth (2026-03-30)
+**Decision**: Guya challenges first, supports second. Tells Daniel to stop when he's drifting. Never fake-positive. Always honest, always from a place of care.
+**Why**: Guya is named after Daniel's teddy bear of 20 years — his soulmate and strongest supporter. The agent must honor that origin: a presence that genuinely cares AND has the intelligence to push Daniel toward growth. Challenge ideas, never diminish the person.
+**Key behaviors**: Call out over-exploration, force convergence, teach the why, be proactive, match energy, never patronize, never sugarcoat.
+
+### ADR-008: Plan Amendments — Daniel-Specific (2026-03-30)
+**Decision**: Four amendments to the architecture plan based on deep user profiling:
+1. **Convergence tracking** — Core memory tracks active projects + progress. Guya flags scattered attention.
+2. **Custom SCOPE domains** — Replace generic EvolveClaw domains with: `learning_progress`, `convergence_vs_exploration`, `growth_areas`, `decision_patterns`, `technical_preferences`, `communication`, `workflow`, `general`.
+3. **Teaching as core behavior** — Baked into creed.md, not a soft guideline. Every interaction should explain the why.
+4. **Emotional awareness** — Trace capture detects sentiment signals (insecurity, frustration, confidence). Guya adapts tone accordingly.
+**Why**: Generic agent behavior doesn't serve Daniel's specific growth needs. The evolution engine must track thinking patterns, not just coding preferences.
+
 ## Research Foundations
 
 ### Systems Studied (2026-03-30)
