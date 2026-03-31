@@ -13,6 +13,5 @@
     "self-evolving",
     "memory",
     "identity"
-  ],
-  "hooks": "hooks/hooks.json"
+  ]
 }

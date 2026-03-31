@@ -1,0 +1,27 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "guya",
+  "description": "Self-evolving personal agent that knows who you are and gets better every session",
+  "owner": {
+    "name": "Daniel"
+  },
+  "plugins": [
+    {
+      "name": "guya",
+      "description": "Self-evolving personal agent — identity, memory, evolution engine, 14 MCP tools, 5 skills",
+      "version": "0.1.0",
+      "author": {
+        "name": "Daniel"
+      },
+      "source": "./",
+      "category": "productivity",
+      "tags": [
+        "personal-agent",
+        "self-evolving",
+        "memory",
+        "identity"
+      ]
+    }
+  ],
+  "version": "0.1.0"
+}
