@@ -372,6 +372,38 @@ async function updateSessionContext(directory, sessionTraces, classificationResu
   await atomicWrite(join(coreDir, 'session-context.md'), summary);
 }
 
+// --- Step 6: Archival memory update ---
+
+async function updateArchivalMemory(directory, sessionTraces, classificationResults) {
+  const archivalDir = join(directory, '.guya', 'memory', 'archival');
+  ensureDir(archivalDir);
+
+  // Detect project from directory name
+  const projectName = directory.split('/').pop().toLowerCase().replace(/[^a-z0-9-]/g, '');
+  if (!projectName) return;
+
+  const archivalFile = join(archivalDir, `${projectName}.md`);
+  const dateStr = today();
+
+  // Build a brief summary from traces
+  const toolNames = [...new Set(
+    sessionTraces.map(t => (t.content || '').replace('Tool: ', '')).filter(Boolean)
+  )];
+  const domains = classificationResults
+    ? [...new Set(classificationResults.map(r => r.domain).filter(Boolean))]
+    : [];
+
+  const summary = `\n\n## Session ${dateStr}\n- Tools used: ${toolNames.slice(0, 10).join(', ') || 'none captured'}\n- Domains: ${domains.join(', ') || 'general'}\n- Traces: ${sessionTraces.length}\n`;
+
+  // Append to existing archival file or create new one
+  if (existsSync(archivalFile)) {
+    const existing = readFileSync(archivalFile, 'utf-8');
+    await atomicWrite(archivalFile, existing + summary);
+  } else {
+    await atomicWrite(archivalFile, `# ${projectName}\n${summary}`);
+  }
+}
+
 // --- Main ---
 
 async function main() {
@@ -483,6 +515,13 @@ async function main() {
     await updateSessionContext(directory, sessionTraces, classificationResults);
   } catch (err) {
     process.stderr.write(`[guya-session-end] Step 5 failed: ${err.message}\n`);
+  }
+
+  // Step 6: Update archival memory with session summary
+  try {
+    await updateArchivalMemory(directory, sessionTraces, classificationResults);
+  } catch (err) {
+    process.stderr.write(`[guya-session-end] Step 6 failed: ${err.message}\n`);
   }
 
   console.log(JSON.stringify({ continue: true }));
