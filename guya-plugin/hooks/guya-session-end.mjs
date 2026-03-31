@@ -143,6 +143,60 @@ async function markTracesClassified(tracesDir, fileGroups) {
   }
 }
 
+// --- Pre-filter: skip noise, only classify traces with learning signal ---
+
+function hasLearningSignal(trace) {
+  // Always classify corrections and preferences
+  if (trace.type === 'correction' || trace.type === 'preference') return true;
+
+  // Always classify reflections
+  if (trace.type === 'reflection') return true;
+
+  // Classify edits to Guya's own identity/guideline/memory files
+  const ctx = (trace.context || '').toLowerCase();
+  if (ctx.includes('.claude/guya/') || ctx.includes('.guya/')) return true;
+
+  // Skip routine read-only tools — no learning signal
+  const toolName = (trace.content || '').replace('Tool: ', '').toLowerCase();
+  const noiseTools = ['read', 'glob', 'grep', 'bash', 'ls', 'cat', 'head', 'tail', 'toolsearch'];
+  if (noiseTools.includes(toolName)) return false;
+
+  // Classify writes — they represent decisions
+  if (['write', 'edit', 'notebookedit'].includes(toolName)) return true;
+
+  // Default: skip. Most tool calls are routine.
+  return false;
+}
+
+function preFilterTraces(unclassified) {
+  // Also detect repeated failures: same tool failing 3+ times in a row
+  const filtered = [];
+  const failureRuns = {};
+
+  for (const entry of unclassified) {
+    const { trace } = entry;
+    const toolName = (trace.content || '').replace('Tool: ', '');
+
+    // Track consecutive failures
+    const output = (trace.toolOutput || '').toLowerCase();
+    if (output.includes('error') || output.includes('failed') || output.includes('exit code 1')) {
+      failureRuns[toolName] = (failureRuns[toolName] || 0) + 1;
+      if (failureRuns[toolName] >= 3) {
+        filtered.push(entry); // Repeated failure is a signal
+        continue;
+      }
+    } else {
+      failureRuns[toolName] = 0;
+    }
+
+    if (hasLearningSignal(trace)) {
+      filtered.push(entry);
+    }
+  }
+
+  return filtered;
+}
+
 // --- Step 2: Classify ---
 
 async function classifyTraces(client, unclassified) {
@@ -342,10 +396,15 @@ async function main() {
 
   const client = new Anthropic({ apiKey });
 
-  // Step 2: Classify
+  // Step 2: Pre-filter noise, then classify
+  const signalTraces = preFilterTraces(unclassified);
+  process.stderr.write(`[guya-session-end] Pre-filter: ${unclassified.length} traces -> ${signalTraces.length} with signal\n`);
+
   let classificationResults = null;
-  try {
-    classificationResults = await classifyTraces(client, unclassified);
+  if (signalTraces.length === 0) {
+    process.stderr.write('[guya-session-end] No traces with learning signal, skipping classification\n');
+  } else try {
+    classificationResults = await classifyTraces(client, signalTraces);
   } catch (err) {
     process.stderr.write(`[guya-session-end] Step 2 failed: ${err.message}\n`);
   }
