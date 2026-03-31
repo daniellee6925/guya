@@ -17,7 +17,7 @@
  *   Completes in under 30 seconds.
  */
 
-import { existsSync, readFileSync, writeFileSync, readdirSync, mkdirSync } from 'fs';
+import { existsSync, readFileSync, writeFileSync, readdirSync, mkdirSync, unlinkSync } from 'fs';
 import { join, dirname } from 'path';
 import { homedir } from 'os';
 import { randomUUID } from 'crypto';
@@ -135,11 +135,18 @@ function filterUnclassified(allTraces, sessionId) {
 }
 
 // Rewrite a JSONL file with updated traces
-async function markTracesClassified(tracesDir, fileGroups) {
+async function pruneClassifiedTraces(tracesDir, fileGroups) {
   for (const [file, traces] of Object.entries(fileGroups)) {
     const filePath = join(tracesDir, file);
-    const lines = traces.map(t => JSON.stringify(t)).join('\n') + '\n';
-    await atomicWrite(filePath, lines);
+    // Keep only unclassified traces — classified ones have served their purpose
+    const remaining = traces.filter(t => !t.classified);
+    if (remaining.length === 0) {
+      // All traces classified — delete the file
+      try { unlinkSync(filePath); } catch {}
+    } else {
+      const lines = remaining.map(t => JSON.stringify(t)).join('\n') + '\n';
+      await atomicWrite(filePath, lines);
+    }
   }
 }
 
@@ -430,7 +437,7 @@ async function main() {
       }
     }
     try {
-      await markTracesClassified(tracesDir, fileGroups);
+      await pruneClassifiedTraces(tracesDir, fileGroups);
     } catch (err) {
       process.stderr.write(`[guya-session-end] Failed to persist classifications: ${err.message}\n`);
     }

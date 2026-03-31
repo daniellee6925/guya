@@ -12,7 +12,9 @@
  *   Completes in under 50ms — no LLM calls
  */
 
-import { existsSync, appendFileSync, mkdirSync } from 'fs';
+import { existsSync, appendFileSync, mkdirSync, statSync } from 'fs';
+
+const MAX_TRACE_FILE_BYTES = 5 * 1024 * 1024; // 5MB cap
 import { join } from 'path';
 import { randomUUID } from 'crypto';
 
@@ -85,7 +87,12 @@ async function main() {
 
     const traceFile = join(tracesDir, `${todayString()}.jsonl`);
     try {
-      appendFileSync(traceFile, JSON.stringify(trace) + '\n', 'utf-8');
+      // Skip if file exceeds 5MB — protect disk space
+      if (existsSync(traceFile) && statSync(traceFile).size >= MAX_TRACE_FILE_BYTES) {
+        // silently drop — better to lose a trace than fill the disk
+      } else {
+        appendFileSync(traceFile, JSON.stringify(trace) + '\n', 'utf-8');
+      }
     } catch {}
 
     console.log(JSON.stringify({ continue: true, suppressOutput: true }));
