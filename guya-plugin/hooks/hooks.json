@@ -1,6 +1,18 @@
 {
-  "description": "Guya lifecycle hooks — context assembly, trace capture, correction detection, session-end evolution",
+  "description": "Guya lifecycle hooks — context assembly, trace capture, correction detection, pre-commit review, session-end evolution",
   "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PLUGIN_ROOT\"/hooks/guya-pre-commit-review.mjs",
+            "timeout": 2
+          }
+        ]
+      }
+    ],
     "SessionStart": [
       {
         "matcher": "*",
