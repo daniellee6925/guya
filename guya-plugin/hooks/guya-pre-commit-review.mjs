@@ -232,7 +232,7 @@ async function main() {
     const directory = input.cwd || input.directory || process.cwd();
 
     if (!isGitCommit(toolName, toolInput)) {
-      return output({ decision: 'allow' });
+      return output({ continue: true, suppressOutput: true });
     }
 
     const stateDir = getStateDir(directory);
@@ -240,12 +240,12 @@ async function main() {
 
     if (isReviewComplete(gateFile)) {
       writeFileSync(gateFile, JSON.stringify({ reviewed: false }));
-      return output({ decision: 'allow' });
+      return output({ continue: true, suppressOutput: true });
     }
 
     const stagedFiles = getStagedFiles(directory);
     if (stagedFiles.length === 0) {
-      return output({ decision: 'allow' });
+      return output({ continue: true, suppressOutput: true });
     }
 
     const report = runChecks(stagedFiles, directory);
@@ -256,7 +256,7 @@ async function main() {
     }
     output({ decision: 'block', reason: formatReviewPrompt(stagedFiles) });
   } catch {
-    output({ decision: 'allow' });
+    output({ continue: true, suppressOutput: true });
   }
 }
 

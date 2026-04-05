@@ -163,6 +163,12 @@ These trigger rules are specific operationalizations of your Soul and Creed. Whe
     sections.push({ label: 'creed.md', content: creed, priority: 1 });
   }
 
+  // 3.5. Growth tracker (global — tracks Daniel across all projects)
+  const growthTracker = readFileSafe(join(GLOBAL_DIR, 'growth-tracker.md'));
+  if (growthTracker) {
+    sections.push({ label: 'growth-tracker.md', content: growthTracker, priority: 2 });
+  }
+
   // 4. Core memory blocks (project-local)
   const coreDir = join(cwd, '.guya', 'memory', 'core');
   const coreFiles = readDir(coreDir).filter(f => f !== 'session-context.md');
