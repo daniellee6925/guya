@@ -7,14 +7,20 @@
 - ~15k LOC source, ~23k LOC tests, 232 source files
 - Phases 1-5 of 10 complete: core pipeline, infra, personas, scenarios, QC, export
 - Remaining: optimizer, realism/diversity metrics, output enrichment, UI
-- Location: /Users/daniel/Desktop/projects/sdf
+- Location: ~/Desktop/projects/sdf
 - Status: Active (primary BosonAI project)
 
 ## Guya
 - Self-evolving personal agent system
 - All 6 phases implemented, installed as Claude Code plugin
-- Location: /Users/daniel/Desktop/guya
+- Location: ~/Desktop/guya
 - Status: Active (personal project)
+
+## Standalone Agent (Mac Mini)
+- Personal AI agent running 24/7 on Mac Mini, accessible via Discord
+- Built on OpenClaw + NemoClaw as foundation, customized with Guya's identity/memory/evolution
+- Universal scope: coding, life management, research, everything
+- Status: Learning/scoping phase. Building starts later this week.
 
 ## BosonAI (general)
 - Enterprise ML products for clients

@@ -11,7 +11,7 @@ Plugin-based pipeline for generating synthetic conversational training data at s
 - Pipeline: Blueprint → Persona → Scenario → Customer/Agent Message Gen → QC → Export
 
 ## What's Done
-- Core pipeline end-to-end working (1,564 tests passing)
+- Core pipeline end-to-end working (1,590+ tests passing)
 - 3 LLM providers with retry + rate limiting
 - Checkpoint/resume from any batch
 - Cost tracking with budget enforcement
@@ -23,12 +23,9 @@ Plugin-based pipeline for generating synthetic conversational training data at s
 - Information asymmetry enforced at function-signature level
 
 ## What's Remaining
-**Production Hardening (for 100K):**
-- GAP-H1: Signal handler for graceful shutdown
-- GAP-H2: Streaming persistence (phase 2 — peak memory still O(total) at batch-post)
+**Production Hardening:** DONE — GAP-H1 (signal handler), GAP-H2 (streaming persistence), GAP-H3 (checkpoint cleanup) all complete.
 
-**Operational Quality:**
-- GAP-M1-M6: Budget-aware retry, progress data, error diagnostics, context key validation, plugin sandboxing, run ID sanitization
+**Operational Quality:** DONE — GAP-M1-M6 all complete (budget-aware retry, progress data, error diagnostics, context key validation, plugin sandboxing, run ID sanitization).
 
 **New Features (high leverage):**
 - FEAT-1: Optimizer module (prompt version optimization feedback loop) — LARGE
@@ -40,9 +37,9 @@ Plugin-based pipeline for generating synthetic conversational training data at s
 - FEAT-9: UI dashboard (FastAPI + HTMX)
 
 ## Project Locations
-- `/Users/daniel/Desktop/projects/sdf` — original
-- `/Users/daniel/Desktop/projects/sdf-dev` — development branch
-- `/Users/daniel/Desktop/projects/sdf-autonomous` — autonomous improvements branch
+- `~/Desktop/projects/sdf` — original
+- `~/Desktop/projects/sdf-dev` — development branch
+- `~/Desktop/projects/sdf-autonomous` — autonomous improvements branch
 
 ## Key Learnings from Sessions (2026-03-31)
 - Daniel corrected scale assumption: 100K not 1K — always verify business context early
@@ -53,3 +50,7 @@ Plugin-based pipeline for generating synthetic conversational training data at s
 
 ## Scorecard
 Overall: A- — Six A+ dimensions. Production-grade for 1-5K. Needs hardening for 100K.
+
+## Session Log
+- **2026-03-31 (sdf-dev)**: Docs consolidation for AI-driven dev, Gemini SDK fix, streaming persistence (GAP-H2), checkpoint cleanup (GAP-H3). Process rules established: STATUS.md tracking, commit at milestones, plan before implement.
+- **2026-03-31 (sdf-autonomous)**: 5 pillars defined (Modular, Universal, Quality Controlled, Self-Improving, Scalable). Quality metrics, second domain validation, 12 commits, 1644 tests. Lesson: vague input → clarify first, never guess and run.
