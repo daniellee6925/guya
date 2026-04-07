@@ -22,7 +22,7 @@ import { join } from 'path';
 import { homedir } from 'os';
 
 const GLOBAL_DIR = join(homedir(), '.claude', 'guya');
-const TOKEN_BUDGET = 4600;
+const TOKEN_BUDGET = 2000;
 const CHAR_BUDGET = TOKEN_BUDGET * 4;
 
 // --- Helpers ---
@@ -113,54 +113,24 @@ function assembleContext(cwd) {
   const sections = [];
   let totalChars = 0;
 
-  // 0. Active Session Behaviors (highest priority — never truncated)
-  const behaviors = `## Active Session Behaviors
+  // 0. Soul (includes session behaviors — highest priority)
 
-These trigger rules are specific operationalizations of your Soul and Creed. When a trigger below applies, follow it exactly — it takes precedence over the more general guidance.
-
-### Convergence
-- If Daniel seems to be jumping between unrelated topics frequently without finishing any, name the pattern directly. Ask which one to commit to. Don't just note it — make him choose.
-- If Daniel starts working on something not in his active projects list, ask: "Is this replacing something or adding to your plate?" before diving in.
-
-### Stuck Detection
-- If Daniel seems stuck on the same problem across multiple attempts (repeated errors, same approach failing), stop helping with the current approach. Step back and reframe: "We've tried this angle a few times. Let me suggest a different approach." Offer a fundamentally different strategy, not a variation.
-
-### Teaching
-- When you write or modify code, briefly explain WHY this approach over alternatives — especially when the choice isn't obvious. Daniel is building toward staff-engineer caliber.
-- When Daniel asks "how do I do X," don't just show X. Show X and explain the principle behind it so he can apply it to Y and Z on his own.
-
-### Proactive Awareness
-- If you notice Daniel is doing something manually that could be automated, say so.
-- If a decision has non-obvious second-order consequences, flag them. Think in systems, not tasks.
-
-### Emotional Awareness
-- If Daniel expresses doubt about his abilities, acknowledge briefly, then redirect to evidence of what he's accomplished. Don't dwell — move forward.
-- If Daniel is clearly frustrated, match the energy but stay constructive. Don't be cheerful when he's angry.
-
-### Escape Hatch
-- If Daniel explicitly says he's exploring, brainstorming, or thinking out loud, suspend convergence rules for this session. Let him explore freely.`;
-
-  sections.push({ label: 'active-behaviors', content: behaviors, priority: 0 });
-
-  // 1. Identity files (global)
-  const identityFiles = ['soul.md', 'identity.md'];
-  for (const file of identityFiles) {
-    const content = readFileSafe(join(GLOBAL_DIR, file));
-    if (content) {
-      sections.push({ label: file, content, priority: 1 });
-    }
+  // 1. Soul (global — includes core commitments + session behaviors)
+  const soul = readFileSafe(join(GLOBAL_DIR, 'soul.md'));
+  if (soul) {
+    sections.push({ label: 'soul.md', content: soul, priority: 0 });
   }
 
-  // 2. User profile (global) — high priority, always include
+  // 2. Identity (global)
+  const identity = readFileSafe(join(GLOBAL_DIR, 'identity.md'));
+  if (identity) {
+    sections.push({ label: 'identity.md', content: identity, priority: 1 });
+  }
+
+  // 3. User profile (global)
   const userProfile = readFileSafe(join(GLOBAL_DIR, 'user.md'));
   if (userProfile) {
     sections.push({ label: 'user.md', content: userProfile, priority: 0 });
-  }
-
-  // 3. Creed (global)
-  const creed = readFileSafe(join(GLOBAL_DIR, 'creed.md'));
-  if (creed) {
-    sections.push({ label: 'creed.md', content: creed, priority: 1 });
   }
 
   // 3.5. Growth tracker (global — tracks Daniel across all projects)
