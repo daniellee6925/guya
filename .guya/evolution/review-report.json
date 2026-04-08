@@ -1,0 +1,22 @@
+{
+  "timestamp": "2026-04-08T22:56:52.938Z",
+  "staged_files": [
+    "guya-plugin/hooks/guya-pre-commit-review.mjs"
+  ],
+  "checks": {
+    "tests": {
+      "pass": true,
+      "issues": []
+    },
+    "complexity": {
+      "pass": true,
+      "issues": []
+    },
+    "cleanup": {
+      "pass": true,
+      "issues": []
+    }
+  },
+  "automated_pass": true,
+  "reviewed": false
+}
