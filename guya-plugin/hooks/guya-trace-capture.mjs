@@ -57,6 +57,30 @@ function ensureTracesDir(tracesDir) {
   }
 }
 
+// --- Filtering ---
+
+// Directories whose files are noise — internal state, not learning signal
+const NOISE_PATHS = ['.omc/', '.guya/evolution/', 'node_modules/', '.git/'];
+
+// Only trace files that indicate real work
+const SIGNAL_EXTENSIONS = ['.py', '.js', '.mjs', '.ts', '.tsx', '.jsx', '.md', '.json', '.yaml', '.yml', '.toml', '.sh'];
+
+function isSignificantEdit(toolInput) {
+  const filePath = typeof toolInput === 'string' ? toolInput : (toolInput?.file_path || toolInput?.path || '');
+  if (!filePath) return false;
+  if (NOISE_PATHS.some(p => filePath.includes(p))) return false;
+  if (!SIGNAL_EXTENSIONS.some(ext => filePath.endsWith(ext))) return false;
+  return true;
+}
+
+function extractFileSummary(toolInput) {
+  const filePath = typeof toolInput === 'string' ? toolInput : (toolInput?.file_path || toolInput?.path || '');
+  const parts = filePath.split('/');
+  const fileName = parts[parts.length - 1] || 'unknown';
+  const project = parts.find((_, i) => i > 0 && parts[i - 1] === 'Desktop') || parts[parts.length - 2] || '';
+  return { fileName, project, filePath };
+}
+
 // --- Main ---
 
 async function main() {
@@ -67,10 +91,15 @@ async function main() {
 
     const toolName = input.tool_name || input.toolName || 'unknown';
     const toolInput = input.tool_input || input.toolInput || '';
-    const toolOutput = input.tool_response || input.toolOutput || '';
     const sessionId = input.session_id || input.sessionId || '';
     const directory = input.cwd || input.directory || process.cwd();
 
+    // Only trace significant file edits — skip noise
+    if (!isSignificantEdit(toolInput)) {
+      return console.log(JSON.stringify({ continue: true, suppressOutput: true }));
+    }
+
+    const { fileName, project, filePath } = extractFileSummary(toolInput);
     const tracesDir = join(directory, '.guya', 'evolution', 'traces');
     ensureTracesDir(tracesDir);
 
@@ -78,16 +107,15 @@ async function main() {
       id: randomUUID(),
       sessionId,
       timestamp: Date.now(),
-      type: 'tool_call',
-      domain: 'general',
-      content: `Tool: ${toolName}`,
-      context: truncate(toolInput, 500),
-      toolOutput: truncate(toolOutput, 500),
+      type: 'file_edit',
+      domain: 'workflow',
+      content: `${toolName}: ${fileName}`,
+      file: filePath,
+      project,
     };
 
     const traceFile = join(tracesDir, `${todayString()}.jsonl`);
     try {
-      // Skip if file exceeds 5MB — protect disk space
       if (existsSync(traceFile) && statSync(traceFile).size >= MAX_TRACE_FILE_BYTES) {
         // silently drop — better to lose a trace than fill the disk
       } else {
