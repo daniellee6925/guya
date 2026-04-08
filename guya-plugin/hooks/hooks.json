@@ -16,6 +16,16 @@
             "timeout": 150
           }
         ]
+      },
+      {
+        "matcher": "Skill",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PLUGIN_ROOT\"/hooks/run.cjs \"$CLAUDE_PLUGIN_ROOT\"/hooks/guya-pre-commit-review.mjs",
+            "timeout": 3
+          }
+        ]
       }
     ],
     "SessionStart": [

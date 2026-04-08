@@ -166,15 +166,20 @@ async function main() {
 
     appendCommit(directory, commit);
 
-    // Consume the review gate AFTER commit succeeds — prevents race condition
-    // where gate is consumed but commit fails, locking out retry attempts
-    const gateFile = join(directory, '.guya', 'evolution', 'review-gate.json');
+    // Reset review state AFTER commit succeeds — prevents stale evidence reuse
+    // and race condition where gate is consumed but commit fails
+    const evolutionDir = join(directory, '.guya', 'evolution');
     try {
+      const gateFile = join(evolutionDir, 'review-gate.json');
       if (existsSync(gateFile)) {
         writeFileSync(gateFile, JSON.stringify({ reviewed: false }));
       }
+      const evidenceFile = join(evolutionDir, 'review-evidence.json');
+      if (existsSync(evidenceFile)) {
+        writeFileSync(evidenceFile, JSON.stringify({ steps: [] }));
+      }
     } catch {
-      process.stderr.write('[guya-scribe] Warning: could not reset review gate\n');
+      process.stderr.write('[guya-scribe] Warning: could not reset review state\n');
     }
 
     process.stderr.write(`[guya-scribe] Logged commit ${commit.hash} (${commit.message}) to STATUS.md\n`);

@@ -1,28 +1,24 @@
 #!/usr/bin/env node
 
 /**
- * Guya PreToolUse Hook — Pre-Commit Quality Harness
+ * Guya PreToolUse Hook — Review Gate + Evidence Recorder
  *
  * CALLING SPEC:
  *   Input: JSON on stdin with { tool_name, tool_input, session_id, cwd }
- *   Output: { decision: "allow" } or { decision: "block", reason: "..." }
+ *   Output: { continue: true } or { decision: "block", reason: "..." }
  *
- *   On git commit, runs automated checks on staged files:
- *     1. Test verification — do test files exist for changed source files?
- *     2. Complexity check — files under 800 LOC, functions under 80 lines?
- *     3. Cleanup scan — no leftover debug code?
+ *   Three jobs:
+ *     1. On Skill call (karpathy-review / review-followup) → record evidence
+ *     2. On git commit --no-verify → block
+ *     3. On git commit → check exemptions, small change, evidence → allow or block
  *
- *   If automated checks fail: blocks with report.
- *   If automated checks pass: blocks until karpathy-review + review-followup done.
- *   Report written to .guya/evolution/review-report.json for agents to read.
+ *   Quality checks (test existence, complexity, cleanup) are handled by
+ *   .git/hooks/pre-commit which runs with accurate staged file state.
  */
 
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
-import { join, basename, dirname, extname } from 'path';
+import { join, extname } from 'path';
 import { execSync } from 'child_process';
-
-const MAX_FILE_LOC = 800;
-const MAX_FUNC_LINES = 80;
 
 // --- stdin ---
 
@@ -46,34 +42,19 @@ function readStdinSync(timeoutMs = 2000) {
   });
 }
 
-// --- git helpers ---
-
-function isGitCommit(toolName, toolInput) {
-  if (toolName !== 'Bash' && toolName !== 'bash') return false;
-  const cmd = typeof toolInput === 'string' ? toolInput : (toolInput?.command || '');
-  return /\bgit\s+commit\b/.test(cmd);
+function output(obj) {
+  process.stdout.write(JSON.stringify(obj) + '\n');
 }
 
-function getStagedFiles(directory, toolInput) {
-  // First try actual staged files (when git add was a separate command)
+// --- config ---
+
+function loadConfig(directory) {
+  const configPath = join(directory, '.guya', 'pre-commit-config.json');
   try {
-    const out = execSync('git diff --cached --name-only --diff-filter=ACMR', {
-      cwd: directory, encoding: 'utf-8', timeout: 5000
-    });
-    const files = out.trim().split('\n').filter(Boolean);
-    if (files.length > 0) return files;
+    return JSON.parse(readFileSync(configPath, 'utf-8'));
   } catch {
-    process.stderr.write('[guya-pre-commit] git diff --cached failed, falling back to command parsing\n');
+    return null;
   }
-
-  // Fallback: parse files from "git add ... && git commit" combined commands
-  const cmd = typeof toolInput === 'string' ? toolInput : (toolInput?.command || '');
-  const addMatch = cmd.match(/\bgit\s+add\s+(.+?)(?:\s*&&|\s*;|\s*\|)/);
-  if (addMatch) {
-    return addMatch[1].trim().split(/\s+/).filter(f => !f.startsWith('-') && f.length > 0);
-  }
-
-  return [];
 }
 
 // --- state ---
@@ -81,251 +62,174 @@ function getStagedFiles(directory, toolInput) {
 function getStateDir(directory) {
   const stateDir = join(directory, '.guya', 'evolution');
   if (!existsSync(stateDir)) {
-    try { mkdirSync(stateDir, { recursive: true }); } catch (err) {
-      process.stderr.write(`[guya-pre-commit] Warning: could not create ${stateDir}: ${err?.message}\n`);
-    }
+    try { mkdirSync(stateDir, { recursive: true }); } catch {}
   }
   return stateDir;
 }
 
-function hashStagedFiles(stagedFiles) {
-  // Deterministic hash of sorted file list — proves review matched these files
-  return stagedFiles.slice().sort().join('|');
+// --- Job 1: Evidence recording ---
+
+const REVIEW_SKILLS = ['karpathy-review', 'review-followup', 'cr'];
+
+function isReviewSkill(toolName, toolInput) {
+  if (toolName !== 'Skill' && toolName !== 'skill') return false;
+  const skill = typeof toolInput === 'string' ? toolInput : (toolInput?.skill || toolInput?.name || '');
+  return REVIEW_SKILLS.some(s => skill.includes(s));
 }
 
-const GATE_MAX_AGE_MS = 10 * 60 * 1000; // 10 minutes
+function getSkillStep(toolInput) {
+  const skill = typeof toolInput === 'string' ? toolInput : (toolInput?.skill || toolInput?.name || '');
+  if (skill.includes('review-followup')) return 'followup';
+  return 'initial';
+}
 
-function isReviewComplete(gateFile, stagedFiles) {
+function recordEvidence(directory, step) {
+  const stateDir = getStateDir(directory);
+  const evidencePath = join(stateDir, 'review-evidence.json');
+
+  let evidence = { steps: [] };
   try {
-    const gate = JSON.parse(readFileSync(gateFile, 'utf-8'));
-    if (!gate.reviewed) return false;
+    evidence = JSON.parse(readFileSync(evidencePath, 'utf-8'));
+    if (!Array.isArray(evidence.steps)) evidence.steps = [];
+  } catch {}
 
-    // Check required fields exist
-    const required = ['filesHash', 'timestamp', 'reviewIssues', 'fixesApplied', 'followupTimestamp', 'followupIssues', 'verifiedAt'];
-    const missing = required.filter(f => gate[f] === undefined || gate[f] === null);
-    if (missing.length > 0) {
-      process.stderr.write(`[guya-pre-commit] Gate rejected: missing fields: ${missing.join(', ')}\n`);
-      return false;
-    }
+  evidence.steps.push({ step, timestamp: Date.now() });
 
-    // Verify the review was for THESE files
-    if (gate.filesHash !== hashStagedFiles(stagedFiles)) {
-      process.stderr.write('[guya-pre-commit] Gate rejected: staged files changed since review\n');
-      return false;
-    }
+  // Also capture content hash of currently staged files
+  try {
+    const hash = execSync('git diff --cached --name-only --diff-filter=ACMR | sort | git hash-object --stdin', {
+      cwd: directory, encoding: 'utf-8', timeout: 5000, shell: true
+    }).trim();
+    evidence.contentHash = hash;
+  } catch {}
 
-    // If issues were found, fixes must have been applied
-    if (gate.reviewIssues > 0 && gate.fixesApplied === 0) {
-      process.stderr.write(`[guya-pre-commit] Gate rejected: ${gate.reviewIssues} issues found but 0 fixes applied\n`);
-      return false;
-    }
+  writeFileSync(evidencePath, JSON.stringify(evidence, null, 2));
+  process.stderr.write(`[guya-gate] Recorded review evidence: ${step}\n`);
+}
 
-    // Verify the review is recent
-    const age = Date.now() - (gate.timestamp || 0);
-    if (age > GATE_MAX_AGE_MS) {
-      process.stderr.write(`[guya-pre-commit] Gate rejected: review expired (${Math.round(age / 60000)}min ago)\n`);
-      return false;
-    }
+// --- Job 2 & 3: Commit gating ---
 
-    // Verify followup review happened after initial review
-    if (gate.followupTimestamp <= gate.timestamp) {
-      process.stderr.write('[guya-pre-commit] Gate rejected: followupTimestamp must be after initial review timestamp\n');
-      return false;
-    }
+function isGitCommit(toolName, toolInput) {
+  if (toolName !== 'Bash' && toolName !== 'bash') return false;
+  const cmd = typeof toolInput === 'string' ? toolInput : (toolInput?.command || '');
+  return /\bgit\s+commit\b/.test(cmd);
+}
 
-    // Verify the verification step happened after the followup
-    if (gate.verifiedAt <= gate.followupTimestamp) {
-      process.stderr.write('[guya-pre-commit] Gate rejected: verifiedAt must be after followup review\n');
-      return false;
-    }
+function hasNoVerify(toolInput) {
+  const cmd = typeof toolInput === 'string' ? toolInput : (toolInput?.command || '');
+  return /--no-verify/.test(cmd);
+}
 
-    // Verify the review report exists and was written recently
-    const reportFile = join(dirname(gateFile), 'review-report.json');
-    try {
-      const report = JSON.parse(readFileSync(reportFile, 'utf-8'));
-      const reportAge = Date.now() - new Date(report.timestamp).getTime();
-      if (reportAge > GATE_MAX_AGE_MS) {
-        process.stderr.write(`[guya-pre-commit] Gate rejected: review report is stale (${Math.round(reportAge / 60000)}min old)\n`);
-        return false;
+function getStagedFiles(directory, toolInput) {
+  // Get currently staged files
+  const staged = new Set();
+  try {
+    const out = execSync('git diff --cached --name-only --diff-filter=ACMR', {
+      cwd: directory, encoding: 'utf-8', timeout: 5000
+    });
+    out.trim().split('\n').filter(Boolean).forEach(f => staged.add(f));
+  } catch {}
+
+  // Also parse git add files from combined commands (TOCTOU mitigation)
+  const cmd = typeof toolInput === 'string' ? toolInput : (toolInput?.command || '');
+  const addMatch = cmd.match(/\bgit\s+add\s+(.+?)(?:\s*&&|\s*;|\s*\|)/);
+  if (addMatch) {
+    addMatch[1].trim().split(/\s+/)
+      .filter(f => !f.startsWith('-') && f.length > 0)
+      .forEach(f => staged.add(f));
+  }
+
+  return [...staged];
+}
+
+function isExempt(file, config) {
+  // Check path exemptions
+  for (const p of config.pathExempt || []) {
+    if (file.includes(p)) return true;
+  }
+  // Check extension exemptions
+  const ext = extname(file);
+  for (const pattern of config.reviewExempt || []) {
+    const patExt = pattern.replace('*', '');
+    if (ext === patExt) return true;
+  }
+  return false;
+}
+
+function isSmallChange(stagedFiles, config, directory) {
+  const threshold = config.smallChange || { maxLines: 30, maxFiles: 3 };
+  const nonExempt = stagedFiles.filter(f => !isExempt(f, config));
+
+  if (nonExempt.length === 0) return true;
+  if (nonExempt.length > threshold.maxFiles) return false;
+
+  try {
+    const stat = execSync('git diff --cached --stat', {
+      cwd: directory, encoding: 'utf-8', timeout: 5000
+    });
+    // Parse "X files changed, Y insertions(+), Z deletions(-)"
+    const match = stat.match(/(\d+)\s+insertion|(\d+)\s+deletion/g);
+    let totalLines = 0;
+    if (match) {
+      for (const m of match) {
+        const num = parseInt(m);
+        if (!isNaN(num)) totalLines += num;
       }
-      // Report must list the same staged files
-      const reportFiles = (report.staged_files || []).slice().sort().join('|');
-      if (reportFiles !== hashStagedFiles(stagedFiles)) {
-        process.stderr.write('[guya-pre-commit] Gate rejected: review report was for different files\n');
-        return false;
-      }
-    } catch {
-      process.stderr.write('[guya-pre-commit] Gate rejected: no valid review report found — review must actually run\n');
-      return false;
     }
-
-    return true;
-  } catch (err) {
-    process.stderr.write(`[guya-pre-commit] Gate file error: ${err?.message}\n`);
+    return totalLines <= threshold.maxLines;
+  } catch {
     return false;
   }
 }
 
-function output(obj) {
-  process.stdout.write(JSON.stringify(obj) + '\n');
-}
+function checkEvidence(directory, config) {
+  const stateDir = getStateDir(directory);
+  const evidencePath = join(stateDir, 'review-evidence.json');
+  const maxAge = (config.gateMaxAgeMinutes || 10) * 60 * 1000;
 
-// --- Check 1: Test Verification ---
-
-function isSourceFile(file) {
-  const ext = extname(file);
-  if (!['.py', '.ts', '.js', '.mjs'].includes(ext)) return false;
-  if (/(?:^|[_./])tests?(?:[_./]|$)|__init__|conftest|fixture|\.config|\.d\.ts/.test(file)) return false;
-  if (file.startsWith('.') || file.includes('node_modules') || file.includes('docs/')) return false;
-  // Skip hook files — they don't need unit tests
-  if (file.includes('hooks/')) return false;
-  return true;
-}
-
-function checkTests(stagedFiles, directory) {
-  const issues = [];
-  for (const file of stagedFiles) {
-    if (!isSourceFile(file)) continue;
-    const ext = extname(file);
-    const base = basename(file, ext);
-    const dir = dirname(file);
-    const testPaths = [
-      join(dir, `test_${base}${ext}`),
-      join(dir, `${base}_test${ext}`),
-      join(dir, `${base}.test${ext}`),
-      join('tests', dir, `test_${base}${ext}`),
-      join('tests', dir, `${base}_test${ext}`),
-      join('tests', `test_${base}${ext}`),
-    ];
-    if (!testPaths.some(tp => existsSync(join(directory, tp)))) {
-      issues.push(`${file} — no test file found`);
+  try {
+    const evidence = JSON.parse(readFileSync(evidencePath, 'utf-8'));
+    if (!Array.isArray(evidence.steps) || evidence.steps.length === 0) {
+      return { valid: false, reason: 'No review evidence found.' };
     }
+
+    const hasInitial = evidence.steps.find(s => s.step === 'initial');
+    const hasFollowup = evidence.steps.find(s => s.step === 'followup');
+
+    if (!hasInitial) {
+      return { valid: false, reason: 'Missing initial review (run /karpathy-review or /cr first).' };
+    }
+    if (!hasFollowup) {
+      return { valid: false, reason: 'Missing followup review (run /review-followup after fixing issues).' };
+    }
+
+    // Verify order: followup after initial
+    if (hasFollowup.timestamp <= hasInitial.timestamp) {
+      return { valid: false, reason: 'Followup must happen after initial review.' };
+    }
+
+    // Verify recency
+    const age = Date.now() - hasInitial.timestamp;
+    if (age > maxAge) {
+      return { valid: false, reason: `Review expired (${Math.round(age / 60000)}min ago, max ${config.gateMaxAgeMinutes || 10}min).` };
+    }
+
+    return { valid: true };
+  } catch {
+    return { valid: false, reason: 'No review evidence found.' };
   }
-  return { pass: issues.length === 0, issues };
-}
-
-// --- Check 2: Complexity ---
-
-function checkComplexity(stagedFiles, directory) {
-  const issues = [];
-  for (const file of stagedFiles) {
-    const ext = extname(file);
-    if (!['.py', '.ts', '.js', '.mjs'].includes(ext)) continue;
-    const fullPath = join(directory, file);
-    if (!existsSync(fullPath)) continue;
-
-    const lines = readFileSync(fullPath, 'utf-8').split('\n');
-    if (lines.length > MAX_FILE_LOC) {
-      issues.push(`${file} — ${lines.length} LOC (max ${MAX_FILE_LOC})`);
-    }
-
-    // Function length: simple heuristic
-    const funcPattern = ext === '.py'
-      ? /^\s*(?:def|async def)\s+(\w+)/
-      : /^\s*(?:export\s+)?(?:async\s+)?function\s+(\w+)/;
-    let funcStart = -1;
-    let funcName = '';
-
-    for (let i = 0; i < lines.length; i++) {
-      const match = lines[i].match(funcPattern);
-      if (match) {
-        if (funcStart >= 0 && (i - funcStart) > MAX_FUNC_LINES) {
-          issues.push(`${file}:${funcStart + 1} — function "${funcName}" is ${i - funcStart} lines (max ${MAX_FUNC_LINES})`);
-        }
-        funcStart = i;
-        funcName = match[1] || 'anonymous';
-      }
-    }
-    if (funcStart >= 0 && (lines.length - funcStart) > MAX_FUNC_LINES) {
-      issues.push(`${file}:${funcStart + 1} — function "${funcName}" is ${lines.length - funcStart} lines (max ${MAX_FUNC_LINES})`);
-    }
-  }
-  return { pass: issues.length === 0, issues };
-}
-
-// --- Check 3: Cleanup Scan ---
-
-function checkCleanup(stagedFiles, directory) {
-  const issues = [];
-  const jsPatterns = [/\bHACK\b/, /\bFIXME\b/, /\bdebugger\b/];
-  const pyPatterns = [/\bHACK\b/, /\bFIXME\b/, /\bbreakpoint\(\)/, /\bpdb\.set_trace\b/];
-
-  for (const file of stagedFiles) {
-    const ext = extname(file);
-    if (!['.py', '.ts', '.js', '.mjs', '.jsx', '.tsx'].includes(ext)) continue;
-    const fullPath = join(directory, file);
-    if (!existsSync(fullPath)) continue;
-
-    const lines = readFileSync(fullPath, 'utf-8').split('\n');
-    const patterns = ext === '.py' ? pyPatterns : jsPatterns;
-
-    for (let i = 0; i < lines.length; i++) {
-      for (const pattern of patterns) {
-        if (pattern.test(lines[i])) {
-          issues.push(`${file}:${i + 1} — ${lines[i].trim().slice(0, 80)}`);
-        }
-      }
-    }
-  }
-  return { pass: issues.length === 0, issues };
-}
-
-// --- Run all checks ---
-
-function runChecks(stagedFiles, directory) {
-  const tests = checkTests(stagedFiles, directory);
-  const complexity = checkComplexity(stagedFiles, directory);
-  const cleanup = checkCleanup(stagedFiles, directory);
-
-  return {
-    timestamp: new Date().toISOString(),
-    staged_files: stagedFiles,
-    checks: { tests, complexity, cleanup },
-    automated_pass: tests.pass && complexity.pass && cleanup.pass,
-    reviewed: false
-  };
-}
-
-// --- Report formatting ---
-
-function formatBlockReason(report) {
-  const allIssues = [
-    ...report.checks.tests.issues.map(i => `[tests] ${i}`),
-    ...report.checks.complexity.issues.map(i => `[complexity] ${i}`),
-    ...report.checks.cleanup.issues.map(i => `[cleanup] ${i}`),
-  ];
-  return `Automated checks failed. Fix these issues before review:\n${allIssues.join('\n')}\n\nFull report: .guya/evolution/review-report.json`;
 }
 
 function formatReviewPrompt(stagedFiles) {
-  const filesHash = stagedFiles.slice().sort().join('|');
-  return `Automated checks passed (${stagedFiles.length} files). Follow this process before committing:
+  return `Review required for ${stagedFiles.length} non-exempt files. Follow this process:
 
-1. INITIAL REVIEW: Run karpathy-review on the staged files. Count total issues found.
-2. FIX: Address the issues found. Count fixes applied.
-3. FOLLOWUP REVIEW: Run review-followup on the staged files. Count any remaining or new issues.
-4. VERIFY: Confirm all issues are resolved and no new problems were introduced.
-5. GATE: Write the gate file with evidence and retry the commit.
+1. Run /karpathy-review or /cr on the staged files
+2. Fix any issues found
+3. Run /review-followup on the staged files
+4. Retry the commit
 
-Gate file format (.guya/evolution/review-gate.json):
-{
-  "reviewed": true,
-  "filesHash": "${filesHash}",
-  "timestamp": <epoch_ms after step 1>,
-  "reviewIssues": <number of issues found in step 1>,
-  "fixesApplied": <number of fixes applied in step 2>,
-  "followupTimestamp": <epoch_ms after step 3>,
-  "followupIssues": <number of issues found in step 3>,
-  "verifiedAt": <epoch_ms after step 4>
-}
-
-Rules enforced by the hook:
-- All fields required. Missing fields = rejected.
-- If reviewIssues > 0 and fixesApplied = 0, rejected (can't ignore issues).
-- followupTimestamp must be after timestamp (proves both reviews ran in order).
-- verifiedAt must be after followupTimestamp (proves verification happened after followup).
-- Gate expires after 10 minutes.
-- filesHash must match staged files.
+The hook records evidence automatically when you run these skills.
+Review expires after 10 minutes.
 
 Staged files: ${stagedFiles.join(', ')}`;
 }
@@ -333,46 +237,68 @@ Staged files: ${stagedFiles.join(', ')}`;
 // --- Main ---
 
 async function main() {
-  let stdinData = '';
   let input = {};
   try {
-    stdinData = await readStdinSync(4000);
+    const stdinData = await readStdinSync(4000);
     try { input = JSON.parse(stdinData); } catch {
-      process.stderr.write(`[guya-pre-commit] stdin parse failed, raw: ${stdinData.slice(0, 200)}\n`);
+      return output({ continue: true, suppressOutput: true });
     }
 
     const toolName = input.tool_name || input.toolName || '';
     const toolInput = input.tool_input || input.toolInput || '';
     const directory = input.cwd || input.directory || process.cwd();
 
+    // Job 1: Record evidence for review skills
+    if (isReviewSkill(toolName, toolInput)) {
+      recordEvidence(directory, getSkillStep(toolInput));
+      return output({ continue: true, suppressOutput: true });
+    }
+
+    // Only gate git commits from here
     if (!isGitCommit(toolName, toolInput)) {
       return output({ continue: true, suppressOutput: true });
     }
 
-    process.stderr.write(`[guya-pre-commit] Commit detected in ${directory}\n`);
+    // Job 2: Block --no-verify
+    if (hasNoVerify(toolInput)) {
+      return output({ decision: 'block', reason: 'Cannot skip git hooks. Remove --no-verify.' });
+    }
 
-    const stateDir = getStateDir(directory);
-    const gateFile = join(stateDir, 'review-gate.json');
+    // Job 3: Review gate
+    const config = loadConfig(directory);
+    if (!config) {
+      return output({ continue: true, suppressOutput: true });
+    }
 
     const stagedFiles = getStagedFiles(directory, toolInput);
     if (stagedFiles.length === 0) {
       return output({ continue: true, suppressOutput: true });
     }
 
-    if (isReviewComplete(gateFile, stagedFiles)) {
-      // Gate is NOT consumed here — post-commit hook resets it after success
+    // Check if all files are exempt
+    const nonExempt = stagedFiles.filter(f => !isExempt(f, config));
+    if (nonExempt.length === 0) {
+      process.stderr.write(`[guya-gate] All ${stagedFiles.length} files exempt, skipping review\n`);
       return output({ continue: true, suppressOutput: true });
     }
 
-    const report = runChecks(stagedFiles, directory);
-    writeFileSync(join(stateDir, 'review-report.json'), JSON.stringify(report, null, 2));
-
-    if (!report.automated_pass) {
-      return output({ decision: 'block', reason: formatBlockReason(report) });
+    // Check if small change
+    if (isSmallChange(stagedFiles, config, directory)) {
+      process.stderr.write(`[guya-gate] Small change (${nonExempt.length} files), skipping review\n`);
+      return output({ continue: true, suppressOutput: true });
     }
-    output({ decision: 'block', reason: formatReviewPrompt(stagedFiles) });
+
+    // Check evidence
+    const evidence = checkEvidence(directory, config);
+    if (evidence.valid) {
+      process.stderr.write(`[guya-gate] Review evidence valid, allowing commit\n`);
+      return output({ continue: true, suppressOutput: true });
+    }
+
+    // Block with review instructions
+    output({ decision: 'block', reason: `${evidence.reason}\n\n${formatReviewPrompt(nonExempt)}` });
   } catch (err) {
-    process.stderr.write(`[guya-pre-commit] CATCH-ALL ERROR: ${err?.message || err} | tool=${input.tool_name || input.toolName} dir=${input.cwd || input.directory}\n`);
+    process.stderr.write(`[guya-gate] ERROR: ${err?.message || err}\n`);
     output({ continue: true, suppressOutput: true });
   }
 }
