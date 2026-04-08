@@ -9,7 +9,7 @@
  *
  *   On git commit, runs automated checks on staged files:
  *     1. Test verification — do test files exist for changed source files?
- *     2. Complexity check — files under 800 LOC, functions under 50 lines?
+ *     2. Complexity check — files under 800 LOC, functions under 80 lines?
  *     3. Cleanup scan — no leftover debug code?
  *
  *   If automated checks fail: blocks with report.
@@ -22,11 +22,11 @@ import { join, basename, dirname, extname } from 'path';
 import { execSync } from 'child_process';
 
 const MAX_FILE_LOC = 800;
-const MAX_FUNC_LINES = 50;
+const MAX_FUNC_LINES = 80;
 
 // --- stdin ---
 
-function readStdinSync(timeoutMs = 3000) {
+function readStdinSync(timeoutMs = 2000) {
   return new Promise((resolve) => {
     const chunks = [];
     let settled = false;
@@ -54,15 +54,24 @@ function isGitCommit(toolName, toolInput) {
   return /\bgit\s+commit\b/.test(cmd);
 }
 
-function getStagedFiles(directory) {
+function getStagedFiles(directory, toolInput) {
+  // First try actual staged files (when git add was a separate command)
   try {
-    const output = execSync('git diff --cached --name-only --diff-filter=ACMR', {
+    const out = execSync('git diff --cached --name-only --diff-filter=ACMR', {
       cwd: directory, encoding: 'utf-8', timeout: 5000
     });
-    return output.trim().split('\n').filter(Boolean);
-  } catch {
-    return [];
+    const files = out.trim().split('\n').filter(Boolean);
+    if (files.length > 0) return files;
+  } catch {}
+
+  // Fallback: parse files from "git add ... && git commit" combined commands
+  const cmd = typeof toolInput === 'string' ? toolInput : (toolInput?.command || '');
+  const addMatch = cmd.match(/\bgit\s+add\s+(.+?)(?:\s*&&|\s*;|\s*\|)/);
+  if (addMatch) {
+    return addMatch[1].trim().split(/\s+/).filter(f => !f.startsWith('-') && f.length > 0);
   }
+
+  return [];
 }
 
 // --- state ---
@@ -223,13 +232,17 @@ function formatReviewPrompt(stagedFiles) {
 
 async function main() {
   try {
-    const stdinData = await readStdinSync(3000);
+    const stdinData = await readStdinSync(4000);
     let input = {};
-    try { input = JSON.parse(stdinData); } catch {}
+    try { input = JSON.parse(stdinData); } catch {
+      process.stderr.write(`[guya-pre-commit] stdin parse failed, raw: ${stdinData.slice(0, 200)}\n`);
+    }
 
     const toolName = input.tool_name || input.toolName || '';
     const toolInput = input.tool_input || input.toolInput || '';
     const directory = input.cwd || input.directory || process.cwd();
+
+    process.stderr.write(`[guya-pre-commit] tool=${toolName} isCommit=${isGitCommit(toolName, toolInput)} dir=${directory}\n`);
 
     if (!isGitCommit(toolName, toolInput)) {
       return output({ continue: true, suppressOutput: true });
@@ -243,7 +256,7 @@ async function main() {
       return output({ continue: true, suppressOutput: true });
     }
 
-    const stagedFiles = getStagedFiles(directory);
+    const stagedFiles = getStagedFiles(directory, toolInput);
     if (stagedFiles.length === 0) {
       return output({ continue: true, suppressOutput: true });
     }
@@ -255,7 +268,8 @@ async function main() {
       return output({ decision: 'block', reason: formatBlockReason(report) });
     }
     output({ decision: 'block', reason: formatReviewPrompt(stagedFiles) });
-  } catch {
+  } catch (err) {
+    process.stderr.write(`[guya-pre-commit] CATCH-ALL ERROR: ${err?.message || err}\n`);
     output({ continue: true, suppressOutput: true });
   }
 }

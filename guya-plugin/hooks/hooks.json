@@ -3,12 +3,17 @@
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "*",
+        "matcher": "Bash",
         "hooks": [
           {
             "type": "command",
             "command": "node \"$CLAUDE_PLUGIN_ROOT\"/hooks/run.cjs \"$CLAUDE_PLUGIN_ROOT\"/hooks/guya-pre-commit-review.mjs",
-            "timeout": 2
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PLUGIN_ROOT\"/hooks/run.cjs \"$CLAUDE_PLUGIN_ROOT\"/hooks/guya-pre-push-check.mjs",
+            "timeout": 150
           }
         ]
       }
@@ -44,12 +49,22 @@
     ],
     "PostToolUse": [
       {
-        "matcher": "*",
+        "matcher": "Write|Edit",
         "hooks": [
           {
             "type": "command",
             "command": "node \"$CLAUDE_PLUGIN_ROOT\"/hooks/run.cjs \"$CLAUDE_PLUGIN_ROOT\"/hooks/guya-trace-capture.mjs",
             "timeout": 1
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PLUGIN_ROOT\"/hooks/run.cjs \"$CLAUDE_PLUGIN_ROOT\"/hooks/guya-post-commit-scribe.mjs",
+            "timeout": 3
           }
         ]
       }

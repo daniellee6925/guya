@@ -214,7 +214,7 @@ async function classifyTraces(client, unclassified) {
   }
 
   const traces = unclassified.map(({ trace }) => trace);
-  const userMessage = JSON.stringify(traces, null, 2);
+  const userMessage = JSON.stringify(traces);
 
   let response;
   try {
@@ -261,7 +261,7 @@ async function synthesizeGuidelines(client, highConfidenceTraces, existingGuidel
     return null;
   }
 
-  const userMessage = JSON.stringify({ highConfidenceTraces, existingGuidelines }, null, 2);
+  const userMessage = JSON.stringify({ highConfidenceTraces, existingGuidelines });
 
   let response;
   try {
@@ -332,12 +332,12 @@ async function writeReflection(client, sessionTraces, directory, sessionId) {
     return;
   }
 
-  const userMessage = JSON.stringify(sessionTraces, null, 2);
+  const userMessage = JSON.stringify(sessionTraces);
 
   let response;
   try {
     response = await client.messages.create({
-      model: 'claude-sonnet-4-6',
+      model: 'claude-haiku-4-5-20251001',
       max_tokens: 1024,
       system: systemPrompt,
       messages: [{ role: 'user', content: userMessage }],
@@ -404,6 +404,55 @@ async function updateArchivalMemory(directory, sessionTraces, classificationResu
   }
 }
 
+// --- Helpers for main pipeline ---
+
+function loadApiKey() {
+  let apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    try {
+      const envFile = readFileSafe(join(GLOBAL_DIR, '.env'));
+      if (envFile) {
+        const match = envFile.match(/^ANTHROPIC_API_KEY=(.+)$/m);
+        if (match) apiKey = match[1].trim().replace(/^["']|["']$/g, '');
+      }
+    } catch {}
+  }
+  return apiKey || null;
+}
+
+async function persistClassifications(classificationResults, allTracesWithMeta, unclassified, tracesDir) {
+  const classById = new Map(classificationResults.map(r => [r.traceId, r]));
+  const fileGroups = {};
+  for (const { trace, file } of allTracesWithMeta) {
+    if (!fileGroups[file]) fileGroups[file] = [];
+    const cls = trace.traceId ? classById.get(trace.traceId) : null;
+    if (cls && unclassified.some(u => u.trace === trace)) {
+      fileGroups[file].push({
+        ...trace, classified: true,
+        persistence: cls.persistence, confidence: cls.confidence, domain: cls.domain,
+      });
+    } else {
+      fileGroups[file].push(trace);
+    }
+  }
+  await pruneClassifiedTraces(tracesDir, fileGroups);
+}
+
+async function runSynthesis(client, classificationResults) {
+  const highConf = classificationResults.filter(r => (r.confidence ?? 0) >= 0.85);
+  if (highConf.length === 0) return;
+  const existingGuidelines = readExistingGuidelines().slice(0, 10);
+  const synthesis = await synthesizeGuidelines(client, highConf, existingGuidelines);
+  if (!synthesis) return;
+  const writes = [];
+  for (const g of synthesis.newGuidelines || []) writes.push(writeGuidelineFile(g));
+  for (const u of synthesis.updatedGuidelines || []) {
+    const match = existingGuidelines.find(eg => eg.content.includes(u.id));
+    if (match) writes.push(updateGuidelineFile(match.file, u));
+  }
+  await Promise.allSettled(writes);
+}
+
 // --- Main ---
 
 async function main() {
@@ -417,25 +466,21 @@ async function main() {
     directory = input.cwd || input.directory || directory;
   } catch {}
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = loadApiKey();
   if (!apiKey) {
-    process.stderr.write('[guya-session-end] ANTHROPIC_API_KEY not set, skipping evolution\n');
-    console.log(JSON.stringify({ continue: true }));
-    return;
+    process.stderr.write('[guya-session-end] ANTHROPIC_API_KEY not set (checked env + ~/.claude/guya/.env), skipping evolution\n');
+    return console.log(JSON.stringify({ continue: true }));
   }
 
   const tracesDir = join(directory, '.guya', 'evolution', 'traces');
   const allTracesWithMeta = readAllTraces(tracesDir);
   const unclassified = filterUnclassified(allTracesWithMeta, sessionId);
 
-  if (unclassified.length === 0) {
-    console.log(JSON.stringify({ continue: true }));
-    return;
-  }
+  if (unclassified.length === 0) return console.log(JSON.stringify({ continue: true }));
 
   const client = new Anthropic({ apiKey });
 
-  // Step 2: Pre-filter noise, then classify
+  // Classify traces
   const signalTraces = preFilterTraces(unclassified);
   process.stderr.write(`[guya-session-end] Pre-filter: ${unclassified.length} traces -> ${signalTraces.length} with signal\n`);
 
@@ -445,84 +490,34 @@ async function main() {
   } else try {
     classificationResults = await classifyTraces(client, signalTraces);
   } catch (err) {
-    process.stderr.write(`[guya-session-end] Step 2 failed: ${err.message}\n`);
+    process.stderr.write(`[guya-session-end] Classification failed: ${err.message}\n`);
   }
 
-  // Mark traces as classified and rewrite JSONL files
+  // Persist classifications
   if (classificationResults) {
-    // Group by file, merge classification back onto traces
-    const classById = new Map(classificationResults.map(r => [r.traceId, r]));
-    const fileGroups = {};
-    for (const { trace, file } of allTracesWithMeta) {
-      if (!fileGroups[file]) fileGroups[file] = [];
-      const cls = trace.traceId ? classById.get(trace.traceId) : null;
-      if (cls && unclassified.some(u => u.trace === trace)) {
-        fileGroups[file].push({
-          ...trace,
-          classified: true,
-          persistence: cls.persistence,
-          confidence: cls.confidence,
-          domain: cls.domain,
-        });
-      } else {
-        fileGroups[file].push(trace);
-      }
-    }
-    try {
-      await pruneClassifiedTraces(tracesDir, fileGroups);
-    } catch (err) {
-      process.stderr.write(`[guya-session-end] Failed to persist classifications: ${err.message}\n`);
-    }
+    try { await persistClassifications(classificationResults, allTracesWithMeta, unclassified, tracesDir); }
+    catch (err) { process.stderr.write(`[guya-session-end] Failed to persist classifications: ${err.message}\n`); }
   }
 
-  // Step 3: Synthesize
+  // Synthesize guidelines
   if (classificationResults) {
-    const highConf = classificationResults.filter(r => (r.confidence ?? 0) >= 0.85);
-    if (highConf.length > 0) {
-      try {
-        const existingGuidelines = readExistingGuidelines();
-        const synthesis = await synthesizeGuidelines(client, highConf, existingGuidelines);
-        if (synthesis) {
-          const writes = [];
-          for (const g of synthesis.newGuidelines || []) {
-            writes.push(writeGuidelineFile(g));
-          }
-          for (const u of synthesis.updatedGuidelines || []) {
-            const match = existingGuidelines.find(eg => eg.content.includes(u.id));
-            if (match) writes.push(updateGuidelineFile(match.file, u));
-          }
-          await Promise.allSettled(writes);
-        }
-      } catch (err) {
-        process.stderr.write(`[guya-session-end] Step 3 failed: ${err.message}\n`);
-      }
-    }
+    try { await runSynthesis(client, classificationResults); }
+    catch (err) { process.stderr.write(`[guya-session-end] Synthesis failed: ${err.message}\n`); }
   }
 
-  // Step 4: Reflect
   const sessionTraces = allTracesWithMeta
     .filter(({ trace }) => !sessionId || !trace.sessionId || trace.sessionId === sessionId)
     .map(({ trace }) => trace);
 
-  try {
-    await writeReflection(client, sessionTraces, directory, sessionId);
-  } catch (err) {
-    process.stderr.write(`[guya-session-end] Step 4 failed: ${err.message}\n`);
-  }
+  // Reflect, update context, update archival — independent, run all
+  try { await writeReflection(client, sessionTraces, directory, sessionId); }
+  catch (err) { process.stderr.write(`[guya-session-end] Reflection failed: ${err.message}\n`); }
 
-  // Step 5: Update session context
-  try {
-    await updateSessionContext(directory, sessionTraces, classificationResults);
-  } catch (err) {
-    process.stderr.write(`[guya-session-end] Step 5 failed: ${err.message}\n`);
-  }
+  try { await updateSessionContext(directory, sessionTraces, classificationResults); }
+  catch (err) { process.stderr.write(`[guya-session-end] Session context update failed: ${err.message}\n`); }
 
-  // Step 6: Update archival memory with session summary
-  try {
-    await updateArchivalMemory(directory, sessionTraces, classificationResults);
-  } catch (err) {
-    process.stderr.write(`[guya-session-end] Step 6 failed: ${err.message}\n`);
-  }
+  try { await updateArchivalMemory(directory, sessionTraces, classificationResults); }
+  catch (err) { process.stderr.write(`[guya-session-end] Archival update failed: ${err.message}\n`); }
 
   console.log(JSON.stringify({ continue: true }));
 }

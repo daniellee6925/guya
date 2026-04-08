@@ -60,11 +60,17 @@ function findMatchingArchival(prompt, archivalDir) {
   const promptLower = prompt.toLowerCase();
   const matches = [];
 
+  const promptWords = promptLower.split(/\s+/).filter(w => w.length >= 2);
+
   for (const file of files) {
     const name = file.replace('.md', '').toLowerCase();
-    // Match if the archival file name appears in the prompt
-    // e.g., prompt "working on sdf optimizer" matches "sdf.md"
-    if (promptLower.includes(name)) {
+    const nameParts = name.split(/[-_]/);
+    // Match if:
+    // 1. The full filename appears in the prompt (e.g., "sdf-dev" in prompt matches "sdf-dev.md")
+    // 2. Any prompt word appears in the filename (e.g., "sdf" in prompt matches "sdf-dev.md")
+    const matched = promptLower.includes(name)
+      || promptWords.some(word => nameParts.some(part => part === word));
+    if (matched) {
       const content = readFileSafe(join(archivalDir, file));
       if (content) {
         matches.push({ name, content });
