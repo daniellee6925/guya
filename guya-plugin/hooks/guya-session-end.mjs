@@ -7,7 +7,7 @@
  *   Input:  JSON on stdin with { sessionId, directory }
  *   Output: JSON on stdout with { continue: true }
  *
- *   Step 1: Read unclassified traces from {directory}/.guya/evolution/traces/
+ *   Step 1: Read unclassified traces from ~/.claude/guya/traces/
  *   Step 2: Classify traces via Haiku (guya-observer)
  *   Step 3: Synthesize guidelines via Sonnet (guya-synthesizer)
  *   Step 4: Write session reflection via Sonnet (guya-reflector)
@@ -472,7 +472,7 @@ async function main() {
     return console.log(JSON.stringify({ continue: true }));
   }
 
-  const tracesDir = join(directory, '.guya', 'evolution', 'traces');
+  const tracesDir = join(GLOBAL_DIR, 'traces');
   const allTracesWithMeta = readAllTraces(tracesDir);
   const unclassified = filterUnclassified(allTracesWithMeta, sessionId);
 

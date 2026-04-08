@@ -13,10 +13,12 @@
  */
 
 import { existsSync, appendFileSync, mkdirSync, statSync } from 'fs';
+import { join } from 'path';
+import { homedir } from 'os';
+import { randomUUID } from 'crypto';
 
 const MAX_TRACE_FILE_BYTES = 5 * 1024 * 1024; // 5MB cap
-import { join } from 'path';
-import { randomUUID } from 'crypto';
+const GLOBAL_TRACES_DIR = join(homedir(), '.claude', 'guya', 'traces');
 
 // --- Helpers ---
 
@@ -100,8 +102,7 @@ async function main() {
     }
 
     const { fileName, project, filePath } = extractFileSummary(toolInput);
-    const tracesDir = join(directory, '.guya', 'evolution', 'traces');
-    ensureTracesDir(tracesDir);
+    ensureTracesDir(GLOBAL_TRACES_DIR);
 
     const trace = {
       id: randomUUID(),
@@ -114,7 +115,7 @@ async function main() {
       project,
     };
 
-    const traceFile = join(tracesDir, `${todayString()}.jsonl`);
+    const traceFile = join(GLOBAL_TRACES_DIR, `${todayString()}.jsonl`);
     try {
       if (existsSync(traceFile) && statSync(traceFile).size >= MAX_TRACE_FILE_BYTES) {
         // silently drop — better to lose a trace than fill the disk

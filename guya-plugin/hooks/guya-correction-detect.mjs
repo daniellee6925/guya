@@ -15,7 +15,10 @@
 
 import { existsSync, appendFileSync, writeFileSync, mkdirSync } from 'fs';
 import { join } from 'path';
+import { homedir } from 'os';
 import { randomUUID } from 'crypto';
+
+const GLOBAL_TRACES_DIR = join(homedir(), '.claude', 'guya', 'traces');
 
 // --- Correction patterns ---
 
@@ -112,37 +115,26 @@ async function main() {
     const isoDate = now.toISOString();
     const uuid = randomUUID();
 
-    const tracesDir = join(directory, '.guya', 'evolution', 'traces');
-    const tacticalDir = join(directory, '.guya', 'evolution', 'guidelines', 'tactical');
-    ensureDir(tracesDir);
-    ensureDir(tacticalDir);
+    ensureDir(GLOBAL_TRACES_DIR);
 
-    // Write trace entry
+    // Detect project from cwd
+    const cwdParts = directory.split('/');
+    const desktopIdx = cwdParts.indexOf('Desktop');
+    const project = desktopIdx >= 0 && cwdParts.length > desktopIdx + 1
+      ? cwdParts[desktopIdx + 1] : cwdParts[cwdParts.length - 1];
+
+    // Write trace entry to global store
     const trace = {
       id: randomUUID(),
       sessionId,
       timestamp,
       type: correctionType,
       domain: 'user_preferences',
-      content: `Correction detected: ${prompt.slice(0, 200)}`,
+      project,
+      content: `${correctionType}: ${prompt.slice(0, 300)}`,
     };
     try {
-      appendFileSync(join(tracesDir, `${todayString()}.jsonl`), JSON.stringify(trace) + '\n', 'utf-8');
-    } catch {}
-
-    // Write tactical guideline
-    const guidelineContent = `---
-id: guideline-${uuid}
-domain: user_preferences
-confidence: 0.8
-created: ${isoDate}
-type: tactical
----
-
-${prompt.trim()}
-`;
-    try {
-      writeFileSync(join(tacticalDir, `${timestamp}.md`), guidelineContent, 'utf-8');
+      appendFileSync(join(GLOBAL_TRACES_DIR, `${todayString()}.jsonl`), JSON.stringify(trace) + '\n', 'utf-8');
     } catch {}
 
     console.log(JSON.stringify({
