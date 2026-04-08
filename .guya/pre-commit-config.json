@@ -1,6 +1,6 @@
 {
   "reviewExempt": ["*.yaml", "*.yml", "*.md", "*.json", "*.toml", "*.css", "*.html", "*.txt", "*.cfg", "*.ini", "*.env.example"],
-  "pathExempt": ["hooks/", "scripts/", "docs/", ".guya/", ".omc/", ".claude/"],
+  "pathExempt": ["scripts/", "docs/", ".guya/", ".omc/", ".claude/"],
   "testRequired": {
     "extensions": [".py"],
     "patterns": [
@@ -22,8 +22,7 @@
     }
   },
   "smallChange": {
-    "maxLines": 30,
-    "maxFiles": 3
+    "maxLines": 10
   },
   "skipOnMerge": true,
   "gateMaxAgeMinutes": 10

@@ -157,11 +157,10 @@ function isExempt(file, config) {
 }
 
 function isSmallChange(stagedFiles, config, directory) {
-  const threshold = config.smallChange || { maxLines: 30, maxFiles: 3 };
+  const threshold = config.smallChange || { maxLines: 10 };
   const nonExempt = stagedFiles.filter(f => !isExempt(f, config));
 
   if (nonExempt.length === 0) return true;
-  if (nonExempt.length > threshold.maxFiles) return false;
 
   try {
     const stat = execSync('git diff --cached --stat', {
