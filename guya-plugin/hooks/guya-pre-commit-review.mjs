@@ -84,10 +84,29 @@ function getStateDir(directory) {
   return stateDir;
 }
 
-function isReviewComplete(gateFile) {
+function hashStagedFiles(stagedFiles) {
+  // Deterministic hash of sorted file list — proves review matched these files
+  return stagedFiles.slice().sort().join('|');
+}
+
+const GATE_MAX_AGE_MS = 10 * 60 * 1000; // 10 minutes
+
+function isReviewComplete(gateFile, stagedFiles) {
   try {
     const gate = JSON.parse(readFileSync(gateFile, 'utf-8'));
-    return gate.reviewed === true;
+    if (!gate.reviewed) return false;
+    // Verify the review was for THESE files
+    if (gate.filesHash !== hashStagedFiles(stagedFiles)) {
+      process.stderr.write('[guya-pre-commit] Gate rejected: staged files changed since review\n');
+      return false;
+    }
+    // Verify the review is recent
+    const age = Date.now() - (gate.timestamp || 0);
+    if (age > GATE_MAX_AGE_MS) {
+      process.stderr.write(`[guya-pre-commit] Gate rejected: review expired (${Math.round(age / 60000)}min ago)\n`);
+      return false;
+    }
+    return true;
   } catch {
     return false;
   }
@@ -225,7 +244,8 @@ function formatBlockReason(report) {
 }
 
 function formatReviewPrompt(stagedFiles) {
-  return `Automated checks passed (${stagedFiles.length} files). Now run karpathy-review on the staged changes, then review-followup. After both pass, write { "reviewed": true } to .guya/evolution/review-gate.json and retry the commit.\n\nStaged files: ${stagedFiles.join(', ')}`;
+  const filesHash = stagedFiles.slice().sort().join('|');
+  return `Automated checks passed (${stagedFiles.length} files). Now run karpathy-review on the staged changes, then review-followup. After both reviews pass, write the gate file and retry the commit:\n\necho '{ "reviewed": true, "filesHash": "${filesHash}", "timestamp": '$(date +%s000)' }' > .guya/evolution/review-gate.json\n\nThe gate expires after 10 minutes and must match the staged files. Do not skip reviews.\n\nStaged files: ${stagedFiles.join(', ')}`;
 }
 
 // --- Main ---
@@ -251,13 +271,13 @@ async function main() {
     const stateDir = getStateDir(directory);
     const gateFile = join(stateDir, 'review-gate.json');
 
-    if (isReviewComplete(gateFile)) {
-      writeFileSync(gateFile, JSON.stringify({ reviewed: false }));
+    const stagedFiles = getStagedFiles(directory, toolInput);
+    if (stagedFiles.length === 0) {
       return output({ continue: true, suppressOutput: true });
     }
 
-    const stagedFiles = getStagedFiles(directory, toolInput);
-    if (stagedFiles.length === 0) {
+    if (isReviewComplete(gateFile, stagedFiles)) {
+      writeFileSync(gateFile, JSON.stringify({ reviewed: false }));
       return output({ continue: true, suppressOutput: true });
     }
 
