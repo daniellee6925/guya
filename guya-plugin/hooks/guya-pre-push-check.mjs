@@ -204,6 +204,7 @@ async function main() {
       const summary = Object.entries(results)
         .map(([name, r]) => r.skipped ? `${name}: skipped (${r.skipped})` : `${name}: passed`)
         .join(', ');
+      process.stderr.write(`[guya-pre-push] All checks passed: ${summary}\n`);
       return output({
         continue: true,
         hookSpecificOutput: {

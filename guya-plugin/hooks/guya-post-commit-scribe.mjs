@@ -166,6 +166,7 @@ async function main() {
 
     appendCommit(directory, commit);
 
+    process.stderr.write(`[guya-scribe] Logged commit ${commit.hash} (${commit.message}) to STATUS.md\n`);
     output({
       continue: true,
       hookSpecificOutput: {
