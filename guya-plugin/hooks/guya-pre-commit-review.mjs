@@ -62,7 +62,9 @@ function getStagedFiles(directory, toolInput) {
     });
     const files = out.trim().split('\n').filter(Boolean);
     if (files.length > 0) return files;
-  } catch {}
+  } catch {
+    process.stderr.write('[guya-pre-commit] git diff --cached failed, falling back to command parsing\n');
+  }
 
   // Fallback: parse files from "git add ... && git commit" combined commands
   const cmd = typeof toolInput === 'string' ? toolInput : (toolInput?.command || '');
@@ -95,19 +97,43 @@ function isReviewComplete(gateFile, stagedFiles) {
   try {
     const gate = JSON.parse(readFileSync(gateFile, 'utf-8'));
     if (!gate.reviewed) return false;
+
+    // Check required fields exist
+    const required = ['filesHash', 'timestamp', 'reviewIssues', 'fixesApplied', 'verifiedAt'];
+    const missing = required.filter(f => gate[f] === undefined || gate[f] === null);
+    if (missing.length > 0) {
+      process.stderr.write(`[guya-pre-commit] Gate rejected: missing fields: ${missing.join(', ')}\n`);
+      return false;
+    }
+
     // Verify the review was for THESE files
     if (gate.filesHash !== hashStagedFiles(stagedFiles)) {
       process.stderr.write('[guya-pre-commit] Gate rejected: staged files changed since review\n');
       return false;
     }
+
+    // If issues were found, fixes must have been applied
+    if (gate.reviewIssues > 0 && gate.fixesApplied === 0) {
+      process.stderr.write(`[guya-pre-commit] Gate rejected: ${gate.reviewIssues} issues found but 0 fixes applied\n`);
+      return false;
+    }
+
     // Verify the review is recent
     const age = Date.now() - (gate.timestamp || 0);
     if (age > GATE_MAX_AGE_MS) {
       process.stderr.write(`[guya-pre-commit] Gate rejected: review expired (${Math.round(age / 60000)}min ago)\n`);
       return false;
     }
+
+    // Verify the verification step happened after the review
+    if (gate.verifiedAt <= gate.timestamp) {
+      process.stderr.write('[guya-pre-commit] Gate rejected: verifiedAt must be after review timestamp\n');
+      return false;
+    }
+
     return true;
-  } catch {
+  } catch (err) {
+    process.stderr.write(`[guya-pre-commit] Gate file error: ${err?.message}\n`);
     return false;
   }
 }
@@ -245,15 +271,40 @@ function formatBlockReason(report) {
 
 function formatReviewPrompt(stagedFiles) {
   const filesHash = stagedFiles.slice().sort().join('|');
-  return `Automated checks passed (${stagedFiles.length} files). Now run karpathy-review on the staged changes, then review-followup. After both reviews pass, write the gate file and retry the commit:\n\necho '{ "reviewed": true, "filesHash": "${filesHash}", "timestamp": '$(date +%s000)' }' > .guya/evolution/review-gate.json\n\nThe gate expires after 10 minutes and must match the staged files. Do not skip reviews.\n\nStaged files: ${stagedFiles.join(', ')}`;
+  return `Automated checks passed (${stagedFiles.length} files). Follow this process before committing:
+
+1. REVIEW: Run karpathy-review and review-followup on the staged files. Count total issues found.
+2. FIX: Address the issues found. Count fixes applied.
+3. VERIFY: Re-review the fixes — confirm they're correct and didn't introduce new issues.
+4. GATE: Write the gate file with evidence and retry the commit.
+
+Gate file format (.guya/evolution/review-gate.json):
+{
+  "reviewed": true,
+  "filesHash": "${filesHash}",
+  "timestamp": <epoch_ms after step 1>,
+  "reviewIssues": <number of issues found in step 1>,
+  "fixesApplied": <number of fixes applied in step 2>,
+  "verifiedAt": <epoch_ms after step 3>
+}
+
+Rules enforced by the hook:
+- All fields required. Missing fields = rejected.
+- If reviewIssues > 0 and fixesApplied = 0, rejected (can't ignore issues).
+- verifiedAt must be after timestamp (proves verification happened after review).
+- Gate expires after 10 minutes.
+- filesHash must match staged files.
+
+Staged files: ${stagedFiles.join(', ')}`;
 }
 
 // --- Main ---
 
 async function main() {
+  let stdinData = '';
+  let input = {};
   try {
-    const stdinData = await readStdinSync(4000);
-    let input = {};
+    stdinData = await readStdinSync(4000);
     try { input = JSON.parse(stdinData); } catch {
       process.stderr.write(`[guya-pre-commit] stdin parse failed, raw: ${stdinData.slice(0, 200)}\n`);
     }
@@ -262,11 +313,11 @@ async function main() {
     const toolInput = input.tool_input || input.toolInput || '';
     const directory = input.cwd || input.directory || process.cwd();
 
-    process.stderr.write(`[guya-pre-commit] tool=${toolName} isCommit=${isGitCommit(toolName, toolInput)} dir=${directory}\n`);
-
     if (!isGitCommit(toolName, toolInput)) {
       return output({ continue: true, suppressOutput: true });
     }
+
+    process.stderr.write(`[guya-pre-commit] Commit detected in ${directory}\n`);
 
     const stateDir = getStateDir(directory);
     const gateFile = join(stateDir, 'review-gate.json');
@@ -289,7 +340,7 @@ async function main() {
     }
     output({ decision: 'block', reason: formatReviewPrompt(stagedFiles) });
   } catch (err) {
-    process.stderr.write(`[guya-pre-commit] CATCH-ALL ERROR: ${err?.message || err}\n`);
+    process.stderr.write(`[guya-pre-commit] CATCH-ALL ERROR: ${err?.message || err} | tool=${input.tool_name || input.toolName} dir=${input.cwd || input.directory}\n`);
     output({ continue: true, suppressOutput: true });
   }
 }
