@@ -165,9 +165,14 @@ async function main() {
     }
 
     appendCommit(directory, commit);
-    process.stderr.write(`[guya-scribe] Logged commit ${commit.hash} to STATUS.md\n`);
 
-    output({ continue: true, suppressOutput: true });
+    output({
+      continue: true,
+      hookSpecificOutput: {
+        hookEventName: 'PostToolUse',
+        additionalContext: `<guya-scribe>\nLogged commit ${commit.hash} (${commit.message}) to STATUS.md\n</guya-scribe>`,
+      },
+    });
   } catch (err) {
     process.stderr.write(`[guya-scribe] ERROR: ${err?.message || err}\n`);
     output({ continue: true, suppressOutput: true });

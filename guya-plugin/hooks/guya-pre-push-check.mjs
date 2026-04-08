@@ -204,8 +204,13 @@ async function main() {
       const summary = Object.entries(results)
         .map(([name, r]) => r.skipped ? `${name}: skipped (${r.skipped})` : `${name}: passed`)
         .join(', ');
-      process.stderr.write(`[guya-pre-push] All checks passed: ${summary}\n`);
-      return output({ continue: true, suppressOutput: true });
+      return output({
+        continue: true,
+        hookSpecificOutput: {
+          hookEventName: 'PreToolUse',
+          additionalContext: `<guya-pre-push>\nAll pre-push checks passed: ${summary}\n</guya-pre-push>`,
+        },
+      });
     }
 
     output({ decision: 'block', reason: formatReport(results) });
