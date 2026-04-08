@@ -26,6 +26,7 @@ import { tmpdir } from 'os';
 import Anthropic from '@anthropic-ai/sdk';
 
 const GLOBAL_DIR = join(homedir(), '.claude', 'guya');
+const OBSIDIAN_VAULT = join(homedir(), 'Desktop', 'secrets');
 const PLUGIN_ROOT = process.env.CLAUDE_PLUGIN_ROOT || dirname(new URL(import.meta.url).pathname);
 
 // --- Helpers ---
@@ -453,6 +454,99 @@ async function runSynthesis(client, classificationResults) {
   await Promise.allSettled(writes);
 }
 
+// --- Step 7: Obsidian vault sync ---
+
+async function syncGrowthTracker(wikiDir, dateStr) {
+  const growthSrc = readFileSafe(join(GLOBAL_DIR, 'growth-tracker.md'));
+  const growthDest = join(wikiDir, 'syntheses', 'growth-tracker.md');
+  if (!growthSrc || !existsSync(growthDest)) return;
+
+  const existing = readFileSafe(growthDest);
+  if (!existing) return;
+
+  let updated = existing;
+
+  // Extract grades from source and update table rows
+  const gradePattern = /\*\*(.+?)\*\*: ([A-Z][+-]?) — /g;
+  let match;
+  while ((match = gradePattern.exec(growthSrc)) !== null) {
+    const [, skill, grade] = match;
+    const tablePattern = new RegExp(`(\\| ${skill.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} \\| )[A-Z][+-]?( \\|)`);
+    updated = updated.replace(tablePattern, `$1${grade}$2`);
+  }
+
+  // Update milestone checkboxes — match entire line to avoid partial duplication
+  const milestoneLines = growthSrc.match(/^\d+\. .+$/gm) || [];
+  for (const line of milestoneLines) {
+    const done = line.includes('~~');
+    const text = line.replace(/^\d+\.\s+/, '').replace(/~~/g, '').replace(/ — .+$/, '').trim();
+    if (!text) continue;
+    const escaped = text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const checkPattern = new RegExp(`- \\[[ x]\\] ${escaped}[^\n]*`);
+    const replacement = done ? `- [x] ${text}` : `- [ ] ${text}`;
+    if (checkPattern.test(updated)) {
+      updated = updated.replace(checkPattern, replacement);
+    }
+  }
+
+  if (updated !== existing) {
+    // Only update frontmatter date when actual content changed
+    updated = updated.replace(/^updated: .+$/m, `updated: ${dateStr}`);
+    const changelogEntry = `| ${dateStr} | Auto-sync: grades and milestones updated from Guya |`;
+    if (!updated.includes(changelogEntry)) {
+      updated = updated.replace(/(## Changelog\n\n\| Date \| Change \|\n\|------|--------\|\n)/, `$1${changelogEntry}\n`);
+    }
+    await atomicWrite(growthDest, updated);
+    process.stderr.write(`[guya-session-end] Obsidian: growth-tracker.md synced\n`);
+  }
+}
+
+async function syncProjectEntity(wikiDir, directory, dateStr) {
+  const projectName = directory.split('/').pop().toLowerCase().replace(/[^a-z0-9-]/g, '');
+  const statusFile = join(directory, 'STATUS.md');
+  const entityFile = join(wikiDir, 'entities', `${projectName}.md`);
+  if (!existsSync(statusFile) || !existsSync(entityFile)) return projectName;
+
+  const status = readFileSafe(statusFile);
+  const entity = readFileSafe(entityFile);
+  if (!status || !entity) return projectName;
+
+  let updated = entity.replace(/^updated: .+$/m, `updated: ${dateStr}`);
+  const focusMatch = status.match(/## Current Focus\n(.+)/);
+  if (focusMatch) {
+    const focus = focusMatch[1].trim();
+    updated = updated.replace(
+      /## Current State\n\n[\s\S]*?(?=\n\n## )/,
+      `## Current State\n\n${focus}`
+    );
+  }
+
+  if (updated !== entity) {
+    await atomicWrite(entityFile, updated);
+    process.stderr.write(`[guya-session-end] Obsidian: ${projectName}.md entity synced\n`);
+  }
+  return projectName;
+}
+
+async function syncObsidianVault(directory) {
+  const wikiDir = join(OBSIDIAN_VAULT, 'wiki');
+  if (!existsSync(wikiDir)) return;
+
+  const dateStr = today();
+  await syncGrowthTracker(wikiDir, dateStr);
+  const projectName = await syncProjectEntity(wikiDir, directory, dateStr);
+
+  // Append to log (once per day)
+  const logFile = join(wikiDir, 'log.md');
+  if (existsSync(logFile)) {
+    const log = readFileSafe(logFile);
+    if (log && !log.includes(`[${dateStr}] auto-sync`)) {
+      const logEntry = `\n## [${dateStr}] auto-sync | Session End\n\n**Source:** Guya SessionEnd hook\n**Pages checked:** growth-tracker, ${projectName || 'n/a'}\n`;
+      await atomicWrite(logFile, log + logEntry);
+    }
+  }
+}
+
 // --- Main ---
 
 async function main() {
@@ -518,6 +612,10 @@ async function main() {
 
   try { await updateArchivalMemory(directory, sessionTraces, classificationResults); }
   catch (err) { process.stderr.write(`[guya-session-end] Archival update failed: ${err.message}\n`); }
+
+  // Sync to Obsidian vault
+  try { await syncObsidianVault(directory); }
+  catch (err) { process.stderr.write(`[guya-session-end] Obsidian sync failed: ${err.message}\n`); }
 
   console.log(JSON.stringify({ continue: true }));
 }
