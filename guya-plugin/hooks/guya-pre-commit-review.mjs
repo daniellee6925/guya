@@ -131,6 +131,26 @@ function isReviewComplete(gateFile, stagedFiles) {
       return false;
     }
 
+    // Verify the review report exists and was written recently
+    const reportFile = join(dirname(gateFile), 'review-report.json');
+    try {
+      const report = JSON.parse(readFileSync(reportFile, 'utf-8'));
+      const reportAge = Date.now() - new Date(report.timestamp).getTime();
+      if (reportAge > GATE_MAX_AGE_MS) {
+        process.stderr.write(`[guya-pre-commit] Gate rejected: review report is stale (${Math.round(reportAge / 60000)}min old)\n`);
+        return false;
+      }
+      // Report must list the same staged files
+      const reportFiles = (report.staged_files || []).slice().sort().join('|');
+      if (reportFiles !== hashStagedFiles(stagedFiles)) {
+        process.stderr.write('[guya-pre-commit] Gate rejected: review report was for different files\n');
+        return false;
+      }
+    } catch {
+      process.stderr.write('[guya-pre-commit] Gate rejected: no valid review report found — review must actually run\n');
+      return false;
+    }
+
     return true;
   } catch (err) {
     process.stderr.write(`[guya-pre-commit] Gate file error: ${err?.message}\n`);
