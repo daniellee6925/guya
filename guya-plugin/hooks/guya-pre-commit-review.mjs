@@ -81,7 +81,9 @@ function getStagedFiles(directory, toolInput) {
 function getStateDir(directory) {
   const stateDir = join(directory, '.guya', 'evolution');
   if (!existsSync(stateDir)) {
-    try { mkdirSync(stateDir, { recursive: true }); } catch {}
+    try { mkdirSync(stateDir, { recursive: true }); } catch (err) {
+      process.stderr.write(`[guya-pre-commit] Warning: could not create ${stateDir}: ${err?.message}\n`);
+    }
   }
   return stateDir;
 }
@@ -99,7 +101,7 @@ function isReviewComplete(gateFile, stagedFiles) {
     if (!gate.reviewed) return false;
 
     // Check required fields exist
-    const required = ['filesHash', 'timestamp', 'reviewIssues', 'fixesApplied', 'verifiedAt'];
+    const required = ['filesHash', 'timestamp', 'reviewIssues', 'fixesApplied', 'followupTimestamp', 'followupIssues', 'verifiedAt'];
     const missing = required.filter(f => gate[f] === undefined || gate[f] === null);
     if (missing.length > 0) {
       process.stderr.write(`[guya-pre-commit] Gate rejected: missing fields: ${missing.join(', ')}\n`);
@@ -125,9 +127,15 @@ function isReviewComplete(gateFile, stagedFiles) {
       return false;
     }
 
-    // Verify the verification step happened after the review
-    if (gate.verifiedAt <= gate.timestamp) {
-      process.stderr.write('[guya-pre-commit] Gate rejected: verifiedAt must be after review timestamp\n');
+    // Verify followup review happened after initial review
+    if (gate.followupTimestamp <= gate.timestamp) {
+      process.stderr.write('[guya-pre-commit] Gate rejected: followupTimestamp must be after initial review timestamp\n');
+      return false;
+    }
+
+    // Verify the verification step happened after the followup
+    if (gate.verifiedAt <= gate.followupTimestamp) {
+      process.stderr.write('[guya-pre-commit] Gate rejected: verifiedAt must be after followup review\n');
       return false;
     }
 
@@ -167,7 +175,7 @@ function output(obj) {
 function isSourceFile(file) {
   const ext = extname(file);
   if (!['.py', '.ts', '.js', '.mjs'].includes(ext)) return false;
-  if (/test|__init__|conftest|fixture|\.config|\.d\.ts/.test(file)) return false;
+  if (/(?:^|[_./])tests?(?:[_./]|$)|__init__|conftest|fixture|\.config|\.d\.ts/.test(file)) return false;
   if (file.startsWith('.') || file.includes('node_modules') || file.includes('docs/')) return false;
   // Skip hook files — they don't need unit tests
   if (file.includes('hooks/')) return false;
@@ -293,10 +301,11 @@ function formatReviewPrompt(stagedFiles) {
   const filesHash = stagedFiles.slice().sort().join('|');
   return `Automated checks passed (${stagedFiles.length} files). Follow this process before committing:
 
-1. REVIEW: Run karpathy-review and review-followup on the staged files. Count total issues found.
+1. INITIAL REVIEW: Run karpathy-review on the staged files. Count total issues found.
 2. FIX: Address the issues found. Count fixes applied.
-3. VERIFY: Re-review the fixes — confirm they're correct and didn't introduce new issues.
-4. GATE: Write the gate file with evidence and retry the commit.
+3. FOLLOWUP REVIEW: Run review-followup on the staged files. Count any remaining or new issues.
+4. VERIFY: Confirm all issues are resolved and no new problems were introduced.
+5. GATE: Write the gate file with evidence and retry the commit.
 
 Gate file format (.guya/evolution/review-gate.json):
 {
@@ -305,13 +314,16 @@ Gate file format (.guya/evolution/review-gate.json):
   "timestamp": <epoch_ms after step 1>,
   "reviewIssues": <number of issues found in step 1>,
   "fixesApplied": <number of fixes applied in step 2>,
-  "verifiedAt": <epoch_ms after step 3>
+  "followupTimestamp": <epoch_ms after step 3>,
+  "followupIssues": <number of issues found in step 3>,
+  "verifiedAt": <epoch_ms after step 4>
 }
 
 Rules enforced by the hook:
 - All fields required. Missing fields = rejected.
 - If reviewIssues > 0 and fixesApplied = 0, rejected (can't ignore issues).
-- verifiedAt must be after timestamp (proves verification happened after review).
+- followupTimestamp must be after timestamp (proves both reviews ran in order).
+- verifiedAt must be after followupTimestamp (proves verification happened after followup).
 - Gate expires after 10 minutes.
 - filesHash must match staged files.
 
