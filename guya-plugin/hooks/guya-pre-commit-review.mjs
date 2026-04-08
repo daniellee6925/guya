@@ -348,7 +348,7 @@ async function main() {
     }
 
     if (isReviewComplete(gateFile, stagedFiles)) {
-      writeFileSync(gateFile, JSON.stringify({ reviewed: false }));
+      // Gate is NOT consumed here — post-commit hook resets it after success
       return output({ continue: true, suppressOutput: true });
     }
 

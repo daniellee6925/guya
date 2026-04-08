@@ -54,10 +54,10 @@ function output(obj) {
 
 function getLatestCommit(directory) {
   try {
-    const log = execSync('git log -1 --format="%h|%s|%aI"', {
+    const log = execSync('git log -1 --format="%h%x00%s%x00%aI"', {
       cwd: directory, encoding: 'utf-8', timeout: 5000, stdio: 'pipe'
     }).trim();
-    const [hash, message, date] = log.split('|');
+    const [hash, message, date] = log.split('\x00');
     return { hash, message, date: date.slice(0, 10) };
   } catch {
     return null;
@@ -116,6 +116,9 @@ function appendCommit(directory, commit) {
 
   const content = readFileSync(statusPath, 'utf-8');
 
+  // Deduplicate — don't add the same commit hash twice
+  if (content.includes(commit.hash)) return;
+
   // Update timestamp
   let updated = content.replace(
     /> Last updated: .*/,
@@ -134,9 +137,6 @@ function appendCommit(directory, commit) {
     const nextNewline = updated.indexOf('\n', insertPos);
     updated = updated.slice(0, nextNewline + 1) + entry + '\n' + updated.slice(nextNewline + 1);
   }
-
-  // Deduplicate — don't add the same commit hash twice
-  if (content.includes(commit.hash)) return;
 
   writeFileSync(statusPath, updated);
 }
@@ -165,6 +165,17 @@ async function main() {
     }
 
     appendCommit(directory, commit);
+
+    // Consume the review gate AFTER commit succeeds — prevents race condition
+    // where gate is consumed but commit fails, locking out retry attempts
+    const gateFile = join(directory, '.guya', 'evolution', 'review-gate.json');
+    try {
+      if (existsSync(gateFile)) {
+        writeFileSync(gateFile, JSON.stringify({ reviewed: false }));
+      }
+    } catch {
+      process.stderr.write('[guya-scribe] Warning: could not reset review gate\n');
+    }
 
     process.stderr.write(`[guya-scribe] Logged commit ${commit.hash} (${commit.message}) to STATUS.md\n`);
     output({
