@@ -3,7 +3,7 @@
 > Last updated: 2026-04-09
 
 ## Current Focus
-Evolution pipeline `traceId`/`id` contract bug fixed. Observer output schema pinned, consumer keys on `id`, runtime assertion added, 5/5 integration tests green, plugin cache synced. Ready for pre-commit review pass (`/karpathy-review` or `/cr`), then commit.
+Classifier batching bug fixed — evolution pipeline can now burn down backlogs of arbitrary size. `classifyTraces` chunks into `CLASSIFY_CHUNK_SIZE=25` batches, loops Haiku per chunk, tolerates partial chunk failures (log-and-continue), returns partial results on success / null only on total failure. `classifyChunk` filters each chunk's results to input ids to prevent cross-chunk id bleed + dedupes within-chunk. `PLUGIN_ROOT` fallback fixed via `computePluginRoot` pure helper. 11/11 classifier tests green, 7/7 merge regression tests green, e2e verified against real Haiku on the 738-trace backlog (30/30 chunks succeeded, 728/730 merged, $0.44 cost). Next: plugin cache drift (HIGH), pre-filter allowlist drift (HIGH), or switch projects.
 
 ## This Session — What Changed and Why
 
@@ -16,10 +16,10 @@ Evolution pipeline `traceId`/`id` contract bug fixed. Observer output schema pin
 **Fix (single commit)**:
 - `guya-plugin/agents/guya-observer.md`: pinned output contract as `[{id, persistence, confidence, domain}]` with explicit "echo `id` unchanged from input" rule
 - `guya-plugin/hooks/guya-session-end.mjs:424-458`: `persistClassifications` now keys on `r.id` / `trace.id`; added runtime assertion that throws if `classificationResults.length > 0 && mergedCount === 0` (contract-violation tripwire); returns `{mergedCount}` for test observability; added `fileURLToPath` import + `isMain` guard so importing the module for tests doesn't trigger the whole pipeline; added `export { persistClassifications }`
-- `guya-plugin/hooks/__tests__/persist-classifications.test.mjs`: new, zero-deps (Node built-in `node:test`), 5 tests including the load-bearing contract-violation regression guard
+- `guya-plugin/hooks/__tests__/persist-classifications.test.mjs`: new, zero-deps (Node built-in `node:test`), 7 tests — contract-violation regression guard, field-level merge verification, identity-robustness, happy path, pruning, empty no-op, phantom-result tolerance. Two added after review-followup caught a test coverage gap.
 - Plugin cache manually synced (drift is still unfixed)
 
-**Verification**: `node --test` → 5/5 pass. `node --check` on source + cache → OK. The load-bearing test feeds the old-shape `{traceId: ...}` and asserts the assertion throws — future drift will fire this instantly.
+**Verification**: `node --test` → 7/7 pass. `node --check` on source + cache → OK. End-to-end verified against real Haiku with 10 real signal traces from today's backlog: Haiku honored the pinned schema, all ids echoed verbatim, `mergedCount=10`, file pruned correctly. Review gates passed via `/karpathy-review` → apply Medium fixes → `/review-followup` → apply one observability fix → commit.
 
 **Backfill decision**: Deferred. Original plan was "self-heal, next session-end burns down the 20 signal traces." Wrong on two counts:
 1. Real signal count is **738**, not 20 — I missed that `tool_call` traces (4,036 of them) pass the pre-filter via their `"Tool: Edit"` content format.
@@ -39,7 +39,7 @@ So the backlog can't self-heal until the batching bug is fixed (new HIGH TODO). 
 **Files in this commit**:
 - `guya-plugin/agents/guya-observer.md` — output schema pinned
 - `guya-plugin/hooks/guya-session-end.mjs` — consumer fix, assertion, export, `isMain` guard
-- `guya-plugin/hooks/__tests__/persist-classifications.test.mjs` — NEW, 5 tests
+- `guya-plugin/hooks/__tests__/persist-classifications.test.mjs` — NEW, 7 tests
 - Plugin cache at `~/.claude/plugins/cache/guya/guya/0.1.0/` manually synced (drift unfixed)
 
 **Latent bugs surfaced during investigation (NOT in scope — see TODO)**:
@@ -50,7 +50,7 @@ So the backlog can't self-heal until the batching bug is fixed (new HIGH TODO). 
 5. **`~/.claude/guya/.env` had a corrupted ANTHROPIC_API_KEY** — tailing Unicode `≈` (U+2248) character caused 401 auth errors on every session-end classification/synthesis call. Daniel replaced with clean key at `Desktop/guya/.env`. Home-directory copy may still be corrupted — needs manual fix by Daniel.
 
 ## Recent Changes
-- [2026-04-09] (uncommitted, this session) fix: repair evolution pipeline `traceId`/`id` contract — pin observer schema, key consumer on `id`, add runtime assertion + integration tests
+- [2026-04-09] `2e362bf` — fix: repair evolution pipeline traceId/id contract — classifications now merge
 - [2026-04-09] `932595d` — refactor: remove decision-gate hook, keep harness marker for other hooks
 - [2026-04-08] `6e49e29` — fix: harden hooks — extract shared stdin util, fix evidence ordering, improve observability
 - [2026-04-08] `32b424c` — fix: correct skills path in plugin.json to match omc convention
@@ -69,10 +69,8 @@ So the backlog can't self-heal until the batching bug is fixed (new HIGH TODO). 
 
 ## TODO
 - [ ] **[HIGH] Fix plugin cache drift systemically** — `~/.claude/plugins/cache/guya/guya/0.1.0/` is a copy not a symlink, every hook edit currently requires manual cache sync, and this has silently hidden at least one session's hook work. Options: dev symlink, auto-sync on commit, `/omc-sync-plugin` script. Pick one.
-- [ ] **[HIGH — blocks backlog burndown] Classifier batching bug in `guya-session-end.mjs:classifyTraces`.** Stuffs ALL pre-filtered traces into one Haiku call. Measured failure mode: 738 backlog traces → 206,774 input tokens → exceeds Haiku 200K context limit → full classification pass aborts. Even within the limit, `max_tokens: 2048` caps response at ~30 classifications per call (measured: 10 traces = 653 output tokens). Fix: chunk into batches of ~25 traces, call Haiku per chunk, concatenate results. Without this, the current backlog can never be burned down.
-- [ ] **[HIGH — same class of bug as today's fix] Pre-filter `hasLearningSignal` silently drops trace types.** `guya-session-end.mjs:156-177` hardcodes `['correction', 'preference', 'reflection']` as always-classify, but `guya-correction-detect.mjs` also writes `pushback`, `decision`, `confirmation`. Those never pass the filter. ~8 traces in current backlog silently dropped. Same producer-consumer drift that bit us today. Fix: expand the allowlist, or better — centralize the trace-type enum in a shared schema module so both producer and consumer import it.
-- [ ] **[MED — investigate] 4,036 orphan `tool_call` traces in the backlog.** No current hook writes `type: 'tool_call'` — trace-capture writes `file_edit`, correction-detect writes the correction family. **Correction to earlier analysis**: these DO pass the pre-filter (their `content` is `"Tool: Edit"` which hits the allowlist via `replace('Tool: ', '')`). They're the dominant signal source by volume. Where are they coming from? Possibilities: legacy format from a pre-refactor version, MCP server writing traces, a hook I haven't audited. First step: `grep -rn "tool_call" ~/.claude/plugins/ ~/.claude/guya/ guya-plugin/` and check git log.
-- [ ] **[MED] `PLUGIN_ROOT` fallback bug at `guya-session-end.mjs:30`.** Falls back to `dirname(import.meta.url)` which resolves to `hooks/` dir, not plugin root. `readAgentPrompt` then looks in `hooks/agents/` which doesn't exist. Latent in prod (Claude Code sets `CLAUDE_PLUGIN_ROOT`), but breaks manual invocation and makes testing harder. Fix: `PLUGIN_ROOT = process.env.CLAUDE_PLUGIN_ROOT || dirname(dirname(fileURLToPath(import.meta.url)))` — walk up one directory.
+- [ ] **[HIGH — same class of bug as the traceId/id contract bug] Pre-filter `hasLearningSignal` silently drops trace types.** `guya-session-end.mjs:156-177` hardcodes `['correction', 'preference', 'reflection']` as always-classify, but `guya-correction-detect.mjs` also writes `pushback`, `decision`, `confirmation`. Those never pass the filter. ~8 traces in current backlog silently dropped. Same producer-consumer drift. Fix: expand the allowlist, or better — centralize the trace-type enum in a shared schema module so both producer and consumer import it.
+- [ ] **[MED — investigate] 4,036 orphan `tool_call` traces in the backlog.** No current hook writes `type: 'tool_call'` — trace-capture writes `file_edit`, correction-detect writes the correction family. These DO pass the pre-filter (their `content` is `"Tool: Edit"` which hits the allowlist via `replace('Tool: ', '')`). They're the dominant signal source by volume. Where are they coming from? Possibilities: legacy format from a pre-refactor version, MCP server writing traces, a hook I haven't audited. First step: `grep -rn "tool_call" ~/.claude/plugins/ ~/.claude/guya/ guya-plugin/` and check git log.
 - [ ] **[MED] `hasLearningSignal` reads fields no producer writes.** `trace.context` and `trace.toolOutput` — neither is written by any known trace producer. Dead code paths in the filter. Either remove them or start writing the fields.
 - [ ] **[LOW] `~/.claude/guya/.env` may still have corrupted ANTHROPIC_API_KEY.** Hex-confirmed a trailing Unicode `≈` (U+2248, 0xe28988) on the key today. Daniel provided a clean replacement at `Desktop/guya/.env` but the home-dir copy may still need manual fix. Verify: `grep ANTHROPIC_API_KEY ~/.claude/guya/.env | tail -c 20 | xxd`
 - [ ] Follow-up commit: apply review findings from 2026-04-08 karpathy-review pass — add `console.error` logging to silent catches in `hook-utils.mjs:36,40`, `intent-detect.mjs:91`, `correction-detect.mjs:101`; consolidate the 3 remaining duplicate `readStdin` implementations to use the shared `hook-utils.mjs` version

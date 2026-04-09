@@ -27,7 +27,15 @@ import Anthropic from '@anthropic-ai/sdk';
 
 const GLOBAL_DIR = join(homedir(), '.claude', 'guya');
 const OBSIDIAN_VAULT = join(homedir(), 'Desktop', 'secrets');
-const PLUGIN_ROOT = process.env.CLAUDE_PLUGIN_ROOT || dirname(new URL(import.meta.url).pathname);
+
+// Pure helper so the fallback can be unit-tested independently of module load.
+// Walks up one directory from hooks/ to the plugin root so readAgentPrompt
+// resolves <root>/agents/*.md. fileURLToPath avoids the Windows leading-slash
+// bug in new URL(...).pathname.
+function computePluginRoot(metaUrl) {
+  return process.env.CLAUDE_PLUGIN_ROOT || dirname(dirname(fileURLToPath(metaUrl)));
+}
+const PLUGIN_ROOT = computePluginRoot(import.meta.url);
 
 // --- Helpers ---
 
@@ -207,6 +215,56 @@ function preFilterTraces(unclassified) {
 
 // --- Step 2: Classify ---
 
+// Haiku-per-chunk sizing. Measured on real backlog traces:
+//   ~280 input tokens / trace → 25 traces ≈ 7K input tokens (well under 200K context)
+//   ~65  output tokens / trace → 25 traces ≈ 1.6K output tokens (under max_tokens=2048)
+// Keep this conservative: failure mode is a whole chunk's classifications are lost.
+const CLASSIFY_CHUNK_SIZE = 25;
+
+// One API call for one chunk of traces. Throws on API / shape errors so the
+// chunking loop can log-and-continue per-chunk rather than abort the whole pass.
+//
+// Post-parse, filters classifications to only those whose id belongs to THIS
+// chunk's input and dedupes within the chunk. Rationale: without this, a
+// hallucinated cross-chunk id (chunk 5 returns an id owned by chunk 0) would
+// silently overwrite chunk 0's correct classification when mergeClassifications
+// builds `new Map(...)` and later entries win. UUID collisions are cosmic-ray
+// unlikely in practice, but the cost of defense is ~5 lines and the cost of
+// the failure mode is silent data corruption — wrong trade.
+async function classifyChunk(client, systemPrompt, traces) {
+  const response = await client.messages.create({
+    model: 'claude-haiku-4-5-20251001',
+    max_tokens: 2048,
+    system: systemPrompt,
+    messages: [{ role: 'user', content: JSON.stringify(traces) }],
+  });
+  const text = response.content?.[0]?.text ?? '';
+  const parsed = parseJsonResponse(text);
+  if (!Array.isArray(parsed)) {
+    throw new Error('classification response was not a JSON array');
+  }
+
+  const inputIds = new Set(traces.map((t) => t.id));
+  const seen = new Set();
+  const clean = [];
+  for (const r of parsed) {
+    if (!r || typeof r !== 'object') continue;
+    if (r.id == null) continue;                 // missing/nullish id — can't join
+    if (!inputIds.has(r.id)) continue;          // hallucinated / cross-chunk id
+    if (seen.has(r.id)) continue;               // within-chunk duplicate
+    seen.add(r.id);
+    clean.push(r);
+  }
+  const dropped = parsed.length - clean.length;
+  if (dropped > 0) {
+    process.stderr.write(
+      `[guya-session-end] classifyChunk: dropped ${dropped} result(s) ` +
+      `(out-of-chunk id, malformed, or duplicate) from a ${traces.length}-trace chunk\n`
+    );
+  }
+  return clean;
+}
+
 async function classifyTraces(client, unclassified) {
   const systemPrompt = readAgentPrompt('guya-observer');
   if (!systemPrompt) {
@@ -215,28 +273,46 @@ async function classifyTraces(client, unclassified) {
   }
 
   const traces = unclassified.map(({ trace }) => trace);
-  const userMessage = JSON.stringify(traces);
+  if (traces.length === 0) return [];
 
-  let response;
-  try {
-    response = await client.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 2048,
-      system: systemPrompt,
-      messages: [{ role: 'user', content: userMessage }],
-    });
-  } catch (err) {
-    process.stderr.write(`[guya-session-end] Classification API error: ${err.message}\n`);
+  // Chunk the traces so each API call stays within Haiku's input context and
+  // the response stays within max_tokens. Without this, a large backlog aborts
+  // the entire classification pass (see STATUS.md: 738 traces → 206K input tokens).
+  const chunks = [];
+  for (let i = 0; i < traces.length; i += CLASSIFY_CHUNK_SIZE) {
+    chunks.push(traces.slice(i, i + CLASSIFY_CHUNK_SIZE));
+  }
+
+  const results = [];
+  let successChunks = 0;
+  let failedChunks = 0;
+  for (let i = 0; i < chunks.length; i++) {
+    try {
+      const chunkResults = await classifyChunk(client, systemPrompt, chunks[i]);
+      results.push(...chunkResults);
+      successChunks++;
+    } catch (err) {
+      failedChunks++;
+      process.stderr.write(
+        `[guya-session-end] Classification chunk ${i + 1}/${chunks.length} ` +
+        `(${chunks[i].length} traces) failed: ${err.message}\n`
+      );
+    }
+  }
+
+  // All chunks failed — signal total failure so the caller skips persistence.
+  // Partial success is fine: the merge step handles extra/missing ids correctly.
+  if (successChunks === 0) {
+    process.stderr.write(`[guya-session-end] All ${chunks.length} classification chunks failed\n`);
     return null;
   }
 
-  const text = response.content?.[0]?.text ?? '';
-  const parsed = parseJsonResponse(text);
-  if (!Array.isArray(parsed)) {
-    process.stderr.write('[guya-session-end] Classification response was not a JSON array\n');
-    return null;
-  }
-  return parsed;
+  process.stderr.write(
+    `[guya-session-end] Classified ${results.length} traces across ` +
+    `${successChunks}/${chunks.length} chunks` +
+    (failedChunks > 0 ? ` (${failedChunks} chunks failed)` : '') + '\n'
+  );
+  return results;
 }
 
 // --- Step 3: Synthesize ---
@@ -678,4 +754,10 @@ if (isMain) {
 
 // Exports for testing — internal functions exposed so unit tests can exercise them
 // without triggering the full session-end pipeline.
-export { persistClassifications, mergeClassifications };
+export {
+  persistClassifications,
+  mergeClassifications,
+  classifyTraces,
+  CLASSIFY_CHUNK_SIZE,
+  computePluginRoot,
+};
