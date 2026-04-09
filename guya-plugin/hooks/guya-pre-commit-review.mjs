@@ -12,13 +12,20 @@
  *     2. On git commit --no-verify → block
  *     3. On git commit → check exemptions, small change, evidence → allow or block
  *
+ *   Config lookup (loadConfig): project `.guya/pre-commit-config.json`
+ *   merged over user-wide `~/.claude/guya/pre-commit-config.json`, project
+ *   wins on key collision. Missing-both = fail-open (returns null, gate skips).
+ *   User-wide acts as an implicit opt-in for every project.
+ *
  *   Quality checks (test existence, complexity, cleanup) are handled by
  *   .git/hooks/pre-commit which runs with accurate staged file state.
  */
 
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
 import { join, extname } from 'path';
+import { homedir } from 'os';
 import { execSync } from 'child_process';
+import { fileURLToPath } from 'url';
 import { readStdin } from './hook-utils.mjs';
 
 function output(obj) {
@@ -27,13 +34,112 @@ function output(obj) {
 
 // --- config ---
 
-function loadConfig(directory) {
-  const configPath = join(directory, '.guya', 'pre-commit-config.json');
+// User-wide default lives here. Project-level at `{directory}/.guya/pre-commit-config.json`.
+// If only the user-wide file exists, the gate still fires for the project.
+// Historical bug: the hook used to hard fail-open when the project config was
+// missing, silently disabling the quality harness in every project Daniel
+// hadn't explicitly configured (SDF ran ungated for weeks). The user-wide
+// fallback makes "default to the quality bar I care about everywhere" the
+// out-of-the-box behavior.
+const USER_CONFIG_PATH = join(homedir(), '.claude', 'guya', 'pre-commit-config.json');
+
+/**
+ * Read a JSON file with tri-state return that distinguishes legitimate
+ * absence (ENOENT) from "file exists but is broken" (parse error, other IO).
+ *
+ * Why tri-state: collapsing both into null (the original implementation)
+ * relocates the fail-open bug — a transient partial-write during editor
+ * save or a corrupted file would be treated as "no config", silently
+ * ungating the commit. Codex caught this in review. The correct policy
+ * is "absent = allow fallback; broken = fail closed with reason".
+ *
+ *   { missing: true }          → file doesn't exist
+ *   { data: ... }              → parsed successfully
+ *   { error: "reason" }        → exists but unreadable/unparseable; caller
+ *                                must fail closed and surface the reason
+ */
+function readJsonFile(path) {
+  if (!existsSync(path)) return { missing: true };
+  let parsed;
   try {
-    return JSON.parse(readFileSync(configPath, 'utf-8'));
-  } catch {
-    return null;
+    parsed = JSON.parse(readFileSync(path, 'utf-8'));
+  } catch (err) {
+    return { error: `${path}: ${err?.message || String(err)}` };
   }
+  // Reject non-object JSON (arrays, numbers, strings, null) — these parse
+  // cleanly but spread to `{}`, which would silently degrade to "no config"
+  // and reintroduce the fail-open class of bug. A config file accidentally
+  // saved as `null` or `[]` should fail closed, not silently disappear.
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return { error: `${path}: expected a JSON object at the top level, got ${Array.isArray(parsed) ? 'array' : typeof parsed}` };
+  }
+  return { data: parsed };
+}
+
+/**
+ * Normalize a merged config to reject concrete shapes that neuter the gate
+ * without obviously being malformed. Scoped intentionally — this is not a
+ * full schema validator, just two guardrails for the exploits Codex named:
+ *
+ *   - `pathExempt: [""]` / `reviewExempt: [""]` match every file via
+ *     `file.includes("")` → empty strings filtered out
+ *   - `gateMaxAgeMinutes: "foo"` coerces to NaN → Number coercion, fall
+ *     back to 30 (matching the default already used in checkEvidence)
+ *
+ * A full validator belongs in the "hook hardening" followup session along
+ * with the other three scribe/gate bugs already on the TODO.
+ */
+function normalizeConfig(config) {
+  const out = { ...config };
+  if (Array.isArray(out.pathExempt)) {
+    out.pathExempt = out.pathExempt.filter((p) => typeof p === 'string' && p.length > 0);
+  }
+  if (Array.isArray(out.reviewExempt)) {
+    out.reviewExempt = out.reviewExempt.filter((p) => typeof p === 'string' && p.length > 0);
+  }
+  if (out.gateMaxAgeMinutes != null) {
+    const n = Number(out.gateMaxAgeMinutes);
+    out.gateMaxAgeMinutes = Number.isFinite(n) && n > 0 ? n : 30;
+  }
+  return out;
+}
+
+/**
+ * Load the pre-commit-config, merging user-wide defaults with project overrides.
+ *
+ * Lookup order:
+ *   1. Project config at `{directory}/.guya/pre-commit-config.json`
+ *   2. User-wide default at `~/.claude/guya/pre-commit-config.json` (or the
+ *      path passed in `userConfigPath` — dependency injection for tests)
+ *
+ * Merge strategy: shallow — project top-level keys completely override
+ * user-level keys. Nested objects (complexity, smallChange, testRequired,
+ * cleanup) are single-concept blocks; overriding one fully is the expected
+ * per-project customization unit.
+ *
+ * Return shape:
+ *   { config: {...}, error: null } — usable merged config (possibly fallback-only)
+ *   { config: null,  error: null } — both files absent, caller may fail open
+ *   { config: null,  error: "reason" } — at least one file exists but is
+ *                                        unreadable/unparseable; caller
+ *                                        MUST fail closed with reason
+ */
+function loadConfig(directory, userConfigPath = USER_CONFIG_PATH) {
+  const projectPath = join(directory, '.guya', 'pre-commit-config.json');
+  const p = readJsonFile(projectPath);
+  const u = readJsonFile(userConfigPath);
+
+  // Fail closed if either file exists but is broken — don't silently drop
+  // to fallback, that's exactly the class of bug this PR is fixing.
+  if (p.error) return { config: null, error: p.error };
+  if (u.error) return { config: null, error: u.error };
+
+  if (p.missing && u.missing) return { config: null, error: null };
+
+  // Shallow merge — project wins — then normalize to strip obviously
+  // gate-breaking values that are valid JSON but unsafe.
+  const merged = { ...(u.data || {}), ...(p.data || {}) };
+  return { config: normalizeConfig(merged), error: null };
 }
 
 // --- state ---
@@ -251,8 +357,20 @@ async function main() {
     }
 
     // Job 3: Review gate
-    const config = loadConfig(directory);
+    const { config, error: configError } = loadConfig(directory);
+    if (configError) {
+      // File exists but is broken — fail CLOSED. Silent fallback here
+      // would reintroduce the exact fail-open bug this PR fixes.
+      process.stderr.write(`[guya-gate] Blocking commit due to unreadable config: ${configError}\n`);
+      return output({
+        decision: 'block',
+        reason: `Pre-commit config is unreadable: ${configError}. Fix or delete the file, then retry.`,
+      });
+    }
     if (!config) {
+      // Both project and user-wide config absent — nothing to gate against.
+      // This is the only path that still fails open, matching pre-PR behavior
+      // for projects that opted out entirely.
       return output({ continue: true, suppressOutput: true });
     }
 
@@ -289,4 +407,18 @@ async function main() {
   }
 }
 
-main();
+// Only run main() when executed as a script (not when imported by tests).
+// Matches the pattern in guya-session-end.mjs / guya-correction-detect.mjs —
+// lets loadConfig be unit-tested in isolation.
+const isMain = (() => {
+  try { return fileURLToPath(import.meta.url) === process.argv[1]; }
+  catch { return false; }
+})();
+
+if (isMain) {
+  main();
+}
+
+// Exports for testing — loadConfig is the primary unit under test;
+// USER_CONFIG_PATH is exported so tests can point it at a tmp fixture.
+export { loadConfig, USER_CONFIG_PATH };
