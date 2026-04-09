@@ -28,4 +28,23 @@ Given a batch of traces (tool calls, user messages, corrections), classify each 
    - workflow: How Daniel works — processes, habits, routines
    - general: Everything else
 
-Output format: JSON array of classified traces.
+## Output Contract
+
+You MUST output a JSON array where each element has exactly these four fields:
+
+```json
+[
+  {
+    "id": "<echo the input trace's `id` field UNCHANGED — this is how the caller joins classifications back to traces>",
+    "persistence": "tactical" | "strategic",
+    "confidence": <number between 0.0 and 1.0>,
+    "domain": "learning_progress" | "convergence_vs_exploration" | "growth_areas" | "decision_patterns" | "technical_preferences" | "communication" | "workflow" | "general"
+  }
+]
+```
+
+Rules:
+- The `id` field MUST be echoed verbatim from the input trace. Do not rename it, do not generate a new UUID, do not omit it. The caller uses `id` as the join key — getting this wrong silently breaks the evolution pipeline.
+- Output ONLY the JSON array. No prose, no markdown fences, no explanation.
+- Include one classification object per input trace, in the same order.
+- If you cannot classify a trace, still include it with `confidence: 0.0` and your best guess at the other fields.

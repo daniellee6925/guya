@@ -19,10 +19,10 @@
 
 import { existsSync, readFileSync, writeFileSync, readdirSync, mkdirSync, unlinkSync } from 'fs';
 import { join, dirname } from 'path';
-import { homedir } from 'os';
+import { homedir, tmpdir } from 'os';
 import { randomUUID } from 'crypto';
 import { rename, writeFile } from 'fs/promises';
-import { tmpdir } from 'os';
+import { fileURLToPath } from 'url';
 import Anthropic from '@anthropic-ai/sdk';
 
 const GLOBAL_DIR = join(homedir(), '.claude', 'guya');
@@ -421,22 +421,53 @@ function loadApiKey() {
   return apiKey || null;
 }
 
-async function persistClassifications(classificationResults, allTracesWithMeta, unclassified, tracesDir) {
-  const classById = new Map(classificationResults.map(r => [r.traceId, r]));
+// Pure merge step — computes fileGroups with classification metadata applied to
+// matching traces. Extracted so it can be unit-tested independently of pruning,
+// which deletes classified traces before they can be inspected.
+function mergeClassifications(classificationResults, allTracesWithMeta, unclassified) {
+  // Contract: classificationResults come from guya-observer and MUST carry the same `id`
+  // as the input trace (see guya-observer.md output contract). We key on `id` to join them.
+  const classById = new Map(classificationResults.map(r => [r.id, r]));
+  // Index unclassified traces by id for O(1) lookup and to avoid coupling the
+  // merge to object identity (safe against future serialization round-trips).
+  const unclassifiedIds = new Set(unclassified.map(u => u.trace.id));
+
   const fileGroups = {};
+  let mergedCount = 0;
   for (const { trace, file } of allTracesWithMeta) {
     if (!fileGroups[file]) fileGroups[file] = [];
-    const cls = trace.traceId ? classById.get(trace.traceId) : null;
-    if (cls && unclassified.some(u => u.trace === trace)) {
+    const cls = trace.id ? classById.get(trace.id) : null;
+    if (cls && unclassifiedIds.has(trace.id)) {
       fileGroups[file].push({
         ...trace, classified: true,
         persistence: cls.persistence, confidence: cls.confidence, domain: cls.domain,
       });
+      mergedCount++;
     } else {
       fileGroups[file].push(trace);
     }
   }
+  return { fileGroups, mergedCount };
+}
+
+async function persistClassifications(classificationResults, allTracesWithMeta, unclassified, tracesDir) {
+  const { fileGroups, mergedCount } = mergeClassifications(
+    classificationResults, allTracesWithMeta, unclassified,
+  );
+
+  // Loud failure: if the observer returned classifications but none joined onto traces,
+  // the contract is broken (field name drift, bad echo, upstream bug). Don't silently no-op.
+  if (classificationResults.length > 0 && mergedCount === 0) {
+    const sample = classificationResults[0] ? Object.keys(classificationResults[0]).join(',') : '(empty)';
+    throw new Error(
+      `persistClassifications: received ${classificationResults.length} classification results ` +
+      `but merged 0 onto traces — contract violated. Observer output keys: [${sample}]. ` +
+      `Expected each result to carry an 'id' field matching an input trace id.`
+    );
+  }
+
   await pruneClassifiedTraces(tracesDir, fileGroups);
+  return { mergedCount };
 }
 
 async function runSynthesis(client, classificationResults) {
@@ -597,7 +628,10 @@ async function main() {
 
   // Persist classifications
   if (classificationResults) {
-    try { await persistClassifications(classificationResults, allTracesWithMeta, unclassified, tracesDir); }
+    try {
+      const { mergedCount } = await persistClassifications(classificationResults, allTracesWithMeta, unclassified, tracesDir);
+      process.stderr.write(`[guya-session-end] Merged ${mergedCount}/${classificationResults.length} classifications onto traces\n`);
+    }
     catch (err) { process.stderr.write(`[guya-session-end] Failed to persist classifications: ${err.message}\n`); }
   }
 
@@ -628,7 +662,20 @@ async function main() {
   console.log(JSON.stringify({ continue: true }));
 }
 
-main().catch((err) => {
-  process.stderr.write(`[guya-session-end] Fatal: ${err.message}\n`);
-  console.log(JSON.stringify({ continue: true }));
-});
+// Only run main() when executed as a script (not when imported for testing).
+// fileURLToPath handles cross-platform path comparison correctly.
+const isMain = (() => {
+  try { return fileURLToPath(import.meta.url) === process.argv[1]; }
+  catch { return false; }
+})();
+
+if (isMain) {
+  main().catch((err) => {
+    process.stderr.write(`[guya-session-end] Fatal: ${err.message}\n`);
+    console.log(JSON.stringify({ continue: true }));
+  });
+}
+
+// Exports for testing — internal functions exposed so unit tests can exercise them
+// without triggering the full session-end pipeline.
+export { persistClassifications, mergeClassifications };
