@@ -195,12 +195,19 @@ describe('scribe integration: blocked commit does not wipe evidence (the core fi
     try { rmSync(dir, { recursive: true, force: true }); } catch {}
   });
 
+  // Helper: write a valid single-line JSONL evidence entry. Matches the
+  // schema owned by review-evidence.mjs so the scribe sees "real" state.
+  function writeJsonlEvidence(evidencePath, step, timestamp) {
+    const entry = { v: 1, step, timestamp, treeSha: 'a'.repeat(40) };
+    writeFileSync(evidencePath, JSON.stringify(entry) + '\n');
+  }
+
   it('first-run bootstrap: HEAD != marker (null) → processes once, writes marker', () => {
     // No marker file yet. Scribe should treat this as "new commit" and
-    // process it (write marker, reset gate if present).
-    const evidencePath = join(dir, '.guya', 'evolution', 'review-evidence.json');
+    // process it (write marker, delete evidence file if present).
+    const evidencePath = join(dir, '.guya', 'evolution', 'review-evidence.jsonl');
     mkdirSync(join(dir, '.guya', 'evolution'), { recursive: true });
-    writeFileSync(evidencePath, JSON.stringify({ steps: [{ step: 'initial', timestamp: Date.now() }] }));
+    writeJsonlEvidence(evidencePath, 'initial', Date.now());
 
     const r = runScribe(dir, {
       tool_name: 'Bash',
@@ -215,10 +222,9 @@ describe('scribe integration: blocked commit does not wipe evidence (the core fi
     const markerContent = readFileSync(markerPath, 'utf-8').trim();
     assert.equal(markerContent.length, 40, 'marker must be full 40-char SHA');
 
-    // First-run bootstrap wiped the gate. This is the accepted one-time
-    // cost of establishing the marker.
-    const evidenceAfter = JSON.parse(readFileSync(evidencePath, 'utf-8'));
-    assert.deepEqual(evidenceAfter, { steps: [] });
+    // First-run bootstrap deleted the evidence file. This is the accepted
+    // one-time cost of establishing the marker.
+    assert.equal(existsSync(evidencePath), false, 'evidence jsonl should be deleted on HEAD advance');
   });
 
   it('HEAD unchanged (blocked commit scenario): marker == HEAD → SKIP reset', () => {
@@ -231,15 +237,12 @@ describe('scribe integration: blocked commit does not wipe evidence (the core fi
     mkdirSync(join(dir, '.guya', 'evolution'), { recursive: true });
     writeFileSync(markerPath, currentHead);
 
-    // Populate evidence file with a review record to prove it survives.
-    const evidencePath = join(dir, '.guya', 'evolution', 'review-evidence.json');
-    const originalEvidence = {
-      steps: [
-        { step: 'initial', timestamp: Date.now() - 1000 },
-        { step: 'followup', timestamp: Date.now() },
-      ],
-    };
-    writeFileSync(evidencePath, JSON.stringify(originalEvidence));
+    // Populate evidence file with two review records to prove they survive.
+    const evidencePath = join(dir, '.guya', 'evolution', 'review-evidence.jsonl');
+    const originalContent =
+      JSON.stringify({ v: 1, step: 'initial', timestamp: Date.now() - 1000, treeSha: 'a'.repeat(40) }) + '\n' +
+      JSON.stringify({ v: 1, step: 'followup', timestamp: Date.now(), treeSha: 'b'.repeat(40) }) + '\n';
+    writeFileSync(evidencePath, originalContent);
 
     // Simulate a blocked commit: matched-regex tool call, but HEAD hasn't
     // advanced since the last scribe run.
@@ -251,11 +254,11 @@ describe('scribe integration: blocked commit does not wipe evidence (the core fi
     assert.equal(r.status, 0);
 
     // Evidence file must be UNCHANGED. This is the bug-fix contract.
-    const evidenceAfter = JSON.parse(readFileSync(evidencePath, 'utf-8'));
-    assert.deepEqual(
-      evidenceAfter,
-      originalEvidence,
-      'review-evidence.json must NOT be wiped when HEAD did not advance',
+    assert.ok(existsSync(evidencePath), 'evidence file must still exist');
+    assert.equal(
+      readFileSync(evidencePath, 'utf-8'),
+      originalContent,
+      'review-evidence.jsonl must NOT be wiped when HEAD did not advance',
     );
   });
 
@@ -266,8 +269,8 @@ describe('scribe integration: blocked commit does not wipe evidence (the core fi
     mkdirSync(join(dir, '.guya', 'evolution'), { recursive: true });
     writeFileSync(markerPath, oldFakeSha);
 
-    const evidencePath = join(dir, '.guya', 'evolution', 'review-evidence.json');
-    writeFileSync(evidencePath, JSON.stringify({ steps: [{ step: 'initial', timestamp: 1 }] }));
+    const evidencePath = join(dir, '.guya', 'evolution', 'review-evidence.jsonl');
+    writeJsonlEvidence(evidencePath, 'initial', 1);
 
     const r = runScribe(dir, {
       tool_name: 'Bash',
@@ -281,16 +284,39 @@ describe('scribe integration: blocked commit does not wipe evidence (the core fi
     const currentHead = execSync('git rev-parse HEAD', { cwd: dir, encoding: 'utf-8' }).trim();
     assert.equal(newMarker, currentHead);
 
-    // Evidence wiped because HEAD advanced (from the fake marker).
-    assert.deepEqual(JSON.parse(readFileSync(evidencePath, 'utf-8')), { steps: [] });
+    // Evidence deleted because HEAD advanced (from the fake marker).
+    assert.equal(existsSync(evidencePath), false, 'evidence jsonl should be deleted after HEAD advance');
+  });
+
+  it('sweeps the legacy review-evidence.json file on HEAD advance', () => {
+    // Repos migrated from the pre-refactor hook may still have the old
+    // JSON file sitting in .guya/evolution/. The scribe should sweep it
+    // alongside the new jsonl file so there is exactly one authoritative
+    // state file (or none).
+    mkdirSync(join(dir, '.guya', 'evolution'), { recursive: true });
+    const oldPath = join(dir, '.guya', 'evolution', 'review-evidence.json');
+    const newPath = join(dir, '.guya', 'evolution', 'review-evidence.jsonl');
+    writeFileSync(oldPath, JSON.stringify({ steps: [] }));
+    writeJsonlEvidence(newPath, 'initial', 1);
+
+    const r = runScribe(dir, {
+      tool_name: 'Bash',
+      tool_input: { command: 'git commit -m "new"' },
+      cwd: dir,
+    });
+    assert.equal(r.status, 0);
+
+    assert.equal(existsSync(oldPath), false, 'legacy .json should be swept');
+    assert.equal(existsSync(newPath), false, '.jsonl should be swept');
   });
 
   it('non-commit Bash call (git status) never reaches the HEAD check', () => {
     // Control case: isGitCommit returns false, scribe short-circuits
     // before the HEAD/marker logic runs. Evidence and marker untouched.
-    const evidencePath = join(dir, '.guya', 'evolution', 'review-evidence.json');
+    const evidencePath = join(dir, '.guya', 'evolution', 'review-evidence.jsonl');
     mkdirSync(join(dir, '.guya', 'evolution'), { recursive: true });
-    writeFileSync(evidencePath, JSON.stringify({ steps: [{ step: 'initial', timestamp: 1 }] }));
+    writeJsonlEvidence(evidencePath, 'initial', 1);
+    const before = readFileSync(evidencePath, 'utf-8');
 
     const markerPath = join(dir, '.guya', 'evolution', 'last-scribe-head');
     assert.equal(existsSync(markerPath), false);
@@ -304,9 +330,6 @@ describe('scribe integration: blocked commit does not wipe evidence (the core fi
 
     // Nothing should have been touched.
     assert.equal(existsSync(markerPath), false, 'marker should not be created for non-commit calls');
-    assert.deepEqual(
-      JSON.parse(readFileSync(evidencePath, 'utf-8')),
-      { steps: [{ step: 'initial', timestamp: 1 }] },
-    );
+    assert.equal(readFileSync(evidencePath, 'utf-8'), before, 'evidence must survive non-commit calls');
   });
 });

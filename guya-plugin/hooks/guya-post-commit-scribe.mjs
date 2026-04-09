@@ -12,7 +12,7 @@
  *   No LLM calls — pure file I/O. Completes in under 50ms.
  */
 
-import { existsSync, readFileSync, writeFileSync, mkdirSync, renameSync } from 'fs';
+import { existsSync, readFileSync, writeFileSync, mkdirSync, renameSync, unlinkSync } from 'fs';
 import { join, basename, dirname } from 'path';
 import { randomUUID } from 'crypto';
 import { execSync } from 'child_process';
@@ -287,15 +287,26 @@ async function main() {
     // Reset review state AFTER confirming HEAD actually advanced —
     // previous implementation wiped on every matched-regex Bash call,
     // even blocked ones, which burned the next commit's evidence.
+    //
+    // Evidence file lives at .guya/evolution/review-evidence.jsonl (owned
+    // by review-evidence.mjs). Deleting the file entirely is the cleanest
+    // reset — next readEvidence returns {missing: true} which blocks with
+    // the canonical "no review evidence" reason. Also sweeps the legacy
+    // `review-evidence.json` file so post-refactor repos don't keep the
+    // stale artifact lying around.
     const evolutionDir = join(directory, '.guya', 'evolution');
     try {
       const gateFile = join(evolutionDir, 'review-gate.json');
       if (existsSync(gateFile)) {
         writeFileSync(gateFile, JSON.stringify({ reviewed: false }));
       }
-      const evidenceFile = join(evolutionDir, 'review-evidence.json');
-      if (existsSync(evidenceFile)) {
-        writeFileSync(evidenceFile, JSON.stringify({ steps: [] }));
+      const newEvidence = join(evolutionDir, 'review-evidence.jsonl');
+      if (existsSync(newEvidence)) {
+        unlinkSync(newEvidence);
+      }
+      const oldEvidence = join(evolutionDir, 'review-evidence.json');
+      if (existsSync(oldEvidence)) {
+        unlinkSync(oldEvidence);
       }
     } catch {
       process.stderr.write('[guya-scribe] Warning: could not reset review state\n');

@@ -21,12 +21,19 @@
  *   .git/hooks/pre-commit which runs with accurate staged file state.
  */
 
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { join, extname } from 'path';
 import { homedir } from 'os';
 import { execSync } from 'child_process';
 import { fileURLToPath } from 'url';
 import { readStdin, isGitCommit } from './hook-utils.mjs';
+import {
+  appendStep,
+  validateForCommit,
+  deleteOldEvidenceFile,
+  readEvidence,
+  DEFAULT_GATE_MAX_AGE_MINUTES,
+} from './review-evidence.mjs';
 
 function output(obj) {
   process.stdout.write(JSON.stringify(obj) + '\n');
@@ -99,7 +106,11 @@ function normalizeConfig(config) {
   }
   if (out.gateMaxAgeMinutes != null) {
     const n = Number(out.gateMaxAgeMinutes);
-    out.gateMaxAgeMinutes = Number.isFinite(n) && n > 0 ? n : 30;
+    // Use `>= 0` (not `> 0`) to match validateForCommit's contract in
+    // review-evidence.mjs — `0` is a legitimate "expire immediately"
+    // debug/strict mode and must round-trip through normalization.
+    // Fall back to the shared default on NaN/negative/Infinity.
+    out.gateMaxAgeMinutes = Number.isFinite(n) && n >= 0 ? n : DEFAULT_GATE_MAX_AGE_MINUTES;
   }
   return out;
 }
@@ -142,17 +153,12 @@ function loadConfig(directory, userConfigPath = USER_CONFIG_PATH) {
   return { config: normalizeConfig(merged), error: null };
 }
 
-// --- state ---
-
-function getStateDir(directory) {
-  const stateDir = join(directory, '.guya', 'evolution');
-  if (!existsSync(stateDir)) {
-    try { mkdirSync(stateDir, { recursive: true }); } catch {}
-  }
-  return stateDir;
-}
-
 // --- Job 1: Evidence recording ---
+//
+// Evidence storage is owned by review-evidence.mjs — see that module for
+// the schema, atomicity guarantees, and the full "what counts as reviewed"
+// spec. This file only wires user-facing skill detection into the module's
+// appendStep API.
 
 const REVIEW_SKILLS = ['karpathy-review', 'review-followup', 'cr'];
 
@@ -168,33 +174,17 @@ function getSkillStep(toolInput) {
   return 'initial';
 }
 
-function recordEvidence(directory, step) {
-  const stateDir = getStateDir(directory);
-  const evidencePath = join(stateDir, 'review-evidence.json');
-
-  let evidence = { steps: [] };
+function recordReviewStep(directory, step) {
   try {
-    evidence = JSON.parse(readFileSync(evidencePath, 'utf-8'));
-    if (!Array.isArray(evidence.steps)) evidence.steps = [];
-  } catch {
-    process.stderr.write('[guya-gate] evidence parse failed, resetting\n');
+    appendStep(directory, step);
+    process.stderr.write(`[guya-gate] Recorded review evidence: ${step}\n`);
+  } catch (err) {
+    // Fail LOUD but don't block the skill — the reviewer is mid-skill,
+    // throwing here would stall their workflow. Surface to stderr so the
+    // problem is visible, and let the commit-time check block if the
+    // evidence never actually landed.
+    process.stderr.write(`[guya-gate] Failed to record review evidence: ${err?.message || err}\n`);
   }
-
-  evidence.steps.push({ step, timestamp: Date.now() });
-
-  // Also capture content hash of currently staged files
-  evidence.contentHash = null;
-  try {
-    const hash = execSync('git diff --cached --name-only --diff-filter=ACMR | sort | git hash-object --stdin', {
-      cwd: directory, encoding: 'utf-8', timeout: 5000, shell: true
-    }).trim();
-    evidence.contentHash = hash;
-  } catch {
-    process.stderr.write('[guya-gate] content hash failed\n');
-  }
-
-  writeFileSync(evidencePath, JSON.stringify(evidence, null, 2));
-  process.stderr.write(`[guya-gate] Recorded review evidence: ${step}\n`);
 }
 
 // --- Job 2 & 3: Commit gating ---
@@ -269,45 +259,18 @@ function isSmallChange(stagedFiles, config, directory) {
   }
 }
 
-function checkEvidence(directory, config) {
-  const stateDir = getStateDir(directory);
-  const evidencePath = join(stateDir, 'review-evidence.json');
-  const maxAge = (config.gateMaxAgeMinutes || 10) * 60 * 1000;
+// checkEvidence moved to review-evidence.mjs as validateForCommit —
+// see that module for the full failure-mode matrix including the new
+// content-identity check via git write-tree and the delta tolerance
+// for small post-review fixes.
 
-  try {
-    const evidence = JSON.parse(readFileSync(evidencePath, 'utf-8'));
-    if (!Array.isArray(evidence.steps) || evidence.steps.length === 0) {
-      return { valid: false, reason: 'No review evidence found.' };
-    }
-
-    const hasInitial = evidence.steps.findLast(s => s.step === 'initial');
-    const hasFollowup = evidence.steps.findLast(s => s.step === 'followup');
-
-    if (!hasInitial) {
-      return { valid: false, reason: 'Missing initial review (run /karpathy-review or /cr first).' };
-    }
-    if (!hasFollowup) {
-      return { valid: false, reason: 'Missing followup review (run /review-followup after fixing issues).' };
-    }
-
-    // Verify order: followup after initial
-    if (hasFollowup.timestamp <= hasInitial.timestamp) {
-      return { valid: false, reason: 'Followup must happen after initial review.' };
-    }
-
-    // Verify recency
-    const age = Date.now() - hasInitial.timestamp;
-    if (age > maxAge) {
-      return { valid: false, reason: `Review expired (${Math.round(age / 60000)}min ago, max ${config.gateMaxAgeMinutes || 10}min).` };
-    }
-
-    return { valid: true };
-  } catch {
-    return { valid: false, reason: 'No review evidence found.' };
-  }
-}
-
-function formatReviewPrompt(stagedFiles) {
+function formatReviewPrompt(stagedFiles, config) {
+  // Pull the default from the review-evidence module rather than
+  // re-hardcoding 30 here. Single source of truth prevents the message
+  // from going stale when the default changes (as it did in b5b17dc).
+  const maxAgeMinutes = Number(config?.gateMaxAgeMinutes) > 0
+    ? Number(config.gateMaxAgeMinutes)
+    : DEFAULT_GATE_MAX_AGE_MINUTES;
   return `Review required for ${stagedFiles.length} non-exempt files. Follow this process:
 
 1. Run /karpathy-review on the staged files
@@ -317,7 +280,7 @@ function formatReviewPrompt(stagedFiles) {
 5. Retry the commit
 
 The hook records evidence automatically when you run these skills.
-Review expires after 10 minutes.
+Review expires after ${maxAgeMinutes} minutes.
 
 Staged files: ${stagedFiles.join(', ')}`;
 }
@@ -336,9 +299,15 @@ async function main() {
     const toolInput = input.tool_input || input.toolInput || '';
     const directory = input.cwd || input.directory || process.cwd();
 
+    // Pre-refactor evidence file lived at `.guya/evolution/review-evidence.json`.
+    // Delete it on sight so there's only one authoritative file and nobody
+    // mistakes the stale JSON for live state during debugging. Safe no-op
+    // after the first run.
+    deleteOldEvidenceFile(directory);
+
     // Job 1: Record evidence for review skills
     if (isReviewSkill(toolName, toolInput)) {
-      recordEvidence(directory, getSkillStep(toolInput));
+      recordReviewStep(directory, getSkillStep(toolInput));
       return output({ continue: true, suppressOutput: true });
     }
 
@@ -388,15 +357,36 @@ async function main() {
       return output({ continue: true, suppressOutput: true });
     }
 
-    // Check evidence
-    const evidence = checkEvidence(directory, config);
+    // Surface corrupt-line warnings BEFORE running validation. readEvidence
+    // tolerates partial/interrupted appends (skips bad lines and keeps the
+    // valid ones), but the caller needs visibility — otherwise a silent
+    // partial read masks file system or producer bugs. This only reads
+    // the file a second time when there's actually something to warn about
+    // (validateForCommit itself reads once internally).
+    const rawEvidence = readEvidence(directory);
+    if (rawEvidence.errors && rawEvidence.errors.length > 0) {
+      const detail = rawEvidence.errors
+        .map((e) => `line ${e.line}: ${e.reason}`)
+        .join('; ');
+      process.stderr.write(
+        `[guya-gate] warning: ${rawEvidence.errors.length} corrupt evidence line(s) ignored (${detail})\n`,
+      );
+    }
+
+    // Check evidence via the review-evidence module. validateForCommit
+    // runs the full spec matrix: step presence, order, staleness, tree
+    // SHA identity, and delta tolerance (same threshold as isSmallChange).
+    const evidence = validateForCommit(directory, config);
     if (evidence.valid) {
+      if (evidence.note) {
+        process.stderr.write(`[guya-gate] ${evidence.note}\n`);
+      }
       process.stderr.write(`[guya-gate] Review evidence valid, allowing commit\n`);
       return output({ continue: true, suppressOutput: true });
     }
 
     // Block with review instructions
-    output({ decision: 'block', reason: `${evidence.reason}\n\n${formatReviewPrompt(nonExempt)}` });
+    output({ decision: 'block', reason: `${evidence.reason}\n\n${formatReviewPrompt(nonExempt, config)}` });
   } catch (err) {
     process.stderr.write(`[guya-gate] ERROR: ${err?.message || err}\n`);
     output({ continue: true, suppressOutput: true });

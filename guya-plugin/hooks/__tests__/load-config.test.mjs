@@ -283,10 +283,23 @@ describe('loadConfig: normalizeConfig guards against concrete exploits', () => {
     assert.equal(typeof config.gateMaxAgeMinutes, 'number');
   });
 
-  it('negative or zero gateMaxAgeMinutes is coerced to default 30', () => {
+  it('negative gateMaxAgeMinutes is coerced to default 30', () => {
+    // Negative values are nonsensical (can't have an "expired -5 minutes
+    // ago" review), fall back to the shared default.
     writeProjectConfig(projectDir, { gateMaxAgeMinutes: -5 });
     const { config } = loadConfig(projectDir, userConfigPath);
     assert.equal(config.gateMaxAgeMinutes, 30);
+  });
+
+  it('gateMaxAgeMinutes: 0 round-trips through normalization (strict debug mode)', () => {
+    // 0 is a legitimate "expire immediately" debug setting — must survive
+    // normalization and reach validateForCommit unchanged. Previously this
+    // was silently clamped to 30 via a `> 0` check, creating a contract
+    // drift between the hook's normalizeConfig and the module's
+    // validateForCommit which accepts `>= 0`.
+    writeProjectConfig(projectDir, { gateMaxAgeMinutes: 0 });
+    const { config } = loadConfig(projectDir, userConfigPath);
+    assert.equal(config.gateMaxAgeMinutes, 0);
   });
 
   it('missing gateMaxAgeMinutes passes through unchanged (defaults applied elsewhere)', () => {
