@@ -59,7 +59,8 @@ function getLatestCommit(directory) {
     }).trim();
     const [hash, message, date] = log.split('\x00');
     return { hash, message, date: date.slice(0, 10) };
-  } catch {
+  } catch (err) {
+    process.stderr.write(`[guya-scribe] Failed to get commit info: ${err.message}\n`);
     return null;
   }
 }
@@ -180,6 +181,20 @@ async function main() {
       }
     } catch {
       process.stderr.write('[guya-scribe] Warning: could not reset review state\n');
+    }
+
+    // Clear active decision session AFTER commit succeeds
+    // This forces the next work to go through the decision harness again
+    try {
+      const { unlink } = await import('fs/promises');
+      const decisionsDir = join(directory, '.guya', 'decisions');
+      const activeSessionFile = join(decisionsDir, '.active-session');
+      if (existsSync(activeSessionFile)) {
+        writeFileSync(activeSessionFile, '');  // Clear instead of delete
+        process.stderr.write('[guya-scribe] Cleared active decision session\n');
+      }
+    } catch {
+      process.stderr.write('[guya-scribe] Warning: could not clear active session\n');
     }
 
     process.stderr.write(`[guya-scribe] Logged commit ${commit.hash} (${commit.message}) to STATUS.md\n`);

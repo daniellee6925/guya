@@ -53,6 +53,11 @@
             "type": "command",
             "command": "node \"$CLAUDE_PLUGIN_ROOT\"/hooks/run.cjs \"$CLAUDE_PLUGIN_ROOT\"/hooks/guya-intent-detect.mjs",
             "timeout": 1
+          },
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PLUGIN_ROOT\"/hooks/run.cjs \"$CLAUDE_PLUGIN_ROOT\"/hooks/guya-decision-gate.mjs",
+            "timeout": 2
           }
         ]
       }

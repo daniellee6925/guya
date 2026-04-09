@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "lastScanned": 1774975019983,
+  "lastScanned": 1775682399545,
   "projectRoot": "/Users/daniel/Desktop/guya",
   "techStack": {
     "languages": [],
@@ -24,16 +24,28 @@
   "structure": {
     "isMonorepo": false,
     "workspaces": [],
-    "mainDirectories": [],
+    "mainDirectories": [
+      "docs"
+    ],
     "gitBranches": null
   },
   "customNotes": [],
   "directoryMap": {
+    "docs": {
+      "path": "docs",
+      "purpose": "Documentation",
+      "fileCount": 2,
+      "lastAccessed": 1775682399538,
+      "keyFiles": [
+        "claude-code-guide.md",
+        "llm-design-patterns.md"
+      ]
+    },
     "guya-plugin": {
       "path": "guya-plugin",
       "purpose": null,
       "fileCount": 5,
-      "lastAccessed": 1774975019979,
+      "lastAccessed": 1775682399541,
       "keyFiles": [
         "CLAUDE.md",
         "package-lock.json",
@@ -44,82 +56,268 @@
       "path": "guya-plugin/node_modules",
       "purpose": "Dependencies",
       "fileCount": 1,
-      "lastAccessed": 1774975019979,
+      "lastAccessed": 1775682399542,
       "keyFiles": []
     }
   },
   "hotPaths": [
     {
-      "path": "guya-plugin/hooks/guya-session-start.mjs",
-      "accessCount": 8,
-      "lastAccessed": 1774986806449,
+      "path": "guya-plugin/hooks/guya-session-end.mjs",
+      "accessCount": 17,
+      "lastAccessed": 1775712016456,
+      "type": "file"
+    },
+    {
+      "path": "guya-plugin/hooks/guya-pre-commit-review.mjs",
+      "accessCount": 15,
+      "lastAccessed": 1775712025193,
+      "type": "file"
+    },
+    {
+      "path": "guya-plugin/hooks/guya-post-commit-scribe.mjs",
+      "accessCount": 9,
+      "lastAccessed": 1775713212952,
       "type": "file"
     },
     {
       "path": "guya-plugin/hooks/hooks.json",
       "accessCount": 7,
-      "lastAccessed": 1774986762989,
-      "type": "file"
-    },
-    {
-      "path": "guya-plugin/hooks/guya-correction-detect.mjs",
-      "accessCount": 6,
-      "lastAccessed": 1774986816961,
-      "type": "file"
-    },
-    {
-      "path": "guya-plugin/hooks/guya-session-end.mjs",
-      "accessCount": 5,
-      "lastAccessed": 1774986804739,
+      "lastAccessed": 1775713219119,
       "type": "file"
     },
     {
       "path": "",
-      "accessCount": 4,
-      "lastAccessed": 1774976466642,
+      "accessCount": 6,
+      "lastAccessed": 1775684895512,
       "type": "directory"
     },
     {
-      "path": "guya-plugin/hooks/guya-trace-capture.mjs",
+      "path": "STATUS.md",
+      "accessCount": 5,
+      "lastAccessed": 1775689726839,
+      "type": "file"
+    },
+    {
+      "path": ".guya/memory/archival/guya.md",
+      "accessCount": 5,
+      "lastAccessed": 1775691341723,
+      "type": "file"
+    },
+    {
+      "path": ".guya/pre-commit-config.json",
       "accessCount": 4,
-      "lastAccessed": 1774986790514,
+      "lastAccessed": 1775689591112,
       "type": "file"
     },
     {
-      "path": ".guya/memory/core/active-projects.md",
-      "accessCount": 1,
-      "lastAccessed": 1774975871034,
+      "path": "guya-plugin/skills/guya-obsidian-sync/SKILL.md",
+      "accessCount": 3,
+      "lastAccessed": 1775712019261,
       "type": "file"
     },
     {
-      "path": ".guya/memory/core/session-context.md",
-      "accessCount": 1,
-      "lastAccessed": 1774976255088,
+      "path": "guya-plugin/hooks/run.cjs",
+      "accessCount": 3,
+      "lastAccessed": 1775712027847,
+      "type": "file"
+    },
+    {
+      "path": "guya-plugin/agents/guya-reflector.md",
+      "accessCount": 2,
+      "lastAccessed": 1775684868643,
+      "type": "file"
+    },
+    {
+      "path": "guya-plugin/hooks/guya-pre-push-check.mjs",
+      "accessCount": 2,
+      "lastAccessed": 1775694250673,
       "type": "file"
     },
     {
       "path": "guya-plugin",
-      "accessCount": 1,
-      "lastAccessed": 1774976361913,
+      "accessCount": 2,
+      "lastAccessed": 1775712004192,
       "type": "directory"
     },
     {
-      "path": ".guya/memory/reflections/2026-03-31-manual.md",
+      "path": ".guya/memory/core/session-context.md",
       "accessCount": 1,
-      "lastAccessed": 1774986645170,
+      "lastAccessed": 1775684852826,
       "type": "file"
     },
     {
-      "path": "guya-plugin/hooks/debug-stdin.mjs",
+      "path": ".guya/memory/reflections/2026-04-08-manual-5.md",
       "accessCount": 1,
-      "lastAccessed": 1774986729864,
+      "lastAccessed": 1775685852474,
       "type": "file"
     },
     {
-      "path": "guya-plugin/hooks",
+      "path": ".guya/memory/reflections/2026-04-08-manual-4.md",
       "accessCount": 1,
-      "lastAccessed": 1774986797748,
-      "type": "directory"
+      "lastAccessed": 1775685852932,
+      "type": "file"
+    },
+    {
+      "path": ".guya/memory/reflections/2026-04-08-manual-3.md",
+      "accessCount": 1,
+      "lastAccessed": 1775685853382,
+      "type": "file"
+    },
+    {
+      "path": ".guya/memory/reflections/2026-04-08-manual-6.md",
+      "accessCount": 1,
+      "lastAccessed": 1775685886319,
+      "type": "file"
+    },
+    {
+      "path": ".guya/memory/reflections/2026-04-08-manual.md",
+      "accessCount": 1,
+      "lastAccessed": 1775691299734,
+      "type": "file"
+    },
+    {
+      "path": ".guya/memory/reflections/2026-04-08-manual-7.md",
+      "accessCount": 1,
+      "lastAccessed": 1775691330443,
+      "type": "file"
+    },
+    {
+      "path": "CLAUDE.md",
+      "accessCount": 1,
+      "lastAccessed": 1775694250858,
+      "type": "file"
+    },
+    {
+      "path": "guya-plugin/.claude-plugin/plugin.json",
+      "accessCount": 1,
+      "lastAccessed": 1775694267410,
+      "type": "file"
+    },
+    {
+      "path": "guya-plugin/.claude-plugin/marketplace.json",
+      "accessCount": 1,
+      "lastAccessed": 1775694326879,
+      "type": "file"
+    },
+    {
+      "path": "guya-plugin/skills/guya-bootstrap/SKILL.md",
+      "accessCount": 1,
+      "lastAccessed": 1775712006650,
+      "type": "file"
+    },
+    {
+      "path": "guya-plugin/skills/guya-evolve/SKILL.md",
+      "accessCount": 1,
+      "lastAccessed": 1775712007420,
+      "type": "file"
+    },
+    {
+      "path": "guya-plugin/skills/guya-status/SKILL.md",
+      "accessCount": 1,
+      "lastAccessed": 1775712007996,
+      "type": "file"
+    },
+    {
+      "path": "guya-plugin/skills/guya-forget/SKILL.md",
+      "accessCount": 1,
+      "lastAccessed": 1775712009051,
+      "type": "file"
+    },
+    {
+      "path": "guya-plugin/package.json",
+      "accessCount": 1,
+      "lastAccessed": 1775712009107,
+      "type": "file"
+    },
+    {
+      "path": "guya-plugin/.mcp.json",
+      "accessCount": 1,
+      "lastAccessed": 1775712009155,
+      "type": "file"
+    },
+    {
+      "path": "guya-plugin/hooks/guya-session-start.mjs",
+      "accessCount": 1,
+      "lastAccessed": 1775712016165,
+      "type": "file"
+    },
+    {
+      "path": "guya-plugin/hooks/guya-trace-capture.mjs",
+      "accessCount": 1,
+      "lastAccessed": 1775712016529,
+      "type": "file"
+    },
+    {
+      "path": "guya-plugin/hooks/guya-correction-detect.mjs",
+      "accessCount": 1,
+      "lastAccessed": 1775712017000,
+      "type": "file"
+    },
+    {
+      "path": "guya-plugin/hooks/guya-intent-detect.mjs",
+      "accessCount": 1,
+      "lastAccessed": 1775712017445,
+      "type": "file"
+    },
+    {
+      "path": "guya-plugin/skills/guya-reflect/SKILL.md",
+      "accessCount": 1,
+      "lastAccessed": 1775712018440,
+      "type": "file"
+    },
+    {
+      "path": "guya-plugin/skills/guya-scribe/SKILL.md",
+      "accessCount": 1,
+      "lastAccessed": 1775712018850,
+      "type": "file"
+    },
+    {
+      "path": "guya-plugin/agents/guya-observer.md",
+      "accessCount": 1,
+      "lastAccessed": 1775712026335,
+      "type": "file"
+    },
+    {
+      "path": "guya-plugin/agents/guya-synthesizer.md",
+      "accessCount": 1,
+      "lastAccessed": 1775712027294,
+      "type": "file"
+    },
+    {
+      "path": "guya-plugin/tools/server.js",
+      "accessCount": 1,
+      "lastAccessed": 1775712027813,
+      "type": "file"
+    },
+    {
+      "path": "guya-plugin/skills/guya-decision-feature/SKILL.md",
+      "accessCount": 1,
+      "lastAccessed": 1775713134273,
+      "type": "file"
+    },
+    {
+      "path": "guya-plugin/skills/guya-decision-bugfix/SKILL.md",
+      "accessCount": 1,
+      "lastAccessed": 1775713143749,
+      "type": "file"
+    },
+    {
+      "path": "guya-plugin/skills/guya-decision-kickoff/SKILL.md",
+      "accessCount": 1,
+      "lastAccessed": 1775713162455,
+      "type": "file"
+    },
+    {
+      "path": "guya-plugin/skills/guya-decision-refactor/SKILL.md",
+      "accessCount": 1,
+      "lastAccessed": 1775713174504,
+      "type": "file"
+    },
+    {
+      "path": "guya-plugin/hooks/guya-decision-gate.mjs",
+      "accessCount": 1,
+      "lastAccessed": 1775713188891,
+      "type": "file"
     }
   ],
   "userDirectives": []

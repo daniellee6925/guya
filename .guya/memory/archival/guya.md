@@ -11,3 +11,16 @@
 - **2026-04-08 PM**: Hook testing and evolution pipeline session. Centralized traces (4,052 from 9 projects). Expanded feedback detection 3→13 patterns. Hardened review gate. Wrote claude-code-guide.md. Growth tracker: "ask why" B-, technical writing B+, milestone #3 done.
 - **2026-04-08 Late PM**: Review gate reliability session. Fixed race condition (gate consumption moved to post-commit). Enforced two-pass review. Fixed scribe bugs and test regex.
 - **2026-04-08 Evening**: Obsidian vault integration. Created 5 wiki pages (entities: guya, sdf, bosonai, daniel-lee + synthesis: growth-tracker). Added session-end hook auto-sync (growth tracker grades/milestones + project entity status). Created /guya-obsidian-sync manual skill. Shipped 3 regex bugs on first pass — caught by testing and review gate.
+- **2026-04-08 Session 5**: Committed previous session's work (two-layer commit validation, reflections/archive). Discovered review gate never fired — all files were exempt via pathExempt (hooks/) and reviewExempt (*.md, *.json). Removed hooks/ from pathExempt, tightened small change threshold to 10 lines, removed maxFiles. Learning session on Claude Code hooks: stdin/stdout contract, Pre/Post timing, matchers, gate pattern, git hooks vs Claude hooks trust model.
+
+
+## Session 2026-04-09
+- Tools used: unknown
+- Domains: general
+- Traces: 510
+
+
+## Session 2026-04-09
+- Tools used: unknown
+- Domains: general
+- Traces: 510
