@@ -25,5 +25,5 @@
     "maxLines": 10
   },
   "skipOnMerge": true,
-  "gateMaxAgeMinutes": 10
+  "gateMaxAgeMinutes": 30
 }
