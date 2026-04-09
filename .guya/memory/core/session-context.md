@@ -1,1 +1,1 @@
-Last session (2026-04-09): 510 trace(s) captured, domains: unclassified.
+Last session (2026-04-09): 512 trace(s) captured, domains: unclassified.

@@ -1,6 +1,6 @@
 {
   "reviewExempt": ["*.yaml", "*.yml", "*.md", "*.json", "*.toml", "*.css", "*.html", "*.txt", "*.cfg", "*.ini", "*.env.example"],
-  "pathExempt": ["scripts/", "docs/", ".guya/", ".omc/", ".claude/"],
+  "pathExempt": ["docs/", ".guya/", ".omc/", ".claude/"],
   "testRequired": {
     "extensions": [".py"],
     "patterns": [

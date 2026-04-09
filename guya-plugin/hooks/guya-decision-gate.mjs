@@ -5,6 +5,10 @@
  *
  * UserPromptSubmit hook — session-scoped decision enforcement
  *
+ * CALLING SPEC:
+ *   Input: JSON on stdin with { prompt, session_id, cwd }
+ *   Output: JSON on stdout — { continue: true } or { decision: "block", reason }
+ *
  * Detects work intent patterns and checks for an active decision doc.
  * Blocks implementation if no decision harness has been run in this session.
  *
@@ -14,10 +18,9 @@
  * - Not cleared by post-commit hook
  */
 
-import fs from 'fs';
-import path from 'path';
-
-const INPUT_TIMEOUT = 2000;
+import { existsSync, readFileSync } from 'fs';
+import { join } from 'path';
+import { readStdin } from './hook-utils.mjs';
 
 // Work intent patterns — these trigger the gate
 const WORK_PATTERNS = [
@@ -33,22 +36,6 @@ const EXCLUDE_PATTERNS = [
   /\?$/,  // ends with question mark
   /^(yes|no|ok|okay|sure|thanks|thank you|great|looks good|perfect|sounds good|makes sense|got it)/i,
 ];
-
-/**
- * Read JSON from stdin with timeout
- */
-function readStdinSync(timeoutMs = INPUT_TIMEOUT) {
-  try {
-    const buffer = Buffer.alloc(64 * 1024);
-    const bytesRead = fs.readSync(0, buffer, 0, buffer.length);
-    if (bytesRead === 0) return null;
-    const input = buffer.toString('utf8', 0, bytesRead).trim();
-    return input.length > 0 ? JSON.parse(input) : null;
-  } catch (err) {
-    console.error('[guya-decision-gate] stdin read failed:', err.message);
-    return null;
-  }
-}
 
 /**
  * Check if text matches work intent
@@ -78,18 +65,15 @@ function hasWorkIntent(text) {
  */
 function getActiveSession(cwd) {
   try {
-    const sessionFilePath = path.join(cwd, '.guya', 'decisions', '.active-session');
+    const sessionFilePath = join(cwd, '.guya', 'decisions', '.active-session');
 
-    if (!fs.existsSync(sessionFilePath)) {
+    if (!existsSync(sessionFilePath)) {
       return null;
     }
 
-    const content = fs.readFileSync(sessionFilePath, 'utf-8');
-    const sessionData = JSON.parse(content);
-
-    return sessionData;
+    const content = readFileSync(sessionFilePath, 'utf-8');
+    return JSON.parse(content);
   } catch (err) {
-    // File doesn't exist or is malformed — treat as no active session
     console.error('[guya-decision-gate] getActiveSession failed:', err.message);
     return null;
   }
@@ -98,31 +82,27 @@ function getActiveSession(cwd) {
 /**
  * Main hook logic
  */
-function main() {
+async function main() {
   try {
-    const hookInput = readStdinSync();
-
-    if (!hookInput || !hookInput.tool_input) {
-      // Can't determine intent — pass through
-      return JSON.stringify({ continue: true });
+    const stdinData = await readStdin(2000);
+    let input = {};
+    try { input = JSON.parse(stdinData); } catch {
+      console.error('[guya-decision-gate] stdin parse failed:', stdinData.slice(0, 100));
     }
 
-    const userText = typeof hookInput.tool_input === 'string'
-      ? hookInput.tool_input
-      : (hookInput.tool_input?.prompt || '');
-    const cwd = hookInput.cwd || process.cwd();
-    const sessionId = hookInput.session_id;
+    const userText = input.prompt || input.message || '';
+    const cwd = input.cwd || input.directory || process.cwd();
+    const sessionId = input.session_id;
 
-    if (!sessionId) {
-      // No session ID in hook input — pass through (can't validate session)
-      console.error('[guya-decision-gate] Warning: No session_id in hook input');
-      return JSON.stringify({ continue: true });
+    if (!userText || !sessionId) {
+      console.log(JSON.stringify({ continue: true }));
+      return;
     }
 
     // Check for work intent
     if (!hasWorkIntent(userText)) {
-      // No work intent detected — pass through
-      return JSON.stringify({ continue: true });
+      console.log(JSON.stringify({ continue: true }));
+      return;
     }
 
     // Work intent detected — check for active session
@@ -130,7 +110,6 @@ function main() {
     const activeSession = getActiveSession(cwd);
 
     if (!activeSession || activeSession.session_id !== sessionId) {
-      // No active decision doc for this session — block
       const blockMessage = `[DECISION GATE] No active decision doc found for this session.
 
 Before implementing, run the appropriate harness:
@@ -143,22 +122,20 @@ This ensures scope, constraints, and success criteria are defined before any cod
 
 Active decision docs are cleared after each commit, so each session requires a fresh harness run.`;
 
-      return JSON.stringify({
+      console.log(JSON.stringify({
         decision: 'block',
         reason: blockMessage,
-      });
+      }));
+      return;
     }
 
     // Active session found and session_id matches — pass through
-    return JSON.stringify({ continue: true });
+    console.log(JSON.stringify({ continue: true }));
 
   } catch (err) {
-    // On any error, pass through (never fatal)
-    // Log to stderr for debugging but don't block
     console.error('[guya-decision-gate] Error:', err.message);
-    return JSON.stringify({ continue: true });
+    console.log(JSON.stringify({ continue: true }));
   }
 }
 
-// Execute and output result
-process.stdout.write(main());
+main();

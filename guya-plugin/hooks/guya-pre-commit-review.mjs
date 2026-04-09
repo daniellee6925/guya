@@ -19,28 +19,7 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
 import { join, extname } from 'path';
 import { execSync } from 'child_process';
-
-// --- stdin ---
-
-function readStdinSync(timeoutMs = 2000) {
-  return new Promise((resolve) => {
-    const chunks = [];
-    let settled = false;
-    const timeout = setTimeout(() => {
-      if (!settled) { settled = true; resolve(Buffer.concat(chunks).toString('utf-8')); }
-    }, timeoutMs);
-    process.stdin.on('data', (chunk) => chunks.push(chunk));
-    process.stdin.on('end', () => {
-      if (!settled) { settled = true; clearTimeout(timeout); resolve(Buffer.concat(chunks).toString('utf-8')); }
-    });
-    process.stdin.on('error', () => {
-      if (!settled) { settled = true; clearTimeout(timeout); resolve(''); }
-    });
-    if (process.stdin.readableEnded) {
-      if (!settled) { settled = true; clearTimeout(timeout); resolve(Buffer.concat(chunks).toString('utf-8')); }
-    }
-  });
-}
+import { readStdin } from './hook-utils.mjs';
 
 function output(obj) {
   process.stdout.write(JSON.stringify(obj) + '\n');
@@ -91,17 +70,22 @@ function recordEvidence(directory, step) {
   try {
     evidence = JSON.parse(readFileSync(evidencePath, 'utf-8'));
     if (!Array.isArray(evidence.steps)) evidence.steps = [];
-  } catch {}
+  } catch {
+    process.stderr.write('[guya-gate] evidence parse failed, resetting\n');
+  }
 
   evidence.steps.push({ step, timestamp: Date.now() });
 
   // Also capture content hash of currently staged files
+  evidence.contentHash = null;
   try {
     const hash = execSync('git diff --cached --name-only --diff-filter=ACMR | sort | git hash-object --stdin', {
       cwd: directory, encoding: 'utf-8', timeout: 5000, shell: true
     }).trim();
     evidence.contentHash = hash;
-  } catch {}
+  } catch {
+    process.stderr.write('[guya-gate] content hash failed\n');
+  }
 
   writeFileSync(evidencePath, JSON.stringify(evidence, null, 2));
   process.stderr.write(`[guya-gate] Recorded review evidence: ${step}\n`);
@@ -128,11 +112,13 @@ function getStagedFiles(directory, toolInput) {
       cwd: directory, encoding: 'utf-8', timeout: 5000
     });
     out.trim().split('\n').filter(Boolean).forEach(f => staged.add(f));
-  } catch {}
+  } catch {
+    process.stderr.write('[guya-gate] git diff --cached failed, staged set may be incomplete\n');
+  }
 
   // Also parse git add files from combined commands (TOCTOU mitigation)
   const cmd = typeof toolInput === 'string' ? toolInput : (toolInput?.command || '');
-  const addMatch = cmd.match(/\bgit\s+add\s+(.+?)(?:\s*&&|\s*;|\s*\|)/);
+  const addMatch = cmd.match(/\bgit\s+add\s+(.+?)(?:\s*&&|\s*;|\s*\||\s*$)/);
   if (addMatch) {
     addMatch[1].trim().split(/\s+/)
       .filter(f => !f.startsWith('-') && f.length > 0)
@@ -150,7 +136,7 @@ function isExempt(file, config) {
   // Check extension exemptions
   const ext = extname(file);
   for (const pattern of config.reviewExempt || []) {
-    const patExt = pattern.replace('*', '');
+    const patExt = pattern.replace(/\*/g, '');
     if (ext === patExt) return true;
   }
   return false;
@@ -163,17 +149,17 @@ function isSmallChange(stagedFiles, config, directory) {
   if (nonExempt.length === 0) return true;
 
   try {
-    const stat = execSync('git diff --cached --stat', {
+    const numstat = execSync('git diff --cached --numstat', {
       cwd: directory, encoding: 'utf-8', timeout: 5000
     });
-    // Parse "X files changed, Y insertions(+), Z deletions(-)"
-    const match = stat.match(/(\d+)\s+insertion|(\d+)\s+deletion/g);
+    // Each line: "added\tremoved\tfile" — sum added + removed
     let totalLines = 0;
-    if (match) {
-      for (const m of match) {
-        const num = parseInt(m);
-        if (!isNaN(num)) totalLines += num;
-      }
+    for (const line of numstat.trim().split('\n').filter(Boolean)) {
+      const [added, removed] = line.split('\t');
+      const a = parseInt(added, 10);
+      const r = parseInt(removed, 10);
+      if (!isNaN(a)) totalLines += a;
+      if (!isNaN(r)) totalLines += r;
     }
     return totalLines <= threshold.maxLines;
   } catch {
@@ -192,8 +178,8 @@ function checkEvidence(directory, config) {
       return { valid: false, reason: 'No review evidence found.' };
     }
 
-    const hasInitial = evidence.steps.find(s => s.step === 'initial');
-    const hasFollowup = evidence.steps.find(s => s.step === 'followup');
+    const hasInitial = evidence.steps.findLast(s => s.step === 'initial');
+    const hasFollowup = evidence.steps.findLast(s => s.step === 'followup');
 
     if (!hasInitial) {
       return { valid: false, reason: 'Missing initial review (run /karpathy-review or /cr first).' };
@@ -222,10 +208,11 @@ function checkEvidence(directory, config) {
 function formatReviewPrompt(stagedFiles) {
   return `Review required for ${stagedFiles.length} non-exempt files. Follow this process:
 
-1. Run /karpathy-review or /cr on the staged files
+1. Run /karpathy-review on the staged files
 2. Fix any issues found
 3. Run /review-followup on the staged files
-4. Retry the commit
+4. Fix any issues found
+5. Retry the commit
 
 The hook records evidence automatically when you run these skills.
 Review expires after 10 minutes.
@@ -238,7 +225,7 @@ Staged files: ${stagedFiles.join(', ')}`;
 async function main() {
   let input = {};
   try {
-    const stdinData = await readStdinSync(4000);
+    const stdinData = await readStdin(4000);
     try { input = JSON.parse(stdinData); } catch {
       return output({ continue: true, suppressOutput: true });
     }

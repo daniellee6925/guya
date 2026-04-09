@@ -1,11 +1,13 @@
 # guya — Status
 
-> Last updated: 2026-04-08 4:10 PM PT
+> Last updated: 2026-04-08
 
 ## Current Focus
 Commit validation system — two-layer review gate with automatic evidence tracking.
 
 ## Recent Changes
+- [2026-04-08] `a508ff8` — fix: register 4 decision harness skills in plugin marketplace discovery
+- [2026-04-08] `ec2169c` — feat: implement decision harness system with 4 interactive skills
 - [2026-04-08] `28c6181` — fix: tighten review gate — remove hooks/ exemption, lower small change to 10 lines
 - [2026-04-08] `b12daba` — docs: add session reflections, research archive, and evolution traces
 - [2026-04-08] `ef1bc6f` — feat: implement two-layer commit validation with automatic evidence tracking

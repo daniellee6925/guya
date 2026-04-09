@@ -14,13 +14,34 @@
 - **2026-04-08 Session 5**: Committed previous session's work (two-layer commit validation, reflections/archive). Discovered review gate never fired — all files were exempt via pathExempt (hooks/) and reviewExempt (*.md, *.json). Removed hooks/ from pathExempt, tightened small change threshold to 10 lines, removed maxFiles. Learning session on Claude Code hooks: stdin/stdout contract, Pre/Post timing, matchers, gate pattern, git hooks vs Claude hooks trust model.
 
 
-## Session 2026-04-09
-- Tools used: unknown
-- Domains: general
-- Traces: 510
+## Session 2026-04-08 Late Evening (Decision Harness)
+
+Built decision harness system to force staff-engineer thinking before implementation. Root problem: Daniel delegates scope/constraints decisions to Claude upfront → wrong implementations → rework. Solution: Explicit trigger skills that ask 8-12 probing questions, synthesize into decision doc + full lod-planner plan + task.
+
+**4 skills created:**
+- `/feature` (10 questions) — new capability (scope, constraints, success criteria)
+- `/bugfix` (8 questions) — debugging/fixing (root cause, blast radius, verification)
+- `/refactor` (8 questions) — code quality (specific problems, behavior preservation)
+- `/kickoff` (12 questions) — new project from scratch (mirrors lod-planner Phase 0)
+
+**Enforcement hook (UserPromptSubmit):**
+- `guya-decision-gate.mjs` detects work intent via regex patterns
+- Session-scoped `.active-session` marker prevents circumvention
+- Blocks implementation if no harness run in current session
+- Post-commit hook clears the marker (one thing per session)
+
+**Code quality:** Reviewed twice (Karpathy + deep review). Fixed defensive checks for tool_input structure. Added observability logging. All tests pass.
+
+**Key insights:**
+- Session-scoped enforcement better than time-scoped (one coherent piece of work per session)
+- Global skills in guya-plugin work across all projects
+- Teaching through questioning forces Daniel to think, not just receive answers
+- Hard gate for all projects, no exemptions
+
+**Next:** Restart Claude Code, test `/feature` on SDF idea, iterate on question intensity.
 
 
 ## Session 2026-04-09
-- Tools used: unknown
+- Tools used: unknown, Edit: guya-decision-gate.mjs
 - Domains: general
-- Traces: 510
+- Traces: 512
