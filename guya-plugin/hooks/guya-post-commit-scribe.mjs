@@ -12,9 +12,12 @@
  *   No LLM calls — pure file I/O. Completes in under 50ms.
  */
 
-import { existsSync, readFileSync, writeFileSync } from 'fs';
-import { join, basename } from 'path';
+import { existsSync, readFileSync, writeFileSync, mkdirSync, renameSync } from 'fs';
+import { join, basename, dirname } from 'path';
+import { randomUUID } from 'crypto';
 import { execSync } from 'child_process';
+import { fileURLToPath } from 'url';
+import { isGitCommit } from './hook-utils.mjs';
 
 // --- stdin ---
 
@@ -39,12 +42,8 @@ function readStdinSync(timeoutMs = 2000) {
 }
 
 // --- detection ---
-
-function isGitCommit(toolName, toolInput) {
-  if (toolName !== 'Bash' && toolName !== 'bash') return false;
-  const cmd = typeof toolInput === 'string' ? toolInput : (toolInput?.command || '');
-  return /\bgit\s+commit\b/.test(cmd);
-}
+// isGitCommit lives in hook-utils.mjs — shared with pre-commit-review to
+// prevent drift and to fix the substring-match-in-echo-payloads bug.
 
 function output(obj) {
   process.stdout.write(JSON.stringify(obj) + '\n');
@@ -62,6 +61,69 @@ function getLatestCommit(directory) {
   } catch (err) {
     process.stderr.write(`[guya-scribe] Failed to get commit info: ${err.message}\n`);
     return null;
+  }
+}
+
+/**
+ * Get the current HEAD as a full 40-char SHA. Full SHA (not abbreviated %h)
+ * because we compare for equality — short hashes can collide as substrings.
+ * Returns null if git isn't available or the repo has no commits yet.
+ */
+export function getCurrentHeadSha(directory) {
+  try {
+    const sha = execSync('git rev-parse HEAD', {
+      cwd: directory, encoding: 'utf-8', timeout: 3000, stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim();
+    return sha || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The scribe persists the HEAD SHA it last processed to this marker file.
+ * Purpose: distinguish "a new commit landed since the last scribe run"
+ * (HEAD advanced → process + reset gate) from "HEAD is unchanged" (the
+ * tool call didn't actually commit → skip everything).
+ *
+ * Historical bug (2026-04-09 session): the original implementation used
+ * STATUS.md contents to decide whether HEAD advanced — if the current
+ * commit hash was already logged, assume no advance. This broke in cases
+ * where STATUS.md was missing or out of sync, or when short-hash
+ * substrings false-deduped. The marker file is the authoritative signal:
+ * it's owned by the scribe, written atomically, and compared against
+ * full SHAs, not substrings.
+ */
+function headMarkerPath(directory) {
+  return join(directory, '.guya', 'evolution', 'last-scribe-head');
+}
+
+export function readHeadMarker(markerPath) {
+  try {
+    return readFileSync(markerPath, 'utf-8').trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+export function writeHeadMarker(markerPath, sha) {
+  // Atomic write: temp file in the SAME directory (so rename stays on the
+  // same filesystem and is POSIX-atomic), then rename over the target. A
+  // crash mid-write leaves the temp file orphaned but never corrupts the
+  // marker. Aligns with the session philosophy of "fail closed on transient
+  // state" — a partial marker would readHeadMarker() as null, trigger a
+  // bogus first-run bootstrap, and risk resetting the gate on the next
+  // blocked commit.
+  try {
+    const parent = dirname(markerPath);
+    mkdirSync(parent, { recursive: true });
+    const tmpPath = join(parent, `.last-scribe-head.${randomUUID()}.tmp`);
+    writeFileSync(tmpPath, sha);
+    renameSync(tmpPath, markerPath);
+    return true;
+  } catch (err) {
+    process.stderr.write(`[guya-scribe] Failed to write HEAD marker: ${err?.message || err}\n`);
+    return false;
   }
 }
 
@@ -101,24 +163,43 @@ const SKELETON = (name) => `# ${name} — Status
 ## Decisions & Notes
 `;
 
+/**
+ * Append a commit entry to STATUS.md's Recent Changes section.
+ *
+ * Returns:
+ *   true  — new entry written (fresh STATUS.md or appended to existing)
+ *   false — STATUS.md already contains the commit hash as a substring;
+ *           skipped the write to avoid duplicating the human-facing log.
+ *
+ * IMPORTANT: this return value is NOT used to decide whether HEAD
+ * advanced — that decision lives in main() via the last-scribe-head
+ * marker file comparison. Conflating the two was the original bug
+ * (a blocked commit with missing STATUS.md produced true here but HEAD
+ * hadn't actually advanced, so the gate got wiped anyway). Treat this
+ * strictly as "was STATUS.md modified" for display purposes.
+ */
 function appendCommit(directory, commit) {
   const statusPath = join(directory, 'STATUS.md');
   const entry = `- [${commit.date}] \`${commit.hash}\` — ${commit.message}`;
 
   if (!existsSync(statusPath)) {
+    // Fresh STATUS.md — this commit is definitely new to the scribe.
     const name = getProjectName(directory);
     const content = SKELETON(name).replace(
       '## Recent Changes\n',
       `## Recent Changes\n${entry}\n`
     );
     writeFileSync(statusPath, content);
-    return;
+    return true;
   }
 
   const content = readFileSync(statusPath, 'utf-8');
 
-  // Deduplicate — don't add the same commit hash twice
-  if (content.includes(commit.hash)) return;
+  // Dedupe on the commit's short hash. Substring match is imprecise
+  // (short hashes can collide as substrings of longer ones), but it's
+  // only used for display-level deduplication of the human-facing log.
+  // The gate-reset decision does NOT depend on this — see main().
+  if (content.includes(commit.hash)) return false;
 
   // Update timestamp
   let updated = content.replace(
@@ -140,6 +221,7 @@ function appendCommit(directory, commit) {
   }
 
   writeFileSync(statusPath, updated);
+  return true;
 }
 
 // --- main ---
@@ -160,15 +242,51 @@ async function main() {
       return output({ continue: true, suppressOutput: true });
     }
 
+    // HEAD-advance check is the authoritative signal for "a new commit
+    // actually landed since the last scribe run". This replaces the old
+    // STATUS.md-based dedup heuristic, which broke when STATUS.md was
+    // missing, out of sync, or had short-hash substring collisions.
+    //
+    // Flow:
+    //   1. Get current HEAD via `git rev-parse HEAD` (full SHA)
+    //   2. Read last-scribe-head marker
+    //   3. If they match → HEAD unchanged → skip everything. The Bash
+    //      tool call matched isGitCommit but didn't advance HEAD (blocked
+    //      commit, duplicate hook fire, or spurious regex hit).
+    //   4. If they differ → process: appendCommit + reset gate + update
+    //      marker.
+    //
+    // First-run bootstrap: marker doesn't exist → lastHead is null →
+    // currentHead !== null → treat as new → process + write marker.
+    // This wipes the gate on the very first scribe invocation per repo,
+    // which is the correct one-time cost for establishing the marker.
+    const currentHead = getCurrentHeadSha(directory);
+    if (!currentHead) {
+      // Can't determine git state (no repo, or git not installed).
+      // Skip silently — scribe has nothing authoritative to act on.
+      return output({ continue: true, suppressOutput: true });
+    }
+
+    const markerPath = headMarkerPath(directory);
+    const lastHead = readHeadMarker(markerPath);
+
+    if (currentHead === lastHead) {
+      process.stderr.write(`[guya-scribe] HEAD unchanged (${currentHead.slice(0, 7)}), skipping — no new commit\n`);
+      return output({ continue: true, suppressOutput: true });
+    }
+
     const commit = getLatestCommit(directory);
     if (!commit) {
       return output({ continue: true, suppressOutput: true });
     }
 
+    // Append to STATUS.md (best-effort display log). The return value is
+    // just "did we modify STATUS.md" — the gate reset is NOT gated on it.
     appendCommit(directory, commit);
 
-    // Reset review state AFTER commit succeeds — prevents stale evidence reuse
-    // and race condition where gate is consumed but commit fails
+    // Reset review state AFTER confirming HEAD actually advanced —
+    // previous implementation wiped on every matched-regex Bash call,
+    // even blocked ones, which burned the next commit's evidence.
     const evolutionDir = join(directory, '.guya', 'evolution');
     try {
       const gateFile = join(evolutionDir, 'review-gate.json');
@@ -197,6 +315,12 @@ async function main() {
       process.stderr.write('[guya-scribe] Warning: could not clear active session\n');
     }
 
+    // Persist the new HEAD as the marker — future scribe invocations
+    // will see currentHead === lastHead and skip unless HEAD advances
+    // again. Writing LAST so a crash between the gate reset and this
+    // write will cause the next run to retry the reset (idempotent).
+    writeHeadMarker(markerPath, currentHead);
+
     process.stderr.write(`[guya-scribe] Logged commit ${commit.hash} (${commit.message}) to STATUS.md\n`);
     output({
       continue: true,
@@ -211,4 +335,22 @@ async function main() {
   }
 }
 
-main();
+// Only run main() when executed as a script (not when imported by tests).
+// Matches the pattern in guya-session-end.mjs / guya-correction-detect.mjs /
+// guya-pre-commit-review.mjs — lets appendCommit be unit-tested in isolation.
+const isMain = (() => {
+  try { return fileURLToPath(import.meta.url) === process.argv[1]; }
+  catch { return false; }
+})();
+
+if (isMain) {
+  main();
+}
+
+// Exports for testing — appendCommit covers the STATUS.md display path.
+// The HEAD marker helpers (getCurrentHeadSha, readHeadMarker,
+// writeHeadMarker) are already exported inline where they're defined,
+// and together they drive the gate-reset decision in main(). See the
+// post-commit-scribe.test.mjs integration test for the end-to-end
+// "blocked commit does not wipe evidence" contract.
+export { appendCommit, headMarkerPath };

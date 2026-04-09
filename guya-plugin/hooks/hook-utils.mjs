@@ -8,9 +8,13 @@
  *     - FEEDBACK_TRACE_TYPES / FEEDBACK_TRACE_TYPE_SET — user-feedback
  *       trace-type enum shared by correction-detect (producer) and
  *       session-end hasLearningSignal (consumer) to prevent schema drift
+ *     - isGitCommit(toolName, toolInput) -> boolean — shared detector
+ *       used by the pre-commit gate AND the post-commit scribe to
+ *       prevent drift between them (historical bug: the scribe fired
+ *       on literal 'git commit' substrings inside `echo '...'` payloads)
  *   Used by: guya-decision-gate.mjs, guya-intent-detect.mjs,
  *            guya-correction-detect.mjs, guya-pre-commit-review.mjs,
- *            guya-session-end.mjs
+ *            guya-post-commit-scribe.mjs, guya-session-end.mjs
  */
 
 import { existsSync, statSync, unlinkSync } from 'fs';
@@ -107,6 +111,46 @@ export function isHarnessActive(cwd) {
   } catch {
     return false;
   }
+}
+
+/**
+ * Detect whether a Bash tool invocation is a `git commit` command.
+ *
+ * Historical bug (2026-04-09): the original `/\bgit\s+commit\b/.test(cmd)`
+ * check fired on any substring match, including literal `git commit` inside
+ * quoted echo payloads like `echo '{"command":"git commit -m test"}'`. The
+ * post-commit-scribe then ran `getLatestCommit()` + wiped the review gate
+ * evidence for a commit that never happened.
+ *
+ * Two-layer defense:
+ *   1. Strip single- and double-quoted substrings so quoted payloads don't
+ *      match (handles `echo '... git commit ...'`).
+ *   2. Require `git commit` to appear at a shell statement boundary:
+ *      start of command, or immediately after a shell separator like
+ *      `&&`, `||`, `;`, `|`, `(`, or newline. This rejects `echo git commit`,
+ *      `grep git commit file`, `printf %s git commit`, and comments like
+ *      `# git commit` where `git commit` is an argument to another command,
+ *      not an invocation.
+ *
+ * Known false-negative (documented-only, not pinned by a test): `bash -c
+ * "git commit -m foo"` — the quoted arg is stripped, leaving `bash -c`,
+ * which doesn't match. Uncommon invocation style for Daniel's workflow.
+ *
+ * Pairs with a HEAD-advance check in post-commit-scribe for defense in
+ * depth: even if this regex slips, the scribe's marker-file comparison
+ * verifies the commit actually landed before wiping state.
+ */
+export function isGitCommit(toolName, toolInput) {
+  if (toolName !== 'Bash' && toolName !== 'bash') return false;
+  const cmd = typeof toolInput === 'string' ? toolInput : (toolInput?.command || '');
+  // Layer 1: strip single- and double-quoted substrings so quoted `git commit`
+  // text doesn't match. Order matters only for clarity — single first because
+  // shells typically treat single-quoted strings as literal.
+  const unquoted = cmd.replace(/'[^']*'/g, '').replace(/"[^"]*"/g, '');
+  // Layer 2: require a shell statement boundary before `git commit`. This
+  // rejects cases where `git commit` appears as an argument to another
+  // command (echo, grep, printf) or inside a comment.
+  return /(?:^|[;&|()\n])\s*git\s+commit\b/.test(unquoted);
 }
 
 /**

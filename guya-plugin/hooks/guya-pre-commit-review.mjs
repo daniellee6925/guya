@@ -26,7 +26,7 @@ import { join, extname } from 'path';
 import { homedir } from 'os';
 import { execSync } from 'child_process';
 import { fileURLToPath } from 'url';
-import { readStdin } from './hook-utils.mjs';
+import { readStdin, isGitCommit } from './hook-utils.mjs';
 
 function output(obj) {
   process.stdout.write(JSON.stringify(obj) + '\n');
@@ -198,12 +198,8 @@ function recordEvidence(directory, step) {
 }
 
 // --- Job 2 & 3: Commit gating ---
-
-function isGitCommit(toolName, toolInput) {
-  if (toolName !== 'Bash' && toolName !== 'bash') return false;
-  const cmd = typeof toolInput === 'string' ? toolInput : (toolInput?.command || '');
-  return /\bgit\s+commit\b/.test(cmd);
-}
+// isGitCommit lives in hook-utils.mjs — shared with post-commit-scribe to
+// prevent drift and to fix the substring-match-in-echo-payloads bug.
 
 function hasNoVerify(toolInput) {
   const cmd = typeof toolInput === 'string' ? toolInput : (toolInput?.command || '');
