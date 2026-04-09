@@ -24,6 +24,7 @@ import { randomUUID } from 'crypto';
 import { rename, writeFile } from 'fs/promises';
 import { fileURLToPath } from 'url';
 import Anthropic from '@anthropic-ai/sdk';
+import { hasLearningSignal } from './hook-utils.mjs';
 
 const GLOBAL_DIR = join(homedir(), '.claude', 'guya');
 const OBSIDIAN_VAULT = join(homedir(), 'Desktop', 'secrets');
@@ -160,29 +161,8 @@ async function pruneClassifiedTraces(tracesDir, fileGroups) {
 }
 
 // --- Pre-filter: skip noise, only classify traces with learning signal ---
-
-function hasLearningSignal(trace) {
-  // Always classify corrections and preferences
-  if (trace.type === 'correction' || trace.type === 'preference') return true;
-
-  // Always classify reflections
-  if (trace.type === 'reflection') return true;
-
-  // Classify edits to Guya's own identity/guideline/memory files
-  const ctx = (trace.context || '').toLowerCase();
-  if (ctx.includes('.claude/guya/') || ctx.includes('.guya/')) return true;
-
-  // Skip routine read-only tools — no learning signal
-  const toolName = (trace.content || '').replace('Tool: ', '').toLowerCase();
-  const noiseTools = ['read', 'glob', 'grep', 'bash', 'ls', 'cat', 'head', 'tail', 'toolsearch'];
-  if (noiseTools.includes(toolName)) return false;
-
-  // Classify writes — they represent decisions
-  if (['write', 'edit', 'notebookedit'].includes(toolName)) return true;
-
-  // Default: skip. Most tool calls are routine.
-  return false;
-}
+// hasLearningSignal lives in hook-utils.mjs so the schema contract test
+// can import it without loading this module's Anthropic SDK dependency.
 
 function preFilterTraces(unclassified) {
   // Also detect repeated failures: same tool failing 3+ times in a row

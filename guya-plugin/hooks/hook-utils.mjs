@@ -5,8 +5,12 @@
  *   Exports:
  *     - readStdin(timeoutMs) -> Promise<string>
  *     - isHarnessActive(cwd) -> boolean
+ *     - FEEDBACK_TRACE_TYPES / FEEDBACK_TRACE_TYPE_SET — user-feedback
+ *       trace-type enum shared by correction-detect (producer) and
+ *       session-end hasLearningSignal (consumer) to prevent schema drift
  *   Used by: guya-decision-gate.mjs, guya-intent-detect.mjs,
- *            guya-correction-detect.mjs, guya-pre-commit-review.mjs
+ *            guya-correction-detect.mjs, guya-pre-commit-review.mjs,
+ *            guya-session-end.mjs
  */
 
 import { existsSync, statSync, unlinkSync } from 'fs';
@@ -14,6 +18,69 @@ import { join } from 'path';
 
 // Harness markers older than this are treated as crash debris and removed.
 const HARNESS_MARKER_TTL_MS = 2 * 60 * 60 * 1000; // 2 hours
+
+/**
+ * User-feedback trace types that always represent learning signal.
+ *
+ * Single source of truth for the producer/consumer contract:
+ *   - Producer: guya-correction-detect.mjs PATTERNS must only emit these types
+ *   - Consumer: guya-session-end.mjs hasLearningSignal must accept all of these
+ *
+ * Drift between producer and consumer silently drops traces from the
+ * classification pipeline (historical bug — confirmation/decision/pushback
+ * were dropped for an unknown stretch). The contract test in
+ * __tests__/trace-schema.test.mjs enforces both directions.
+ *
+ * If you add a new regex with a new type to correction-detect PATTERNS,
+ * add the type here too. The contract test will fail loudly if you forget.
+ */
+export const FEEDBACK_TRACE_TYPES = Object.freeze([
+  'correction',
+  'confirmation',
+  'preference',
+  'decision',
+  'pushback',
+]);
+
+export const FEEDBACK_TRACE_TYPE_SET = new Set(FEEDBACK_TRACE_TYPES);
+
+/**
+ * Decide whether a trace carries enough learning signal to be classified.
+ *
+ * Pure function — lives in hook-utils (not guya-session-end) so the schema
+ * contract test can import it without loading @anthropic-ai/sdk and the
+ * rest of the session-end pipeline.
+ *
+ * Paths:
+ *   1. Any user-feedback type in FEEDBACK_TRACE_TYPE_SET → classify
+ *   2. 'reflection' → classify (kept for future producers — memory_reflect
+ *      currently writes markdown, not traces)
+ *   3. context path matches .claude/guya/ or .guya/ → classify (edits to
+ *      Guya's own identity/guideline/memory files)
+ *   4. Legacy "Tool: X" content shape:
+ *      - read-only tools → skip
+ *      - write-family tools → classify
+ *   5. Default → skip
+ */
+export function hasLearningSignal(trace) {
+  // Null guard — this is shared code and callers may pass thin objects.
+  // Original caller (preFilterTraces) only passes real trace objects, but
+  // widening the caller surface widens the input risk surface.
+  if (!trace || typeof trace !== 'object') return false;
+
+  if (FEEDBACK_TRACE_TYPE_SET.has(trace.type)) return true;
+  if (trace.type === 'reflection') return true;
+
+  const ctx = (trace.context || '').toLowerCase();
+  if (ctx.includes('.claude/guya/') || ctx.includes('.guya/')) return true;
+
+  const toolName = (trace.content || '').replace('Tool: ', '').toLowerCase();
+  const noiseTools = ['read', 'glob', 'grep', 'bash', 'ls', 'cat', 'head', 'tail', 'toolsearch'];
+  if (noiseTools.includes(toolName)) return false;
+  if (['write', 'edit', 'notebookedit'].includes(toolName)) return true;
+
+  return false;
+}
 
 /**
  * Check whether a decision harness (feature/bugfix/refactor/kickoff)

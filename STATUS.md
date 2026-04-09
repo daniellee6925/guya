@@ -3,47 +3,53 @@
 > Last updated: 2026-04-09
 
 ## Current Focus
-Classifier batching bug fixed — evolution pipeline can now burn down backlogs of arbitrary size. `classifyTraces` chunks into `CLASSIFY_CHUNK_SIZE=25` batches, loops Haiku per chunk, tolerates partial chunk failures (log-and-continue), returns partial results on success / null only on total failure. `classifyChunk` filters each chunk's results to input ids to prevent cross-chunk id bleed + dedupes within-chunk. `PLUGIN_ROOT` fallback fixed via `computePluginRoot` pure helper. 11/11 classifier tests green, 7/7 merge regression tests green, e2e verified against real Haiku on the 738-trace backlog (30/30 chunks succeeded, 728/730 merged, $0.44 cost). Next: plugin cache drift (HIGH), pre-filter allowlist drift (HIGH), or switch projects.
+Pre-filter allowlist drift fixed — producer-consumer schema drift that silently dropped `confirmation`, `decision`, `pushback` feedback traces is now structurally impossible. Centralized `FEEDBACK_TRACE_TYPES` enum + `hasLearningSignal` in `hook-utils.mjs` as the single source of truth. Runtime guard in `correction-detect.mjs` throws at module load if PATTERNS emits an unregistered type — this is the primary defense, not the test suite. Contract test (`trace-schema.test.mjs`) is a secondary safety net: 12 tests covering static `PATTERNS` scan, `hasLearningSignal` acceptance, reverse dead-enum check, `detectCorrection` emit sweep (exercises every known emit path including the `INSTEAD_OF_PATTERN` escape hatch Codex flagged), and null-guard boundary cases. 30/30 hook tests green. Both review passes applied findings from code-reviewer + codex — Codex found a real HIGH bug I missed (the `INSTEAD_OF_PATTERN` escape path that evaded `PATTERNS`-only validation). Hooks synced to plugin cache. Next: plugin cache drift (HIGH, still design-decision), orphan `tool_call` traces investigation (MED), `hasLearningSignal` file_edit content-format mismatch (newly-spotted LOW), or switch projects.
 
 ## This Session — What Changed and Why
 
-**Started as**: Pick the next HIGH TODO. Three candidates — cache drift, classifier batching, pre-filter allowlist drift. Chose classifier batching because it was scoped, fix was already specified in the TODO, and it unblocks real value (the 738-trace backlog). Cache drift was rejected as "not execution-ready" — it's a design decision with three options, not a coding task.
+**Started as**: Next HIGH TODO after classifier batching. Three candidates — cache drift (still design-decision, not execution-ready), pre-filter allowlist drift (scoped, same class of bug as the traceId/id contract we just fixed), orphan `tool_call` traces (investigation, not fix). Chose allowlist drift: scoped, high-leverage (silently dropping ~8 traces per batch), and fixing it retires a whole class of bug.
 
-**Root cause (known from this morning)**: `classifyTraces` stuffed ALL pre-filtered traces into one Haiku call. Two failure modes at scale: 738 traces → 206,774 input tokens exceeds Haiku 200K context, and `max_tokens: 2048` caps output at ~30 classifications per call.
+**Root cause**: `guya-session-end.mjs` `hasLearningSignal` hardcoded `['correction','preference','reflection']` as the always-classify set. `guya-correction-detect.mjs` PATTERNS emits 5 feedback types: `correction`, `confirmation`, `preference`, `decision`, `pushback`. Three types (`confirmation`, `decision`, `pushback`) silently fell through to `return false`. Same producer-consumer schema drift class as this morning's `traceId`/`id` contract bug — which is exactly why the right fix is structural, not an allowlist expansion.
 
-**Fix (commit `a78b8f5`)**:
-- `classifyChunk` new helper: one API call for one chunk, throws on shape errors so the loop can isolate per-chunk failures
-- `classifyTraces` rewritten: chunks to `CLASSIFY_CHUNK_SIZE = 25`, loops per-chunk, log-and-continue on chunk failure, returns partial results on partial success and `null` only when ALL chunks fail
-- **Cross-chunk ID safety** (Codex catch, round 1): `classifyChunk` filters response to only ids present in THAT chunk's input, dedupes within-chunk, rejects nullish ids. Without this, a hallucinated cross-chunk id would silently overwrite an earlier correct classification when `mergeClassifications` built its `Map`. Defense-in-depth against observer drift.
-- **`PLUGIN_ROOT` fallback fix**: extracted `computePluginRoot(metaUrl)` pure helper, uses `fileURLToPath` (Windows-safe), walks up one directory from hooks/. This was STATUS.md latent bug #4 (MED) — pulled in because the classifier tests literally couldn't run without it.
+**Fix strategy — centralize over patch**: Decided against the simpler allowlist expansion because it just resets the drift timer. Instead:
+1. Single source of truth: `FEEDBACK_TRACE_TYPES` (frozen array) + `FEEDBACK_TRACE_TYPE_SET` in `hook-utils.mjs`.
+2. Producer-side runtime guard: correction-detect throws at module load if PATTERNS emits an unregistered type. Primary defense — fails fast, never reaches production silently.
+3. Consumer-side import: `hasLearningSignal` moved to `hook-utils.mjs` (no longer in session-end.mjs) and uses the Set. Pure function, no Anthropic SDK dependency in the test path — Codex's MED #3 fix.
+4. Contract test (`trace-schema.test.mjs`): 12 tests. Static PATTERNS → schema, schema → PATTERNS reverse (dead enum entries), `hasLearningSignal` acceptance sweep, `detectCorrection` emit sweep (crucial — this covers escape-hatch paths like `INSTEAD_OF_PATTERN` that bypass PATTERNS entirely), null-guard boundary, behavior preservation for non-feedback paths.
 
-**Tests**: `guya-plugin/hooks/__tests__/classify-traces.test.mjs` NEW — 11 tests (empty input, single-chunk, exact-boundary, multi-chunk sizing, partial chunk failure, total failure, non-array shape, cross-chunk id bleed, within-chunk duplicate dedup, computePluginRoot fallback, computePluginRoot env override). 7 existing `persist-classifications` tests untouched, still green. **18/18 total.**
+**Review cycle — this is where the real learning happened**:
 
-**E2E verification (real Haiku, non-destructive tmp copy of the real 738-trace backlog)**:
-- 30/30 chunks succeeded (zero API failures against real Haiku)
-- 728/730 classifications merged (99.7% echo fidelity, 2 phantom drops tolerated below the assertion threshold)
-- 4342 → 3284 traces after pruning (1058 removed = 728 new merges + 330 historical pre-classified residue)
-- Cost: $0.44, Duration: 7.5 min sequential
+- `/cr` (Claude + Karpathy + Codex synthesis):
+  - **Karpathy** flagged 4 items, I **disagreed with 3** as scope creep (pre-existing duplicate code in readStdin, pre-existing hasLearningSignal scope conflation, isMain gate duplication). Agreed with 0. The one I agreed on (removing unused `detectCorrection` export) I later reverted because Codex caught why it was needed.
+  - **Codex** caught 2 HIGH bugs I missed plus 1 MED I agreed with:
+    - **HIGH #1 (INSTEAD_OF escape hatch)**: `detectCorrection` has a return path (`INSTEAD_OF_PATTERN` on line 50) that emits `'correction'` outside the PATTERNS loop. My contract test only scanned PATTERNS, so a future escape-hatch with a new type would evade it. Same bug-class I was trying to prevent, reappearing in the prevention code itself. **Fix**: hoisted `INSTEAD_OF_TYPE` const, added it to the runtime guard, and added a `detectCorrection` emit-sweep test that probes every known emit path and asserts all outputs are in the set.
+    - **HIGH #2 (runtime enforcement)**: Test-time drift detection is weaker than runtime drift detection. Someone editing a hook without running tests would silently ship broken code. **Fix**: added module-load assertion in correction-detect — throws immediately on drift, making the test a secondary safety net rather than the primary defense.
+    - **MED #3 (test coupling)**: Contract test imported `hasLearningSignal` from session-end.mjs, which dragged in the entire Anthropic SDK as a transitive dep just to test a pure function. **Fix**: moved `hasLearningSignal` to `hook-utils.mjs` (where it always belonged — it's a pure function with no session-end dependencies).
 
-**Review cycle**: `/cr` (Claude + Codex synthesis) caught HIGH cross-chunk bleed + 2 MED (PLUGIN_ROOT test coverage, malformed-array test coverage) → applied all three → `/review-followup` caught 1 LOW nullish-id guard → applied → clock expired during STATUS.md writing → re-ran `/karpathy-review` + `/review-followup` (no new findings, pure ceremony) → committed.
+- `/review-followup` (deeper categorical review):
+  - Found 2 LOW items worth fixing:
+    - PATTERNS was exported mutable (asymmetry with the frozen FEEDBACK_TRACE_TYPES on the other side of the contract). **Fix**: `Object.freeze(PATTERNS)`.
+    - `hasLearningSignal` didn't guard against null/undefined input — safe in current call sites (`preFilterTraces` only passes real traces) but since it's now shared code importable from new sites, widening the call surface widens the input risk surface. **Fix**: added `if (!trace || typeof trace !== 'object') return false;` + test case.
 
-**Process follow-up (commit `b5b17dc`)**: Bumped `gateMaxAgeMinutes` in `.guya/pre-commit-config.json` from 10 → 30 min. The 10-min window forced a wasteful re-review pass during normal commit prep. Two-pass requirement (initial + followup) unchanged — that's still load-bearing.
+**The key growth moment this session**: I presented my first pass to the user as "done" with confidence. Codex immediately found a HIGH bug (INSTEAD_OF escape hatch) in the exact code meant to prevent that bug class. Reminder that independent review catches what self-review misses — even when you're specifically hunting for a known pattern. Karpathy caught style issues but missed the semantic hole that Codex caught. Different reviewers catch different layers.
 
-**Files in `a78b8f5`**:
-- `guya-plugin/hooks/guya-session-end.mjs` — classifyChunk + classifyTraces rewrite, computePluginRoot extraction, new exports
-- `guya-plugin/hooks/__tests__/classify-traces.test.mjs` — NEW, 11 tests
-- `STATUS.md` — session narrative + removed 2 HIGH TODOs
-- Plugin cache manually synced (drift still unfixed — remains a HIGH TODO)
+**Tests**: 30/30 green (19 existing classify-traces/persist-classifications + 12 new trace-schema + 1 follow-up null-guard). `detectCorrection` sweep confirmed every pattern class (5 distinct types) is actually emitted by at least one probe. 
+**Files changed**:
+- `guya-plugin/hooks/hook-utils.mjs` — added `FEEDBACK_TRACE_TYPES`, `FEEDBACK_TRACE_TYPE_SET`, `hasLearningSignal` (moved from session-end.mjs)
+- `guya-plugin/hooks/guya-session-end.mjs` — deleted local `hasLearningSignal`, imported from hook-utils, removed from test exports
+- `guya-plugin/hooks/guya-correction-detect.mjs` — frozen PATTERNS, hoisted `INSTEAD_OF_TYPE`, runtime drift guard, `isMain` gate for test isolation, exports PATTERNS + detectCorrection
+- `guya-plugin/hooks/__tests__/trace-schema.test.mjs` — NEW, 12 tests
+- `STATUS.md` — session narrative, TODO cleanup
+- Plugin cache synced (hook-utils.mjs, guya-session-end.mjs, guya-correction-detect.mjs)
 
-**Known latent bugs carried over (unchanged)**:
-1. `hasLearningSignal` pre-filter allowlist drift — `pushback`/`decision`/`confirmation` trace types silently dropped (~8 per batch). Same producer-consumer drift class as the traceId bug. **HIGH**.
-2. 4,036 orphan `tool_call` traces from an unknown producer — investigate origin. MED.
-3. `PLUGIN_ROOT` fallback — **FIXED THIS SESSION**.
-4. `~/.claude/guya/.env` ANTHROPIC_API_KEY may still be corrupted (U+2248 trailing byte) — home-dir copy confirmed still broken, Desktop/.env used instead. LOW — manual fix.
-
-**Backlog burndown status**: Fix is live in source and synced to plugin cache. NEXT SessionEnd hook invocation will be the first real-world run of the chunking code against the actual backlog. If nothing changed on disk between now and then, it should burn down ~728 more classifications automatically. That's the real validation — e2e against a tmp copy proved the code, but the in-situ run proves the plugin wiring.
+**Known latent bugs**:
+1. 4,036 orphan `tool_call` traces from an unknown producer — investigate origin. MED.
+2. **NEWLY SPOTTED**: `hasLearningSignal` tool-name parser expects `content: "Tool: X"` format (e.g., `"Tool: Edit"`), but `trace-capture.mjs` writes `content: "Edit: foo.js"`. After `.replace('Tool: ', '')` the content is still `"edit: foo.js"` which doesn't exact-match `['write','edit','notebookedit']`. file_edit traces may fall through to `return false`. Needs trace-level verification before fixing. LOW.
+3. `~/.claude/guya/.env` ANTHROPIC_API_KEY may still be corrupted (U+2248 trailing byte). LOW — manual fix.
+4. Pre-existing: `guya-session-end.mjs` has its own `readStdinWithTimeout` duplicating `hook-utils.mjs:readStdin`. Same for `isMain` gate pattern in both session-end and correction-detect. Both valid DRY follow-ups, flagged by Karpathy, deferred as scope creep for this PR.
 
 ## Recent Changes
+- [2026-04-09] `e1e067d` — docs: update STATUS.md session narrative for classifier batching fix
 - [2026-04-09] `b5b17dc` — chore: bump pre-commit review gate window from 10 to 30 minutes
 - [2026-04-09] `a78b8f5` — fix: chunk Haiku classification calls to unblock backlog burndown — plus cross-chunk id safety and PLUGIN_ROOT fallback
 - [2026-04-09] `2e362bf` — fix: repair evolution pipeline traceId/id contract — classifications now merge
@@ -65,8 +71,9 @@ Classifier batching bug fixed — evolution pipeline can now burn down backlogs 
 
 ## TODO
 - [ ] **[HIGH] Fix plugin cache drift systemically** — `~/.claude/plugins/cache/guya/guya/0.1.0/` is a copy not a symlink, every hook edit currently requires manual cache sync, and this has silently hidden at least one session's hook work. Options: dev symlink, auto-sync on commit, `/omc-sync-plugin` script. Pick one.
-- [ ] **[HIGH — same class of bug as the traceId/id contract bug] Pre-filter `hasLearningSignal` silently drops trace types.** `guya-session-end.mjs:156-177` hardcodes `['correction', 'preference', 'reflection']` as always-classify, but `guya-correction-detect.mjs` also writes `pushback`, `decision`, `confirmation`. Those never pass the filter. ~8 traces in current backlog silently dropped. Same producer-consumer drift. Fix: expand the allowlist, or better — centralize the trace-type enum in a shared schema module so both producer and consumer import it.
 - [ ] **[MED — investigate] 4,036 orphan `tool_call` traces in the backlog.** No current hook writes `type: 'tool_call'` — trace-capture writes `file_edit`, correction-detect writes the correction family. These DO pass the pre-filter (their `content` is `"Tool: Edit"` which hits the allowlist via `replace('Tool: ', '')`). They're the dominant signal source by volume. Where are they coming from? Possibilities: legacy format from a pre-refactor version, MCP server writing traces, a hook I haven't audited. First step: `grep -rn "tool_call" ~/.claude/plugins/ ~/.claude/guya/ guya-plugin/` and check git log.
+- [ ] **[LOW — spotted during allowlist drift fix] `hasLearningSignal` tool-name parser doesn't match `file_edit` trace content format.** `trace-capture.mjs:113` writes `content: "Edit: app.py"` but `hasLearningSignal` does `(trace.content || '').replace('Tool: ', '').toLowerCase()` then does an exact match against `['write','edit','notebookedit']`. After replace, the content is still `"edit: app.py"` which ≠ `'edit'`. file_edit traces fall through to the default `return false`. Needs verification against real traces (test with a sample) before fixing. If confirmed, fix is either: parse `content` up to the first `:`, or change trace-capture to write `"Tool: Edit"` format like `tool_call` traces.
+- [ ] **[LOW — DRY follow-up, flagged by Karpathy review but deferred]** Extract `isMain` gate pattern into `hook-utils.mjs` — currently duplicated in `guya-session-end.mjs` and `guya-correction-detect.mjs`. Also extract `readStdinWithTimeout` in `guya-session-end.mjs:42` — duplicates `hook-utils.mjs:readStdin`. Both require touching multiple files, so deferred from the allowlist drift PR to avoid scope creep.
 - [ ] **[MED] `hasLearningSignal` reads fields no producer writes.** `trace.context` and `trace.toolOutput` — neither is written by any known trace producer. Dead code paths in the filter. Either remove them or start writing the fields.
 - [ ] **[LOW] `~/.claude/guya/.env` may still have corrupted ANTHROPIC_API_KEY.** Hex-confirmed a trailing Unicode `≈` (U+2248, 0xe28988) on the key today. Daniel provided a clean replacement at `Desktop/guya/.env` but the home-dir copy may still need manual fix. Verify: `grep ANTHROPIC_API_KEY ~/.claude/guya/.env | tail -c 20 | xxd`
 - [ ] Follow-up commit: apply review findings from 2026-04-08 karpathy-review pass — add `console.error` logging to silent catches in `hook-utils.mjs:36,40`, `intent-detect.mjs:91`, `correction-detect.mjs:101`; consolidate the 3 remaining duplicate `readStdin` implementations to use the shared `hook-utils.mjs` version

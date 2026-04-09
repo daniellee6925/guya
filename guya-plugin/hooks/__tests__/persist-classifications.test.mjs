@@ -15,7 +15,7 @@ import { mkdtempSync, writeFileSync, readFileSync, existsSync, rmSync } from 'fs
 import { join } from 'path';
 import { tmpdir } from 'os';
 
-import { persistClassifications } from '../guya-session-end.mjs';
+import { persistClassifications, mergeClassifications } from '../guya-session-end.mjs';
 
 // --- Test helpers ---
 
@@ -144,6 +144,68 @@ test('persistClassifications: empty classificationResults is a no-op (not a cont
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test('mergeClassifications: merged traces carry persistence, confidence, domain fields verbatim from the classification', () => {
+  // Field-level verification — persistClassifications prunes merged traces
+  // before we can inspect them, so we test the pure merge step directly to
+  // lock the contract on which classification fields land on which traces.
+  const trace1 = { id: 'a', type: 'correction', content: 'x', timestamp: 1, sessionId: 's1' };
+  const trace2 = { id: 'b', type: 'file_edit', content: 'y', timestamp: 2, sessionId: 's1' };
+  const allTracesWithMeta = [
+    { trace: trace1, file: 'test.jsonl' },
+    { trace: trace2, file: 'test.jsonl' },
+  ];
+  const unclassified = [{ trace: trace1, file: 'test.jsonl' }];
+  const classificationResults = [
+    { id: 'a', persistence: 'strategic', confidence: 0.92, domain: 'growth_areas' },
+  ];
+
+  const { fileGroups, mergedCount } = mergeClassifications(
+    classificationResults, allTracesWithMeta, unclassified,
+  );
+
+  assert.equal(mergedCount, 1);
+  const group = fileGroups['test.jsonl'];
+  assert.equal(group.length, 2, 'both traces should be in the file group');
+
+  const merged = group.find(t => t.id === 'a');
+  assert.equal(merged.classified, true);
+  assert.equal(merged.persistence, 'strategic');
+  assert.equal(merged.confidence, 0.92);
+  assert.equal(merged.domain, 'growth_areas');
+  // Original fields must be preserved, not replaced.
+  assert.equal(merged.type, 'correction');
+  assert.equal(merged.sessionId, 's1');
+  assert.equal(merged.content, 'x');
+
+  // Untouched trace must not be mutated with any classification metadata.
+  const untouched = group.find(t => t.id === 'b');
+  assert.equal(untouched.classified, undefined);
+  assert.equal(untouched.persistence, undefined);
+  assert.equal(untouched.confidence, undefined);
+  assert.equal(untouched.domain, undefined);
+});
+
+test('mergeClassifications: merge is robust to object-identity changes (same id, different object)', () => {
+  // Regression guard for the old `.some(u => u.trace === trace)` check that
+  // relied on reference equality. After the fix, merge joins by id, so a
+  // deserialized copy of the same logical trace still works correctly.
+  const trace1 = { id: 'shared-id', type: 'correction', content: 'x', timestamp: 1 };
+  // Deliberately different object with the same id (simulates a round-trip).
+  const trace1Copy = JSON.parse(JSON.stringify(trace1));
+
+  const allTracesWithMeta = [{ trace: trace1, file: 'f.jsonl' }];
+  const unclassified = [{ trace: trace1Copy, file: 'f.jsonl' }];
+  const classificationResults = [
+    { id: 'shared-id', persistence: 'tactical', confidence: 0.7, domain: 'workflow' },
+  ];
+
+  const { mergedCount } = mergeClassifications(
+    classificationResults, allTracesWithMeta, unclassified,
+  );
+
+  assert.equal(mergedCount, 1, 'merge should succeed across identity boundary via id lookup');
 });
 
 test('persistClassifications: mixed — some observer results match, some dont, still merges matches', async () => {

@@ -17,13 +17,17 @@ import { existsSync, appendFileSync, writeFileSync, mkdirSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
 import { randomUUID } from 'crypto';
-import { isHarnessActive } from './hook-utils.mjs';
+import { fileURLToPath } from 'url';
+import { isHarnessActive, FEEDBACK_TRACE_TYPE_SET } from './hook-utils.mjs';
 
 const GLOBAL_TRACES_DIR = join(homedir(), '.claude', 'guya', 'traces');
 
 // --- Correction patterns ---
 
-const PATTERNS = [
+// Frozen to match FEEDBACK_TRACE_TYPES' posture on the schema side — both
+// halves of the contract should be immutable at module scope. Shallow freeze
+// is sufficient: the runtime guard and detectCorrection only read .type/.regex.
+const PATTERNS = Object.freeze([
   // Corrections — Daniel says something is wrong
   { regex: /\bno[,.]?\s+(use|do|make|write|prefer|try|that|don't)\b/i, type: 'correction' },
   { regex: /\b(wrong|incorrect|that's not right|fix that|not what i (asked|meant|want))\b/i, type: 'correction' },
@@ -44,19 +48,42 @@ const PATTERNS = [
   { regex: /\bwhy (are we|did you|would you|do we|is this)\b/i, type: 'pushback' },
   { regex: /\b(are you sure|I don'?t think|that (doesn't|doesn) seem right)\b/i, type: 'pushback' },
   { regex: /\bdo (we|you) (really )?need\b/i, type: 'pushback' },
-];
+]);
 
 const INSTEAD_OF_PATTERN = /\binstead of\b/i;
+// Hoisted so the runtime guard below can sweep every emit path, not just PATTERNS.
+const INSTEAD_OF_TYPE = 'correction';
 
 // Short prompts that are just commands (< 15 chars) aren't feedback
 const MIN_SIGNAL_LENGTH = 15;
+
+// Runtime guard: every trace type this module can emit must be registered in
+// FEEDBACK_TRACE_TYPE_SET, or session-end's hasLearningSignal will silently
+// drop the trace. Throws at module load (not inside main's try/catch) so a
+// broken hook fails fast instead of dropping traces for weeks unnoticed.
+// This is the primary defense against producer/consumer schema drift — the
+// contract test in trace-schema.test.mjs is a secondary safety net.
+for (const { type } of PATTERNS) {
+  if (!FEEDBACK_TRACE_TYPE_SET.has(type)) {
+    throw new Error(
+      `[guya-correction-detect] PATTERNS contains unregistered type '${type}'. ` +
+      `Add it to hook-utils.mjs FEEDBACK_TRACE_TYPES or remove the pattern.`,
+    );
+  }
+}
+if (!FEEDBACK_TRACE_TYPE_SET.has(INSTEAD_OF_TYPE)) {
+  throw new Error(
+    `[guya-correction-detect] INSTEAD_OF_TYPE '${INSTEAD_OF_TYPE}' is not in ` +
+    `FEEDBACK_TRACE_TYPES — register it or change the emit type.`,
+  );
+}
 
 function detectCorrection(prompt) {
   if (prompt.length < MIN_SIGNAL_LENGTH) return null;
   for (const { regex, type } of PATTERNS) {
     if (regex.test(prompt)) return type;
   }
-  if (INSTEAD_OF_PATTERN.test(prompt.slice(0, 150))) return 'correction';
+  if (INSTEAD_OF_PATTERN.test(prompt.slice(0, 150))) return INSTEAD_OF_TYPE;
   return null;
 }
 
@@ -159,4 +186,20 @@ async function main() {
   }
 }
 
-main();
+// Only run main() when executed as a script (not when imported by tests).
+// Matches the pattern in guya-session-end.mjs — lets the contract test
+// inspect PATTERNS without triggering the hook side effects.
+const isMain = (() => {
+  try { return fileURLToPath(import.meta.url) === process.argv[1]; }
+  catch { return false; }
+})();
+
+if (isMain) {
+  main();
+}
+
+// Exports for testing — PATTERNS and detectCorrection are both inspected
+// by trace-schema.test.mjs. PATTERNS alone is not sufficient: detectCorrection
+// has an out-of-band emit path (INSTEAD_OF_PATTERN) that the contract test
+// only catches by invoking detectCorrection directly.
+export { PATTERNS, detectCorrection };
