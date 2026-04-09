@@ -7,49 +7,45 @@ Classifier batching bug fixed — evolution pipeline can now burn down backlogs 
 
 ## This Session — What Changed and Why
 
-**Started as**: Fix the two HIGH priority bugs from STATUS.md — (1) `traceId`/`id` mismatch in the evolution pipeline, (2) systemic plugin cache drift.
+**Started as**: Pick the next HIGH TODO. Three candidates — cache drift, classifier batching, pre-filter allowlist drift. Chose classifier batching because it was scoped, fix was already specified in the TODO, and it unblocks real value (the 738-trace backlog). Cache drift was rejected as "not execution-ready" — it's a design decision with three options, not a coding task.
 
-**Scope chosen**: Bug #1 only, scoped tightly. Cache drift is a separate design decision (symlink vs auto-sync vs script) and gets its own conversation. Daniel drove root-cause thinking via explain-before-implement flow (explicit choice to understand the bug before fixing).
+**Root cause (known from this morning)**: `classifyTraces` stuffed ALL pre-filtered traces into one Haiku call. Two failure modes at scale: 738 traces → 206,774 input tokens exceeds Haiku 200K context, and `max_tokens: 2048` caps output at ~30 classifications per call.
 
-**Root cause**: Producer-consumer contract mismatch across two hops. Trace producers (`guya-trace-capture.mjs`, `guya-correction-detect.mjs`) write `{id: randomUUID()}`. Session-end consumer (`persistClassifications`) keyed lookups on `traceId` — a field no producer writes. The ternary guard `trace.traceId ? ... : null` silently short-circuited to null every time. Compounding bug: `guya-observer.md` never specified its output schema at all, so even fixing the consumer key would leave the code depending on Haiku to guess right. Two contract violations, one fix pass.
+**Fix (commit `a78b8f5`)**:
+- `classifyChunk` new helper: one API call for one chunk, throws on shape errors so the loop can isolate per-chunk failures
+- `classifyTraces` rewritten: chunks to `CLASSIFY_CHUNK_SIZE = 25`, loops per-chunk, log-and-continue on chunk failure, returns partial results on partial success and `null` only when ALL chunks fail
+- **Cross-chunk ID safety** (Codex catch, round 1): `classifyChunk` filters response to only ids present in THAT chunk's input, dedupes within-chunk, rejects nullish ids. Without this, a hallucinated cross-chunk id would silently overwrite an earlier correct classification when `mergeClassifications` built its `Map`. Defense-in-depth against observer drift.
+- **`PLUGIN_ROOT` fallback fix**: extracted `computePluginRoot(metaUrl)` pure helper, uses `fileURLToPath` (Windows-safe), walks up one directory from hooks/. This was STATUS.md latent bug #4 (MED) — pulled in because the classifier tests literally couldn't run without it.
 
-**Fix (single commit)**:
-- `guya-plugin/agents/guya-observer.md`: pinned output contract as `[{id, persistence, confidence, domain}]` with explicit "echo `id` unchanged from input" rule
-- `guya-plugin/hooks/guya-session-end.mjs:424-458`: `persistClassifications` now keys on `r.id` / `trace.id`; added runtime assertion that throws if `classificationResults.length > 0 && mergedCount === 0` (contract-violation tripwire); returns `{mergedCount}` for test observability; added `fileURLToPath` import + `isMain` guard so importing the module for tests doesn't trigger the whole pipeline; added `export { persistClassifications }`
-- `guya-plugin/hooks/__tests__/persist-classifications.test.mjs`: new, zero-deps (Node built-in `node:test`), 7 tests — contract-violation regression guard, field-level merge verification, identity-robustness, happy path, pruning, empty no-op, phantom-result tolerance. Two added after review-followup caught a test coverage gap.
-- Plugin cache manually synced (drift is still unfixed)
+**Tests**: `guya-plugin/hooks/__tests__/classify-traces.test.mjs` NEW — 11 tests (empty input, single-chunk, exact-boundary, multi-chunk sizing, partial chunk failure, total failure, non-array shape, cross-chunk id bleed, within-chunk duplicate dedup, computePluginRoot fallback, computePluginRoot env override). 7 existing `persist-classifications` tests untouched, still green. **18/18 total.**
 
-**Verification**: `node --test` → 7/7 pass. `node --check` on source + cache → OK. End-to-end verified against real Haiku with 10 real signal traces from today's backlog: Haiku honored the pinned schema, all ids echoed verbatim, `mergedCount=10`, file pruned correctly. Review gates passed via `/karpathy-review` → apply Medium fixes → `/review-followup` → apply one observability fix → commit.
+**E2E verification (real Haiku, non-destructive tmp copy of the real 738-trace backlog)**:
+- 30/30 chunks succeeded (zero API failures against real Haiku)
+- 728/730 classifications merged (99.7% echo fidelity, 2 phantom drops tolerated below the assertion threshold)
+- 4342 → 3284 traces after pruning (1058 removed = 728 new merges + 330 historical pre-classified residue)
+- Cost: $0.44, Duration: 7.5 min sequential
 
-**Backfill decision**: Deferred. Original plan was "self-heal, next session-end burns down the 20 signal traces." Wrong on two counts:
-1. Real signal count is **738**, not 20 — I missed that `tool_call` traces (4,036 of them) pass the pre-filter via their `"Tool: Edit"` content format.
-2. The classifier can't handle 738 traces in one call — measured 206,774 input tokens, exceeds Haiku's 200K context. AND `max_tokens: 2048` caps output at ~30 classifications per call.
+**Review cycle**: `/cr` (Claude + Codex synthesis) caught HIGH cross-chunk bleed + 2 MED (PLUGIN_ROOT test coverage, malformed-array test coverage) → applied all three → `/review-followup` caught 1 LOW nullish-id guard → applied → clock expired during STATUS.md writing → re-ran `/karpathy-review` + `/review-followup` (no new findings, pure ceremony) → committed.
 
-So the backlog can't self-heal until the batching bug is fixed (new HIGH TODO). For normal-sized sessions (~20-50 signal traces), the current fix works correctly — verified end-to-end below. The backlog specifically is frozen until chunking lands.
+**Process follow-up (commit `b5b17dc`)**: Bumped `gateMaxAgeMinutes` in `.guya/pre-commit-config.json` from 10 → 30 min. The 10-min window forced a wasteful re-review pass during normal commit prep. Two-pass requirement (initial + followup) unchanged — that's still load-bearing.
 
-**End-to-end verification (real Haiku, real backlog subset, 10 signal traces from `2026-04-09.jsonl`)**:
-- Haiku honored the pinned `{id, persistence, confidence, domain}` schema perfectly — all 10 classifications had the right keys
-- All output `id` fields echoed input trace `id`s verbatim
-- `persistClassifications` merged all 10, returned `mergedCount=10`
-- `pruneClassifiedTraces` deleted the file because every trace was classified
-- Runtime assertion did NOT spuriously fire on the happy path
-- Cost: 1,781 input + 653 output tokens = ~$0.004
-- Confidence scores ranged 0.45–0.88 (not a flat hallucination — real classification behavior)
+**Files in `a78b8f5`**:
+- `guya-plugin/hooks/guya-session-end.mjs` — classifyChunk + classifyTraces rewrite, computePluginRoot extraction, new exports
+- `guya-plugin/hooks/__tests__/classify-traces.test.mjs` — NEW, 11 tests
+- `STATUS.md` — session narrative + removed 2 HIGH TODOs
+- Plugin cache manually synced (drift still unfixed — remains a HIGH TODO)
 
-**Files in this commit**:
-- `guya-plugin/agents/guya-observer.md` — output schema pinned
-- `guya-plugin/hooks/guya-session-end.mjs` — consumer fix, assertion, export, `isMain` guard
-- `guya-plugin/hooks/__tests__/persist-classifications.test.mjs` — NEW, 7 tests
-- Plugin cache at `~/.claude/plugins/cache/guya/guya/0.1.0/` manually synced (drift unfixed)
+**Known latent bugs carried over (unchanged)**:
+1. `hasLearningSignal` pre-filter allowlist drift — `pushback`/`decision`/`confirmation` trace types silently dropped (~8 per batch). Same producer-consumer drift class as the traceId bug. **HIGH**.
+2. 4,036 orphan `tool_call` traces from an unknown producer — investigate origin. MED.
+3. `PLUGIN_ROOT` fallback — **FIXED THIS SESSION**.
+4. `~/.claude/guya/.env` ANTHROPIC_API_KEY may still be corrupted (U+2248 trailing byte) — home-dir copy confirmed still broken, Desktop/.env used instead. LOW — manual fix.
 
-**Latent bugs surfaced during investigation (NOT in scope — see TODO)**:
-1. `hasLearningSignal` pre-filter hardcodes `correction|preference|reflection` but producers also write `pushback`, `decision`, `confirmation` — ~8 signal traces per batch currently dropped (same producer-consumer drift class as the main bug)
-2. **4,036 orphan `tool_call` traces from an unknown producer** — no current hook writes `type: 'tool_call'`. Possibly legacy format, possibly a phantom producer. Note: these traces DO pass the `hasLearningSignal` pre-filter because their `content` is formatted `"Tool: Edit"` which matches the `['write','edit','notebookedit']` allowlist, so they're not dead data — they're the dominant signal source by volume (738 of 738 signal traces in the backlog).
-3. **Classifier batching scales poorly.** `classifyTraces` makes ONE Haiku call with ALL filtered traces stuffed into the user message. Measured against real backlog: 738 traces = 206,774 tokens, exceeds Haiku's 200K context. Even at context limit, `max_tokens: 2048` caps output at ~30 classifications per call (measured: 10 traces produced 653 output tokens). Needs chunking.
-4. **`PLUGIN_ROOT` fallback at `guya-session-end.mjs:30` is wrong.** Falls back to `dirname(import.meta.url)` which resolves to `hooks/` dir, not the plugin root. `readAgentPrompt` then looks for `hooks/agents/*.md` which doesn't exist. Latent in prod because Claude Code sets `CLAUDE_PLUGIN_ROOT` env var, but breaks every manual invocation and any testing that bypasses the plugin runtime.
-5. **`~/.claude/guya/.env` had a corrupted ANTHROPIC_API_KEY** — tailing Unicode `≈` (U+2248) character caused 401 auth errors on every session-end classification/synthesis call. Daniel replaced with clean key at `Desktop/guya/.env`. Home-directory copy may still be corrupted — needs manual fix by Daniel.
+**Backlog burndown status**: Fix is live in source and synced to plugin cache. NEXT SessionEnd hook invocation will be the first real-world run of the chunking code against the actual backlog. If nothing changed on disk between now and then, it should burn down ~728 more classifications automatically. That's the real validation — e2e against a tmp copy proved the code, but the in-situ run proves the plugin wiring.
 
 ## Recent Changes
+- [2026-04-09] `b5b17dc` — chore: bump pre-commit review gate window from 10 to 30 minutes
+- [2026-04-09] `a78b8f5` — fix: chunk Haiku classification calls to unblock backlog burndown — plus cross-chunk id safety and PLUGIN_ROOT fallback
 - [2026-04-09] `2e362bf` — fix: repair evolution pipeline traceId/id contract — classifications now merge
 - [2026-04-09] `932595d` — refactor: remove decision-gate hook, keep harness marker for other hooks
 - [2026-04-08] `6e49e29` — fix: harden hooks — extract shared stdin util, fix evidence ordering, improve observability
