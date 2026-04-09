@@ -78,6 +78,21 @@ After I collect your answers, I'll:
 - **Plan**: `.guya/plans/refactor-{name}/` (6 files, lod-planner format)
 - **Task**: Created with plan path
 
+## Marker Management (MANDATORY — before Q1)
+
+Before asking Q1, create `.guya/decisions/` if it doesn't exist and write `.guya/decisions/.harness-active` containing:
+
+    {"type": "refactor", "started_at": "<current ISO8601 timestamp>"}
+
+This tells Guya's UserPromptSubmit hooks that the user is answering domain questions during a harness, not issuing work commands (decision-gate would otherwise block every work verb), not reloading project context (intent-detect would spam archival), and not giving behavioral corrections to Guya (correction-detect would save answers as fake guidelines).
+
+Remove the marker (`rm .guya/decisions/.harness-active`) when:
+- Plan generation completes successfully
+- The user aborts the harness
+- Any step fails irrecoverably
+
+The marker auto-expires after 2 hours as a crash-recovery safety net.
+
 ---
 
 # Let's Start

@@ -17,6 +17,7 @@ import { existsSync, appendFileSync, writeFileSync, mkdirSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
 import { randomUUID } from 'crypto';
+import { isHarnessActive } from './hook-utils.mjs';
 
 const GLOBAL_TRACES_DIR = join(homedir(), '.claude', 'guya', 'traces');
 
@@ -102,6 +103,14 @@ async function main() {
     const prompt = input.prompt || input.message || '';
     const sessionId = input.session_id || input.sessionId || '';
     const directory = input.cwd || input.directory || process.cwd();
+
+    // Decision harness in progress — user is answering domain questions,
+    // not giving behavior feedback to Guya. Suppress to prevent
+    // false-positive "corrections" from polluting the guideline corpus.
+    if (isHarnessActive(directory)) {
+      console.log(JSON.stringify({ continue: true, suppressOutput: true }));
+      return;
+    }
 
     const correctionType = detectCorrection(prompt);
 

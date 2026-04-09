@@ -560,6 +560,14 @@ async function main() {
     directory = input.cwd || input.directory || directory;
   } catch {}
 
+  // Safety net: remove stale harness marker so next session starts clean.
+  // The marker should already be gone if the harness completed or was
+  // aborted properly, but crashes or force-quits can leave it behind.
+  try {
+    const markerPath = join(directory, '.guya', 'decisions', '.harness-active');
+    if (existsSync(markerPath)) unlinkSync(markerPath);
+  } catch {}
+
   const apiKey = loadApiKey();
   if (!apiKey) {
     process.stderr.write('[guya-session-end] ANTHROPIC_API_KEY not set (checked env + ~/.claude/guya/.env), skipping evolution\n');

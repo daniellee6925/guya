@@ -15,6 +15,7 @@
 import { existsSync, readFileSync, readdirSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
+import { isHarnessActive } from './hook-utils.mjs';
 
 const GLOBAL_DIR = join(homedir(), '.claude', 'guya');
 
@@ -93,6 +94,14 @@ async function main() {
     const directory = input.cwd || input.directory || process.cwd();
 
     if (!prompt || prompt.length < 3) {
+      console.log(JSON.stringify({ continue: true, suppressOutput: true }));
+      return;
+    }
+
+    // Decision harness in progress — user is answering questions about
+    // the current project, so reloading archival on every answer is just
+    // token waste (SessionStart already loaded the relevant archival).
+    if (isHarnessActive(directory)) {
       console.log(JSON.stringify({ continue: true, suppressOutput: true }));
       return;
     }
