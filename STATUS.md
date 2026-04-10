@@ -1,76 +1,32 @@
 # guya — Status
 
-> Last updated: 2026-04-10
+> Last updated: 2026-04-10 12:00 PT
 
 ## Current Focus
-**Review-evidence module refactor — bug #2 (contentHash dead/broken) and bug #3 (recordEvidence lost-update race) retired in a single extraction.** The pre-commit review gate's evidence handling was a thicket of accreted concerns in one file: dead content-hash code, a filename-only hash that would've been useless even if checked, and an unlocked read-modify-write on shared state. Rather than patch each in place, extracted everything to a typed `review-evidence.mjs` module with a pinned spec, atomic append, and content-identity fingerprinting via `git write-tree`.
+**Pre-commit gate TOCTOU hardening — 5 bugs fixed, all silently allowing commits to bypass the review gate.** Root trigger: Daniel noticed SDF commits going through without review. Investigation traced it to `isSmallChange` running `git diff --cached --numstat` inside a PreToolUse hook that fires *before* `git add` executes — so combined `git add && git commit` commands always returned 0 lines staged → gate skipped. Fixed in commit `4b83f53`. 175 tests passing.
 
-**What "reviewed" now means (spec pinned in code at top of module)**: a commit is reviewed iff (1) both `/karpathy-review` and `/review-followup` ran in the gate window, (2) followup is after initial, AND (3) the current staged tree SHA either exactly matches the tree SHA captured at the last followup OR differs by ≤ `smallChange.maxLines` (same threshold as `isSmallChange`, no new knob). Tree SHA comes from `git write-tree`, which is git's own canonical identity of the staged state — the exact thing `git commit` uses internally.
+**The 5 bugs and their fixes**:
+1. **TOCTOU in `isSmallChange`**: `git diff --cached --numstat` returned 0 when called before `git add`. Added TOCTOU guard: if numstat returns empty lines, return `false` (not small). Also changed signature to accept `nonExempt` directly (pre-filtered), and filter numstat by `nonExemptSet` so exempt files don't deflate the line count.
+2. **Ghost `<file>` in staged list**: `matchAll(/\bgit add (.+?)(...)/g)` scanned the entire bash command including the commit message body. A message containing "git add" was parsed as a path. Fixed by truncating the command at `git commit` before scanning.
+3. **Path normalization skew**: `./src/a.py` from `git add` args vs `src/a.py` from `git diff --name-only` — Set lookup always missed. Fixed in `parseAddArgs`: strip `./` prefix on every token.
+4. **`gateMaxAgeMinutes: 0` clamped silently**: `> 0` check turned `0` into the default 30 minutes, making "expire immediately" unrepresentable. Fixed: `>= 0`.
+5. **Multiple `git add` segments not captured**: `match` (first only) replaced with `matchAll` loop — all `git add` segments in a chained command are now captured.
 
-**Why this kills three bugs at once**:
-1. **Dead `contentHash`** → replaced with `validateForCommit` that actually compares the fingerprint at commit time.
-2. **Filename-only hash** → replaced with `git write-tree` (content-recursive, byte-perfect identity).
-3. **Lost-update race** → replaced with append-only JSONL + `appendFileSync` (POSIX `O_APPEND`, atomic writes for lines under the filesystem-block bound, tested via forked concurrent subprocesses).
+**Architecture of `getStagedFiles` after fix**:
+```js
+const cmd = rawCmd.split(/\bgit\s+commit\b/)[0];  // truncate at commit boundary
+for (const m of cmd.matchAll(/\bgit\s+add\s+(.+?)(?:\s*&&|\s*;|\s*\||\s*$)/g)) {
+  parseAddArgs(m[1]).forEach(f => staged.add(f));
+}
+```
 
-**Architecture**:
-- `review-evidence.mjs` (new, ~540 LOC) — schema, `readEvidence`/`appendStep`/`validateForCommit`/`deleteOldEvidenceFile`, DI seams for `now` and `gitCmd`, PIPE_BUF invariant assertion
-- `guya-pre-commit-review.mjs` (shrank from 421 → 388 LOC) — deleted `recordEvidence`, `checkEvidence`, dead `contentHash` code, `getStateDir`; now a thin orchestrator around the module
-- `guya-post-commit-scribe.mjs` (small change) — wipes `review-evidence.jsonl` (new) AND sweeps the legacy `review-evidence.json` file on HEAD advance
-- Filename changed: `review-evidence.json` → `review-evidence.jsonl`. Legacy file is deleted on sight by both the gate and the scribe. One authoritative file, no dual-state confusion.
+**Review cycle (karpathy → followup)**: Both passes ran clean — no new issues found. The gate correctly blocked my own combined `git add && git commit` attempt three times before I staged and committed separately, validating the fix works.
 
-**Review cycle found real bugs**:
-- **karpathy-review** (first pass): flagged magic-number drift — `DEFAULT_GATE_MAX_AGE_MINUTES` was private to the module but the hook re-hardcoded `30` in `formatReviewPrompt`. Exactly the class of bug I just shipped a fix for (the "10 minutes" stale message). Fixed: export the constant, single source of truth. Also flagged missing observability for corrupt jsonl lines — readEvidence collects errors but the caller never surfaced them. Fixed: main() logs corrupt-line warnings to stderr.
-- **review-followup** (second pass): flagged `gateMaxAgeMinutes: 0` silently clamped to 30 by `> 0` check (can't express "expire immediately" strict mode). Fixed: changed to `>= 0`. Also flagged PIPE_BUF invariant was implicit/untested. Fixed: added runtime assertion in `appendStep` + test pins. Added test for `findLast`-by-position semantics to lock in the file-order-vs-timestamp-order assumption against future refactors.
-- **Codex independent review** (third pass): caught a **contract drift I introduced an hour earlier** — `validateForCommit` now accepts `>= 0` but the hook's `normalizeConfig` still clamped to `> 0`, so the new behavior was unreachable through the real hook path. Fixed. Also flagged two pre-existing issues deferred to separate TODOs (see below).
-
-**Tests: 160/160 green** (up from 86 at session start): 50 review-evidence unit tests including concurrent-append race, 16 pre-commit-review E2E tests (spawn real hook subprocess + real git fixtures), 2 new scribe integration tests, 6 added during the review cycle. Manual 8-step walkthrough in a scratch repo confirmed every failure mode behaves as specified. Plugin cache synced.
-
-**The meta-lesson**: three sequential review passes (karpathy → followup → codex) each caught things the previous missed, and Codex caught something the self-reviews couldn't — a drift I introduced DURING the review cycle itself. Self-review blindness is real even when you're specifically looking for a bug class. The review discipline is load-bearing.
-
-## This Session — What Changed and Why
-
-**Started as**: Next HIGH TODO after classifier batching. Three candidates — cache drift (still design-decision, not execution-ready), pre-filter allowlist drift (scoped, same class of bug as the traceId/id contract we just fixed), orphan `tool_call` traces (investigation, not fix). Chose allowlist drift: scoped, high-leverage (silently dropping ~8 traces per batch), and fixing it retires a whole class of bug.
-
-**Root cause**: `guya-session-end.mjs` `hasLearningSignal` hardcoded `['correction','preference','reflection']` as the always-classify set. `guya-correction-detect.mjs` PATTERNS emits 5 feedback types: `correction`, `confirmation`, `preference`, `decision`, `pushback`. Three types (`confirmation`, `decision`, `pushback`) silently fell through to `return false`. Same producer-consumer schema drift class as this morning's `traceId`/`id` contract bug — which is exactly why the right fix is structural, not an allowlist expansion.
-
-**Fix strategy — centralize over patch**: Decided against the simpler allowlist expansion because it just resets the drift timer. Instead:
-1. Single source of truth: `FEEDBACK_TRACE_TYPES` (frozen array) + `FEEDBACK_TRACE_TYPE_SET` in `hook-utils.mjs`.
-2. Producer-side runtime guard: correction-detect throws at module load if PATTERNS emits an unregistered type. Primary defense — fails fast, never reaches production silently.
-3. Consumer-side import: `hasLearningSignal` moved to `hook-utils.mjs` (no longer in session-end.mjs) and uses the Set. Pure function, no Anthropic SDK dependency in the test path — Codex's MED #3 fix.
-4. Contract test (`trace-schema.test.mjs`): 12 tests. Static PATTERNS → schema, schema → PATTERNS reverse (dead enum entries), `hasLearningSignal` acceptance sweep, `detectCorrection` emit sweep (crucial — this covers escape-hatch paths like `INSTEAD_OF_PATTERN` that bypass PATTERNS entirely), null-guard boundary, behavior preservation for non-feedback paths.
-
-**Review cycle — this is where the real learning happened**:
-
-- `/cr` (Claude + Karpathy + Codex synthesis):
-  - **Karpathy** flagged 4 items, I **disagreed with 3** as scope creep (pre-existing duplicate code in readStdin, pre-existing hasLearningSignal scope conflation, isMain gate duplication). Agreed with 0. The one I agreed on (removing unused `detectCorrection` export) I later reverted because Codex caught why it was needed.
-  - **Codex** caught 2 HIGH bugs I missed plus 1 MED I agreed with:
-    - **HIGH #1 (INSTEAD_OF escape hatch)**: `detectCorrection` has a return path (`INSTEAD_OF_PATTERN` on line 50) that emits `'correction'` outside the PATTERNS loop. My contract test only scanned PATTERNS, so a future escape-hatch with a new type would evade it. Same bug-class I was trying to prevent, reappearing in the prevention code itself. **Fix**: hoisted `INSTEAD_OF_TYPE` const, added it to the runtime guard, and added a `detectCorrection` emit-sweep test that probes every known emit path and asserts all outputs are in the set.
-    - **HIGH #2 (runtime enforcement)**: Test-time drift detection is weaker than runtime drift detection. Someone editing a hook without running tests would silently ship broken code. **Fix**: added module-load assertion in correction-detect — throws immediately on drift, making the test a secondary safety net rather than the primary defense.
-    - **MED #3 (test coupling)**: Contract test imported `hasLearningSignal` from session-end.mjs, which dragged in the entire Anthropic SDK as a transitive dep just to test a pure function. **Fix**: moved `hasLearningSignal` to `hook-utils.mjs` (where it always belonged — it's a pure function with no session-end dependencies).
-
-- `/review-followup` (deeper categorical review):
-  - Found 2 LOW items worth fixing:
-    - PATTERNS was exported mutable (asymmetry with the frozen FEEDBACK_TRACE_TYPES on the other side of the contract). **Fix**: `Object.freeze(PATTERNS)`.
-    - `hasLearningSignal` didn't guard against null/undefined input — safe in current call sites (`preFilterTraces` only passes real traces) but since it's now shared code importable from new sites, widening the call surface widens the input risk surface. **Fix**: added `if (!trace || typeof trace !== 'object') return false;` + test case.
-
-**The key growth moment this session**: I presented my first pass to the user as "done" with confidence. Codex immediately found a HIGH bug (INSTEAD_OF escape hatch) in the exact code meant to prevent that bug class. Reminder that independent review catches what self-review misses — even when you're specifically hunting for a known pattern. Karpathy caught style issues but missed the semantic hole that Codex caught. Different reviewers catch different layers.
-
-**Tests**: 30/30 green (19 existing classify-traces/persist-classifications + 12 new trace-schema + 1 follow-up null-guard). `detectCorrection` sweep confirmed every pattern class (5 distinct types) is actually emitted by at least one probe. 
-**Files changed**:
-- `guya-plugin/hooks/hook-utils.mjs` — added `FEEDBACK_TRACE_TYPES`, `FEEDBACK_TRACE_TYPE_SET`, `hasLearningSignal` (moved from session-end.mjs)
-- `guya-plugin/hooks/guya-session-end.mjs` — deleted local `hasLearningSignal`, imported from hook-utils, removed from test exports
-- `guya-plugin/hooks/guya-correction-detect.mjs` — frozen PATTERNS, hoisted `INSTEAD_OF_TYPE`, runtime drift guard, `isMain` gate for test isolation, exports PATTERNS + detectCorrection
-- `guya-plugin/hooks/__tests__/trace-schema.test.mjs` — NEW, 12 tests
-- `STATUS.md` — session narrative, TODO cleanup
-- Plugin cache synced (hook-utils.mjs, guya-session-end.mjs, guya-correction-detect.mjs)
-
-**Known latent bugs**:
-1. 4,036 orphan `tool_call` traces from an unknown producer — investigate origin. MED.
-2. **NEWLY SPOTTED**: `hasLearningSignal` tool-name parser expects `content: "Tool: X"` format (e.g., `"Tool: Edit"`), but `trace-capture.mjs` writes `content: "Edit: foo.js"`. After `.replace('Tool: ', '')` the content is still `"edit: foo.js"` which doesn't exact-match `['write','edit','notebookedit']`. file_edit traces may fall through to `return false`. Needs trace-level verification before fixing. LOW.
-3. `~/.claude/guya/.env` ANTHROPIC_API_KEY may still be corrupted (U+2248 trailing byte). LOW — manual fix.
-4. Pre-existing: `guya-session-end.mjs` has its own `readStdinWithTimeout` duplicating `hook-utils.mjs:readStdin`. Same for `isMain` gate pattern in both session-end and correction-detect. Both valid DRY follow-ups, flagged by Karpathy, deferred as scope creep for this PR.
+**Tests**: 175/175 passing. Added 2 new E2E tests (multiple `git add` segments, commit message body ghosting) and 1 unit test (`./` normalization in `parseAddArgs`).
 
 ## Recent Changes
+- [2026-04-10] `4b83f53` — fix: harden pre-commit gate against TOCTOU, ghost files, and path skew
+- [2026-04-10] `4c771a1` — fix: shell-aware tokenizer for getStagedFiles quoted-path bypass
 - [2026-04-10] `2f22658` — fix: resolve hooks cwd to git repo root, prevent phantom state dirs
 - [2026-04-10] `40750fa` — fix: auto-sync plugin cache on commit via post-commit hook
 - [2026-04-09] `5cce60f` — refactor: extract review-evidence module with content-identity fingerprint

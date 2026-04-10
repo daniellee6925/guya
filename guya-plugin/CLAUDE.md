@@ -12,10 +12,17 @@ Your context is assembled at session start by the `guya-session-start.mjs` hook 
 
 Spawnable via the `Agent` tool with `subagent_type="guya:agent-name"`:
 
+### Evolution Pipeline
 - `guya:guya-observer` (haiku) — Classify traces: tactical/strategic, confidence, domain
 - `guya:guya-synthesizer` (sonnet) — Generate guidelines from classified traces
 - `guya:guya-reflector` (sonnet) — Post-session reflection: what worked, what to change
 - `guya:guya-consolidator` (opus) — Merge, prune, re-rank guidelines
+
+### Workflow Agents
+- `guya:guya-tester` (sonnet) — Generate tests and regression coverage. Wired to: `guya-decision-feature`, `guya-decision-bugfix`
+- `guya:guya-document` (haiku) — Generate documentation from code without touching source logic. Wired to: `guya-cr`, `guya-karpathy-review`
+- `guya:guya-debugger` (sonnet) — Root-cause analysis with competing hypotheses and evidence. Wired to: `guya-decision-bugfix`
+- `guya:guya-refactor` (sonnet) — Safe scoped refactors with behavior preservation and change log. Wired to: `guya-decision-refactor`
 
 ## MCP Tools
 

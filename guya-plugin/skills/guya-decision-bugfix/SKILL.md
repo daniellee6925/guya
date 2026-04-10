@@ -69,6 +69,12 @@ After I collect your answers, I'll:
 - **Plan**: `.guya/plans/bugfix-{name}/` (6 files, lod-planner format)
 - **Task**: Created with plan path
 
+## Agent Integration
+
+- If root cause is unclear after Q6, spawn `guya:guya-debugger` before plan generation — it produces a diagnosis with competing hypotheses and blast radius
+- After plan generation, offer to spawn `guya:guya-tester` to scaffold a regression test that locks in the fix
+- After plan generation, prompt: "Run `/scribe arch: [decision summary]` to record this in ARCHITECTURE.md"
+
 ## Marker Management (MANDATORY — before Q1)
 
 Before asking Q1, create `.guya/decisions/` if it doesn't exist and write `.guya/decisions/.harness-active` containing:

@@ -84,6 +84,11 @@ You'll get:
   - `notes.md` — living log
 - **Task**: Created with plan path so you have one clear work item
 
+## Agent Integration
+
+- After plan generation, offer to spawn `guya:guya-tester` to scaffold the test structure for the feature (maps to Q10 answers)
+- After plan generation, prompt: "Run `/scribe arch` to record the architectural decisions from this session in ARCHITECTURE.md"
+
 ## Marker Management (MANDATORY — before Q1)
 
 Before asking Q1, create `.guya/decisions/` if it doesn't exist and write `.guya/decisions/.harness-active` containing:

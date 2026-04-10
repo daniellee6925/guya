@@ -1,7 +1,0 @@
-{
-  "tool_name": "Bash",
-  "tool_input_preview": "{\"command\":\"cd /Users/daniel/.claude/plugins/cache/guya/guya/0.1.0 && echo '{}' | node tools/server.js 2>&1\",\"description\":\"Test MCP server from installed location\"}",
-  "error": "Exit code 1\nfile:///Users/daniel/.claude/plugins/cache/guya/guya/0.1.0/node_modules/@modelcontextprotocol/sdk/dist/esm/server/mcp.js:688\n                    throw new Error(`Tool ${name} expected a Zod schema or ToolAnnotations, but received an unrecognized object`);\n                          ^\n\nError: Tool evolve_consolidate expected a Zod schema or ToolAnnotations, but received an unrecognized object\n    at McpServer.tool (file:///Users/daniel/.claude/plugins/cache/guya/guya/0.1.0/node_modules...",
-  "timestamp": "2026-03-31T21:05:22.165Z",
-  "retry_count": 1
-}

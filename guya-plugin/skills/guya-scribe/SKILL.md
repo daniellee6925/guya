@@ -1,37 +1,25 @@
 ---
 name: guya-scribe
-description: Update or create STATUS.md with current project state. Use when asked "scribe", "update status", "document progress", or to add TODOs.
-argument-hint: "[todo: description] or [note: description] or empty for full update"
+description: Update STATUS.md, ARCHITECTURE.md, and relevant CLAUDE.md files with current project state. Use whenever asked "scribe", "update status", "update docs", "update architecture", "add todo", or "record this decision". Trigger proactively after significant work sessions — if the project state has changed and isn't recorded, use this skill.
+argument-hint: "[todo: description] | [note: description] | [arch: decision description]"
 ---
 
-# Scribe — Project Status Tracker
+# Scribe — Project State Orchestrator
 
-Keep STATUS.md current with progress, changes, and TODOs. Works on any project.
+Keep STATUS.md, ARCHITECTURE.md, and per-module CLAUDE.md files current so any session can pick up without ramp-up. Works in any git repo.
 
-## When This Triggers
+## Full Update — `/scribe` or no args
 
-- User says "scribe", "update status", "document this", "add todo"
-- User wants to record a decision, TODO, or progress checkpoint
+One command updates all three docs. Run the three tracks below — STATUS.md inline, the other two via agents in parallel.
 
-## Modes
+### Track 1: STATUS.md (inline — no agent)
 
-### Full Update (no args or `/scribe`)
+Git log and git status are the source of truth. Don't interpret — record.
 
-1. Read `STATUS.md` in the project root (if it exists)
-2. Read recent git log (`git log --oneline -20`)
-3. Check uncommitted changes (`git status --short`)
-4. Check for TODO/FIXME comments in recently changed files
-5. Rewrite STATUS.md with the structure below, preserving any existing TODOs that aren't done
-
-### Add TODO (`/scribe todo: description`)
-
-Append to the TODO section of STATUS.md. Create the file if it doesn't exist.
-
-### Add Note (`/scribe note: description`)
-
-Append a timestamped note to the Decisions/Notes section.
-
-## STATUS.md Structure
+1. Read `STATUS.md` if it exists
+2. Run `git log --oneline -20` and `git status --short`
+3. Grep for TODO/FIXME in recently changed files
+4. Rewrite STATUS.md — preserve all unchecked TODOs and all Decisions & Notes entries
 
 ```markdown
 # [Project Name] — Status
@@ -39,32 +27,83 @@ Append a timestamped note to the Decisions/Notes section.
 > Last updated: YYYY-MM-DD HH:MM PT
 
 ## Current Focus
-One sentence: what's actively being worked on right now.
+One sentence: what is actively being worked on right now.
 
 ## Recent Changes
 - [YYYY-MM-DD] `abc1234` — commit message
-- [YYYY-MM-DD] `def5678` — commit message
-(Last 10 commits, newest first. Remove entries older than 7 days on full update.)
+(Last 10 commits, newest first. Drop entries older than 7 days.)
 
 ## In Progress
 - [ ] thing currently being worked on
-- [ ] another thing in flight
 
 ## TODO
-- [ ] future task 1
-- [ ] future task 2
-(Preserve existing unchecked items. Mark completed items with [x] but remove after 3 days.)
+- [ ] future task
+(Preserve all unchecked items. Mark done [x] but remove after 3 days.)
 
 ## Decisions & Notes
 - [YYYY-MM-DD] decided X because Y
-- [YYYY-MM-DD] note about something
-(Append-only. Don't remove unless user asks.)
+(Append-only. Never remove unless user asks.)
 ```
+
+---
+
+### Track 2: ARCHITECTURE.md (spawn guya-document agent)
+
+Spawn `guya:guya-document` with this task:
+
+> Read ARCHITECTURE.md if it exists. Read the most recent decision doc in `.guya/decisions/` if present. Read `git log --oneline -10`. Update the Current Architecture and Target Architecture sections to reflect the current state. Do not touch the Decision Log — that is append-only and managed separately. Write the result back to ARCHITECTURE.md.
+
+After the agent completes, append any new architectural decisions from the session to the Decision Log mechanically (date + one-line summary).
+
+```markdown
+# [Project Name] — Architecture
+
+> Last updated: YYYY-MM-DD HH:MM PT
+
+## Current Architecture
+What exists now: modules, data flow, key boundaries, major components.
+Write as a snapshot — what a new engineer needs to understand the system.
+
+## Target Architecture
+Where the system is heading: decisions made but not yet implemented.
+Distinguish clearly from Current — this is intent, not reality.
+
+## Decision Log
+- [YYYY-MM-DD] decided X because Y
+(Append-only. Never edit or remove past entries.)
+```
+
+---
+
+### Track 3: CLAUDE.md per changed directory (spawn guya-document agent)
+
+Only update CLAUDE.md for directories where module *responsibilities* changed — new modules, refactors, API surface changes. Skip directories where only bug fixes or minor edits occurred, because those don't change what the module does.
+
+To determine scope: read the git log and diff summaries. If commits suggest structural change (new file, module split, interface change, new export), include that directory.
+
+For each in-scope directory, spawn `guya:guya-document` with this task:
+
+> Read the existing CLAUDE.md in [directory] if it exists. Read the source files in this directory to understand what the module does now, its public interface, and its role in the larger system. Update CLAUDE.md to reflect the current state — purpose, key behaviors, calling specs, constraints. Preserve any sections the user manually wrote unless they're factually outdated.
+
+---
+
+## Targeted Modes
+
+### Add TODO — `/scribe todo: description`
+Append to the TODO section of STATUS.md only. Create the file if it doesn't exist.
+
+### Add Note — `/scribe note: description`
+Append a timestamped note to Decisions & Notes in STATUS.md only.
+
+### Append Architecture Decision — `/scribe arch: decision description`
+Append a single dated entry to the Decision Log in ARCHITECTURE.md only. Create the file if needed.
+
+---
 
 ## Rules
 
-- **Don't invent TODOs.** Only add what the user explicitly asks for or what's in the existing file.
-- **Don't editorialize.** "Recent Changes" is commit messages, not your interpretation.
-- **Preserve user entries.** If the user manually wrote something in STATUS.md, keep it.
-- **Be fast.** Full update should take one read + one write. No LLM calls needed for the hook-generated entries.
-- **Project-agnostic.** Works in any git repo. Infer project name from the directory name or package.json/pyproject.toml.
+- **Don't invent content.** Record what exists — git log, decision docs, actual code. Never fabricate TODOs, decisions, or architectural claims.
+- **Decision Log is append-only.** Past entries are historical record. Never edit or remove them.
+- **Preserve user entries.** If the user manually wrote something in any of these files, keep it unless it's factually outdated.
+- **CLAUDE.md scope is earned.** Only update a directory's CLAUDE.md if the module's responsibilities actually changed — don't touch it for minor edits.
+- **Project-agnostic.** Infer project name from directory name or package.json/pyproject.toml.

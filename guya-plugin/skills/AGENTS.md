@@ -3,7 +3,7 @@
 
 # skills
 
-11 skills for personal evolution, memory management, and decision-making harnesses.
+15 skills for personal evolution, memory management, decision-making harnesses, and code quality.
 
 ## Purpose
 
@@ -34,3 +34,13 @@ Staff-engineer-level decision harnesses for major decisions:
 | `guya-decision-bugfix/SKILL.md` | guya-decision-bugfix | Staff-engineer-level decision harness for bug fixes |
 | `guya-decision-kickoff/SKILL.md` | guya-decision-kickoff | Staff-engineer-level decision harness for project kickoffs |
 | `guya-decision-refactor/SKILL.md` | guya-decision-refactor | Staff-engineer-level decision harness for refactors |
+
+## Code Review Skills
+
+| File | Skill | Purpose |
+|-----------|-------|---------|
+| `guya-karpathy-review/SKILL.md` | guya-karpathy-review | Review code using Karpathy guidelines + silent errors, scalability, security, race conditions |
+| `guya-review-followup/SKILL.md` | guya-review-followup | Deep follow-up review: logic correctness, state management, data integrity, observability |
+| `guya-cr/SKILL.md` | guya-cr | Comprehensive review combining Claude + Karpathy guidelines + Codex independent pass |
+| `guya-optimize/SKILL.md` | guya-optimize | Find simplification and optimization opportunities — report only, no fixes |
+| `guya-learn/SKILL.md` | guya-learn | Interactive learning session from first principles with active recall and progress tracking |

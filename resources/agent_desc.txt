@@ -1,0 +1,25 @@
+@docs-agent
+One of your early agents should write documentation. It reads your code and generates API docs, function references, and tutorials. Give it commands like npm run docs:build and markdownlint docs/ so it can validate its own work. Tell it to write to docs/ and never touch src/. 
+
+What it does: Turns code comments and function signatures into Markdown documentation  
+Example commands: npm run docs:build, markdownlint docs/
+Example boundaries: Write to docs/, never modify source code
+@test-agent
+This one writes tests. Point it at your test framework (Jest, PyTest, Playwright) and give it the command to run tests. The boundary here is critical: it can write to tests but should never remove a test because it is failing and cannot be fixed by the agent. 
+
+What it does: Writes unit tests, integration tests, and edge case coverage  
+Example commands: npm test, pytest -v, cargo test --coverage  
+Example boundaries: Write to tests/, never remove failing tests unless authorized by user
+@lint-agent
+A fairly safe agent to create early on. It fixes code style and formatting but shouldn’t change logic. Give it commands that let it auto-fix style issues. This one’s low-risk because linters are designed to be safe.
+
+What it does: Formats code, fixes import order, enforces naming conventions  
+Example commands: npm run lint --fix, prettier --write
+Example boundaries: Only fix style, never change code logic
+
+@dev-deploy-agent
+Handles builds and deployments to your local dev environment. Keep it locked down: only deploy to dev environments and require explicit approval. Give it build commands and deployment tools but make the boundaries very clear.
+
+What it does: Runs local or dev builds, creates Docker images  
+Example commands: npm run test
+Example boundaries: Only deploy to dev, require user approval for anything with risk

@@ -78,6 +78,11 @@ After I collect your answers, I'll:
 - **Plan**: `.guya/plans/refactor-{name}/` (6 files, lod-planner format)
 - **Task**: Created with plan path
 
+## Agent Integration
+
+- After plan approval, offer to spawn `guya:guya-refactor` to execute the refactor incrementally with behavior preservation and a change log
+- After plan generation, prompt: "Run `/scribe arch` to record the target architectural state and rationale in ARCHITECTURE.md"
+
 ## Marker Management (MANDATORY — before Q1)
 
 Before asking Q1, create `.guya/decisions/` if it doesn't exist and write `.guya/decisions/.harness-active` containing:

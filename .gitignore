@@ -1,0 +1,25 @@
+# Secrets
+.env
+.env.*
+
+# Node
+node_modules/
+**/node_modules/
+
+# OMC runtime state (ephemeral — not meaningful across sessions)
+.omc/sessions/
+.omc/state/
+guya-plugin/.omc/
+guya-plugin/hooks/.omc/
+guya-plugin/skills/.omc/
+
+# Agent replay logs (ephemeral)
+**/.omc/state/*.jsonl
+
+# State markers
+.orphaned_at
+**/.orphaned_at
+
+# OS
+.DS_Store
+**/.DS_Store
