@@ -67,9 +67,12 @@ After I collect your answers, I'll:
 - Synthesize what we learned
 - Call out gaps or risks that stood out
 - Challenge weak reasoning ("Why is that the right constraint?")
-- Ask for confirmation before generating the plan
 
-Only after alignment do we move to plan generation.
+**Before generating the plan**, read:
+1. `ARCHITECTURE.md` — check the proposed feature direction against existing architectural decisions and the Decision Log. Flag if this contradicts or duplicates a prior ADR.
+2. `CLAUDE.md` — check against LOD rules, file size constraints, module responsibilities, and project guidelines. Flag violations before proceeding.
+
+Surface any conflicts in the alignment confirmation: "Here's where this plan bumps against existing architecture or constraints — do you want to proceed or adjust?" Only generate the plan after alignment is confirmed.
 
 ## Output
 
@@ -87,7 +90,15 @@ You'll get:
 ## Agent Integration
 
 - After plan generation, offer to spawn `guya:guya-tester` to scaffold the test structure for the feature (maps to Q10 answers)
-- After plan generation, prompt: "Run `/scribe arch` to record the architectural decisions from this session in ARCHITECTURE.md"
+- After plan generation, offer to spawn `guya:guya-document` to generate documentation for new modules or changed interfaces
+- After plan generation, prompt: "Run `/guya:guya-scribe arch: [decision summary]` to record the architectural decisions from this session in ARCHITECTURE.md"
+
+## Post-Implementation Workflow
+
+After implementation is complete:
+1. **Commit** — pre-commit hook runs `guya-review` automatically. Fix any issues it surfaces, then re-commit.
+2. **Complex changes** — run `/guya:guya-deep-review` manually before committing to get ahead of issues rather than reacting to them.
+3. **Before PR** — run `/guya:guya-pr` to get a Codex fresh-eyes pass and a clean PR description.
 
 ## Marker Management (MANDATORY — before Q1)
 

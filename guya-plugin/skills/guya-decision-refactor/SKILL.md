@@ -72,6 +72,12 @@ After I collect your answers, I'll:
 - Confirm scope boundaries
 - Align on disruption tolerance
 
+**Before generating the plan**, read:
+1. `ARCHITECTURE.md` — check the proposed target state against existing architectural decisions and the Decision Log. Flag if the refactor contradicts a prior ADR or the stated target architecture.
+2. `CLAUDE.md` — check against LOD rules, file size limits, module responsibilities, and project constraints. The refactor should move the codebase *toward* compliance, not away from it.
+
+Surface any conflicts in the alignment confirmation: "Here's where this plan bumps against existing architecture or constraints — do you want to proceed or adjust?" Only generate the plan after alignment is confirmed.
+
 ## Output
 
 - **Decision doc**: `.guya/decisions/refactor-{YYYYMMDD-HHMM}.md`
@@ -81,7 +87,14 @@ After I collect your answers, I'll:
 ## Agent Integration
 
 - After plan approval, offer to spawn `guya:guya-refactor` to execute the refactor incrementally with behavior preservation and a change log
-- After plan generation, prompt: "Run `/scribe arch` to record the target architectural state and rationale in ARCHITECTURE.md"
+- After plan generation, prompt: "Run `/guya:guya-scribe arch: [decision summary]` to record the target architectural state and rationale in ARCHITECTURE.md"
+
+## Post-Implementation Workflow
+
+After implementation is complete:
+1. **Commit** — pre-commit hook runs `guya-review` automatically. Fix any issues it surfaces, then re-commit.
+2. **Complex changes** — run `/guya:guya-deep-review` manually before committing to get ahead of issues rather than reacting to them.
+3. **Before PR** — run `/guya:guya-pr` to get a Codex fresh-eyes pass and a clean PR description.
 
 ## Marker Management (MANDATORY — before Q1)
 

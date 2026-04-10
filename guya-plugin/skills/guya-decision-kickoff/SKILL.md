@@ -89,7 +89,12 @@ After I collect your answers, I'll:
 - Test the file tree against LOD rules
 - Walk through the pattern applicability
 - Calibrate the first slice
-- Confirm alignment before generating Phase 0 + full plan
+
+**Before generating the plan**, read:
+1. `ARCHITECTURE.md` — if this project extends an existing system, check the proposed architecture against existing decisions and the Decision Log. Flag conflicts with prior ADRs.
+2. `CLAUDE.md` — check the proposed stack and file structure against LOD rules, module responsibility constraints, and project guidelines. A new project should start compliant.
+
+Surface any conflicts in the alignment confirmation: "Here's where this plan bumps against existing architecture or constraints — do you want to proceed or adjust?" Only generate the plan after alignment is confirmed.
 
 ## Output
 
@@ -104,6 +109,19 @@ After I collect your answers, I'll:
 - **Task**: Created with plan path
 
 This is the most detailed output of all harnesses because new projects have the longest runway.
+
+## Agent Integration
+
+- After plan generation, offer to spawn `guya:guya-tester` to scaffold the test structure (maps to Q10 answers)
+- After plan generation, offer to spawn `guya:guya-document` to generate documentation for new modules and entry points
+- After plan generation, prompt: "Run `/guya:guya-scribe arch: [decision summary]` to record the Phase 0 architecture and key decisions in ARCHITECTURE.md"
+
+## Post-Implementation Workflow
+
+After implementation is complete:
+1. **Commit** — pre-commit hook runs `guya-review` automatically. Fix any issues it surfaces, then re-commit.
+2. **Complex changes** — run `/guya:guya-deep-review` manually before committing to get ahead of issues rather than reacting to them.
+3. **Before PR** — run `/guya:guya-pr` to get a Codex fresh-eyes pass and a clean PR description.
 
 ## Marker Management (MANDATORY — before Q1)
 
