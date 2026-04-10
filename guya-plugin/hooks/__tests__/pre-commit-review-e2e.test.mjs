@@ -398,3 +398,45 @@ describe('pre-commit-review e2e: corrupt evidence lines are reported to stderr',
     assert.ok(decision.continue);
   });
 });
+
+// ---------------------------------------------------------------------------
+// TOCTOU: combined git add && git commit arg parsing
+// ---------------------------------------------------------------------------
+
+describe('pre-commit-review e2e: combined git add && git commit command parsing', () => {
+  let dir;
+  beforeEach(() => { dir = initFixtureRepo(); });
+  afterEach(() => { try { rmSync(dir, { recursive: true, force: true }); } catch {} });
+
+  it('captures files from multiple git add segments in one command', () => {
+    // Nothing is staged — TOCTOU simulation: hook fires before git add runs.
+    // Both files must be detected from the command's git add arg strings.
+    const r = runHook(dir, {
+      tool_name: 'Bash',
+      tool_input: { command: 'git add src/a.py && git add src/b.py && git commit -m "feat: add two modules"' },
+    });
+    const decision = parseDecision(r.stdout);
+    // Both .py files are non-exempt — gate must block and name both files
+    assert.equal(decision.decision, 'block', `expected block, got: ${r.stdout}`);
+    assert.match(decision.reason, /src\/a\.py/);
+    assert.match(decision.reason, /src\/b\.py/);
+  });
+
+  it('ignores git add mentions inside the commit message body', () => {
+    // Stage a real file via git — it's already staged when the hook fires
+    writeFileSync(join(dir, 'feature.py'), 'def f():\n'.repeat(20));
+    execSync('git add feature.py', { cwd: dir });
+
+    // Commit message body contains "git add" — must not produce ghost staged files
+    const r = runHook(dir, {
+      tool_name: 'Bash',
+      tool_input: { command: 'git add feature.py && git commit -m "refactor: replace git add calls with matchAll"' },
+    });
+    const decision = parseDecision(r.stdout);
+    assert.equal(decision.decision, 'block', `expected block, got: ${r.stdout}`);
+    // Only feature.py should appear — tokens from the message must not leak
+    assert.match(decision.reason, /feature\.py/);
+    assert.doesNotMatch(decision.reason, /matchAll/);
+    assert.doesNotMatch(decision.reason, /calls/);
+  });
+});

@@ -191,6 +191,24 @@ function recordReviewStep(directory, step) {
 // isGitCommit lives in hook-utils.mjs — shared with post-commit-scribe to
 // prevent drift and to fix the substring-match-in-echo-payloads bug.
 
+// Shell-aware tokenizer for git add argument strings. Handles double-quoted,
+// single-quoted, and unquoted paths. Exported for unit testing.
+// Input: raw arg string after `git add` (e.g. '"file with spaces.js" normal.js')
+// Output: array of filename strings with flags filtered out
+function parseAddArgs(argStr) {
+  const tokens = [];
+  const re = /"([^"]+)"|'([^']+)'|(\S+)/g;
+  let m;
+  while ((m = re.exec(argStr)) !== null) {
+    const token = (m[1] ?? m[2] ?? m[3]).trim();
+    // Normalize `./relative` → `relative` so paths match git's output format
+    // (git diff --name-only never emits a ./ prefix; typed args might).
+    const normalized = token.replace(/^\.\//, '');
+    if (!normalized.startsWith('-') && normalized.length > 0) tokens.push(normalized);
+  }
+  return tokens;
+}
+
 function hasNoVerify(toolInput) {
   const cmd = typeof toolInput === 'string' ? toolInput : (toolInput?.command || '');
   return /--no-verify/.test(cmd);
@@ -208,11 +226,16 @@ function getStagedFiles(directory, toolInput) {
     process.stderr.write('[guya-gate] git diff --cached failed, staged set may be incomplete\n');
   }
 
-  // Also parse git add files from combined commands (TOCTOU mitigation)
-  const cmd = typeof toolInput === 'string' ? toolInput : (toolInput?.command || '');
-  const addMatch = cmd.match(/\bgit\s+add\s+(.+?)(?:\s*&&|\s*;|\s*\||\s*$)/);
-  if (addMatch) {
-    parseAddArgs(addMatch[1]).forEach(f => staged.add(f));
+  // Also parse git add files from combined commands (TOCTOU mitigation).
+  // Use matchAll to capture every `git add` segment — a single command can
+  // have multiple: `git add a.py && git add b.py && git commit`.
+  // Truncate at `git commit` first: anything after it is a commit message
+  // argument, not shell commands. Without this, "git add" mentions inside
+  // a heredoc message body are parsed as file paths (ghost staged files).
+  const rawCmd = typeof toolInput === 'string' ? toolInput : (toolInput?.command || '');
+  const cmd = rawCmd.split(/\bgit\s+commit\b/)[0];
+  for (const m of cmd.matchAll(/\bgit\s+add\s+(.+?)(?:\s*&&|\s*;|\s*\||\s*$)/g)) {
+    parseAddArgs(m[1]).forEach(f => staged.add(f));
   }
 
   return [...staged];
@@ -232,9 +255,10 @@ function isExempt(file, config) {
   return false;
 }
 
-function isSmallChange(stagedFiles, config, directory) {
-  const threshold = config.smallChange || { maxLines: 10 };
-  const nonExempt = stagedFiles.filter(f => !isExempt(f, config));
+function isSmallChange(nonExempt, config, directory) {
+  // Use nullish coalescing so `smallChange: {}` doesn't silently drop maxLines.
+  const maxLines = config.smallChange?.maxLines ?? 10;
+  const nonExemptSet = new Set(nonExempt);
 
   if (nonExempt.length === 0) return true;
 
@@ -242,16 +266,24 @@ function isSmallChange(stagedFiles, config, directory) {
     const numstat = execSync('git diff --cached --numstat', {
       cwd: directory, encoding: 'utf-8', timeout: 5000
     });
-    // Each line: "added\tremoved\tfile" — sum added + removed
+    // TOCTOU: combined `git add && git commit` fires the hook before anything
+    // is staged. numstat returns empty while getStagedFiles found files via the
+    // git-add arg parse. Can't verify size → require review (fail closed).
+    const numstatLines = numstat.trim().split('\n').filter(Boolean);
+    if (numstatLines.length === 0) return false;
+    // Each line: "added\tremoved\tfile" — sum added + removed for non-exempt
+    // files only. Exempt files (config/docs/etc.) can have large diffs without
+    // requiring review; counting them inflates the threshold unfairly.
     let totalLines = 0;
-    for (const line of numstat.trim().split('\n').filter(Boolean)) {
-      const [added, removed] = line.split('\t');
+    for (const line of numstatLines) {
+      const [added, removed, file] = line.split('\t');
+      if (file && !nonExemptSet.has(file)) continue;
       const a = parseInt(added, 10);
       const r = parseInt(removed, 10);
       if (!isNaN(a)) totalLines += a;
       if (!isNaN(r)) totalLines += r;
     }
-    return totalLines <= threshold.maxLines;
+    return totalLines <= maxLines;
   } catch {
     return false;
   }
@@ -266,9 +298,11 @@ function formatReviewPrompt(stagedFiles, config) {
   // Pull the default from the review-evidence module rather than
   // re-hardcoding 30 here. Single source of truth prevents the message
   // from going stale when the default changes (as it did in b5b17dc).
-  const maxAgeMinutes = Number(config?.gateMaxAgeMinutes) > 0
-    ? Number(config.gateMaxAgeMinutes)
-    : DEFAULT_GATE_MAX_AGE_MINUTES;
+  // Mirror normalizeConfig's condition exactly — `>= 0` not `> 0` so that
+  // gateMaxAgeMinutes=0 (legitimate "expire immediately" debug mode) shows
+  // the correct value instead of falling back to the default.
+  const n = Number(config?.gateMaxAgeMinutes);
+  const maxAgeMinutes = Number.isFinite(n) && n >= 0 ? n : DEFAULT_GATE_MAX_AGE_MINUTES;
   return `Review required for ${stagedFiles.length} non-exempt files. Follow this process:
 
 1. Run /karpathy-review on the staged files
@@ -290,6 +324,7 @@ async function main() {
   try {
     const stdinData = await readStdin(4000);
     try { input = JSON.parse(stdinData); } catch {
+      process.stderr.write('[guya-gate] Failed to parse stdin — failing open\n');
       return output({ continue: true, suppressOutput: true });
     }
 
@@ -350,7 +385,7 @@ async function main() {
     }
 
     // Check if small change
-    if (isSmallChange(stagedFiles, config, directory)) {
+    if (isSmallChange(nonExempt, config, directory)) {
       process.stderr.write(`[guya-gate] Small change (${nonExempt.length} files), skipping review\n`);
       return output({ continue: true, suppressOutput: true });
     }
@@ -386,7 +421,7 @@ async function main() {
     // Block with review instructions
     output({ decision: 'block', reason: `${evidence.reason}\n\n${formatReviewPrompt(nonExempt, config)}` });
   } catch (err) {
-    process.stderr.write(`[guya-gate] ERROR: ${err?.message || err}\n`);
+    process.stderr.write(`[guya-gate] ERROR: ${err?.message || err}\n${err?.stack || ''}\n`);
     output({ continue: true, suppressOutput: true });
   }
 }
@@ -401,21 +436,6 @@ const isMain = (() => {
 
 if (isMain) {
   main();
-}
-
-// Shell-aware tokenizer for git add argument strings. Handles double-quoted,
-// single-quoted, and unquoted paths. Exported for unit testing.
-// Input: raw arg string after `git add` (e.g. '"file with spaces.js" normal.js')
-// Output: array of filename strings with flags filtered out
-function parseAddArgs(argStr) {
-  const tokens = [];
-  const re = /"([^"]+)"|'([^']+)'|(\S+)/g;
-  let m;
-  while ((m = re.exec(argStr)) !== null) {
-    const token = (m[1] ?? m[2] ?? m[3]).trim();
-    if (!token.startsWith('-') && token.length > 0) tokens.push(token);
-  }
-  return tokens;
 }
 
 // Exports for testing — loadConfig is the primary unit under test;

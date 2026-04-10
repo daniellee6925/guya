@@ -50,4 +50,9 @@ describe('parseAddArgs: shell-aware tokenizer', () => {
   it('returns empty array for empty string', () => {
     assert.deepEqual(parseAddArgs(''), []);
   });
+
+  it('normalizes ./ prefix so paths match git diff --name-only output', () => {
+    const result = parseAddArgs('./src/a.py ./src/b.py');
+    assert.deepEqual(result, ['src/a.py', 'src/b.py']);
+  });
 });
