@@ -3,48 +3,19 @@
 > Last updated: 2026-04-10 12:00 PT
 
 ## Current Focus
-**Pre-commit gate TOCTOU hardening — 5 bugs fixed, all silently allowing commits to bypass the review gate.** Root trigger: Daniel noticed SDF commits going through without review. Investigation traced it to `isSmallChange` running `git diff --cached --numstat` inside a PreToolUse hook that fires *before* `git add` executes — so combined `git add && git commit` commands always returned 0 lines staged → gate skipped. Fixed in commit `4b83f53`. 175 tests passing.
-
-**The 5 bugs and their fixes**:
-1. **TOCTOU in `isSmallChange`**: `git diff --cached --numstat` returned 0 when called before `git add`. Added TOCTOU guard: if numstat returns empty lines, return `false` (not small). Also changed signature to accept `nonExempt` directly (pre-filtered), and filter numstat by `nonExemptSet` so exempt files don't deflate the line count.
-2. **Ghost `<file>` in staged list**: `matchAll(/\bgit add (.+?)(...)/g)` scanned the entire bash command including the commit message body. A message containing "git add" was parsed as a path. Fixed by truncating the command at `git commit` before scanning.
-3. **Path normalization skew**: `./src/a.py` from `git add` args vs `src/a.py` from `git diff --name-only` — Set lookup always missed. Fixed in `parseAddArgs`: strip `./` prefix on every token.
-4. **`gateMaxAgeMinutes: 0` clamped silently**: `> 0` check turned `0` into the default 30 minutes, making "expire immediately" unrepresentable. Fixed: `>= 0`.
-5. **Multiple `git add` segments not captured**: `match` (first only) replaced with `matchAll` loop — all `git add` segments in a chained command are now captured.
-
-**Architecture of `getStagedFiles` after fix**:
-```js
-const cmd = rawCmd.split(/\bgit\s+commit\b/)[0];  // truncate at commit boundary
-for (const m of cmd.matchAll(/\bgit\s+add\s+(.+?)(?:\s*&&|\s*;|\s*\||\s*$)/g)) {
-  parseAddArgs(m[1]).forEach(f => staged.add(f));
-}
-```
-
-**Review cycle (karpathy → followup)**: Both passes ran clean — no new issues found. The gate correctly blocked my own combined `git add && git commit` attempt three times before I staged and committed separately, validating the fix works.
-
-**Tests**: 175/175 passing. Added 2 new E2E tests (multiple `git add` segments, commit message body ghosting) and 1 unit test (`./` normalization in `parseAddArgs`).
+**Decision harness skill system update.** All 4 decision harnesses (bugfix, feature, refactor, kickoff) updated: now read ARCHITECTURE.md + CLAUDE.md before plan generation as a validation gate, post-implementation workflow added (pre-commit hook handles review, guya-deep-review for complex changes, guya-pr before PR), scribe command fixed to correct namespace, guya-document offer added to feature + kickoff. Also investigating post-commit-scribe hook timeout: STATUS.md missed 4 commits from today's skill rewrite session despite hook being wired correctly.
 
 ## Recent Changes
+- [2026-04-10] `0234387` — feat: update decision harnesses with architecture validation and post-impl workflow
+- [2026-04-10] `14bcbf8` — refactor: rewrite guya-learn, guya-optimize, guya-reflect, guya-evolve skills
+- [2026-04-10] `cfaa7bb` — refactor: rename and rewrite all three review skills
+- [2026-04-10] `49a5359` — feat: add 4 workflow agents, rewrite all agents, extend scribe, improve skills
 - [2026-04-10] `4b83f53` — fix: harden pre-commit gate against TOCTOU, ghost files, and path skew
 - [2026-04-10] `4c771a1` — fix: shell-aware tokenizer for getStagedFiles quoted-path bypass
 - [2026-04-10] `2f22658` — fix: resolve hooks cwd to git repo root, prevent phantom state dirs
 - [2026-04-10] `40750fa` — fix: auto-sync plugin cache on commit via post-commit hook
 - [2026-04-09] `5cce60f` — refactor: extract review-evidence module with content-identity fingerprint
 - [2026-04-09] `abaf6f0` — fix: drive scribe gate-reset from HEAD marker, harden isGitCommit
-- [2026-04-09] `e1e067d` — docs: update STATUS.md session narrative for classifier batching fix
-- [2026-04-09] `b5b17dc` — chore: bump pre-commit review gate window from 10 to 30 minutes
-- [2026-04-09] `a78b8f5` — fix: chunk Haiku classification calls to unblock backlog burndown — plus cross-chunk id safety and PLUGIN_ROOT fallback
-- [2026-04-09] `2e362bf` — fix: repair evolution pipeline traceId/id contract — classifications now merge
-- [2026-04-09] `932595d` — refactor: remove decision-gate hook, keep harness marker for other hooks
-- [2026-04-08] `6e49e29` — fix: harden hooks — extract shared stdin util, fix evidence ordering, improve observability
-- [2026-04-08] `32b424c` — fix: correct skills path in plugin.json to match omc convention
-- [2026-04-08] `a508ff8` — fix: register 4 decision harness skills in plugin marketplace discovery
-- [2026-04-08] `ec2169c` — feat: implement decision harness system with 4 interactive skills
-- [2026-04-08] `28c6181` — fix: tighten review gate — remove hooks/ exemption, lower small change to 10 lines
-- [2026-04-08] `ef1bc6f` — feat: implement two-layer commit validation with automatic evidence tracking
-- [2026-04-08] `be794f4` — feat: add Obsidian vault sync to session-end hook and new sync skill
-- [2026-04-08] `9ec809f` — feat: enforce two-pass review in pre-commit gate
-- [2026-04-08] `dad8416` — fix: require review report proof in pre-commit gate
 
 ## In Progress
 - [ ] Comprehensive logging system for guya plugin hooks — original ask from 2026-04-08 late night, never scoped, still outstanding
@@ -85,4 +56,7 @@ for (const m of cmd.matchAll(/\bgit\s+add\s+(.+?)(?:\s*&&|\s*;|\s*\||\s*$)/g)) {
 - [2026-04-08] Centralized all traces to ~/.claude/guya/traces/ — single source of truth across 9 projects (4,052 traces merged)
 - [2026-04-08] Pre-commit gate hardened: requires filesHash, timestamp, reviewIssues, fixesApplied, verifiedAt + review-report.json proof
 - [2026-04-08] Feedback detection expanded from 3→13 patterns: corrections, confirmations, pushback, preferences, decisions
+- [2026-04-10] Skill system refactor: renamed guya-karpathy-review → guya-review, guya-review-followup → guya-deep-review, guya-cr → guya-pr (redesigned for PR prep). Added 4 workflow agents (guya-tester, guya-document, guya-debugger, guya-refactor). Rewrote guya-learn, guya-optimize, guya-reflect, guya-evolve, guya-scribe with explicit steps and WHY framing.
+- [2026-04-10] Decision harnesses updated: all 4 now read ARCHITECTURE.md + CLAUDE.md before plan generation as a validation gate. Post-implementation workflow added (pre-commit hook is the evaluator, guya-deep-review for complex changes, guya-pr before PR). No standalone evaluator skill needed. Scribe command fixed from /scribe arch to /guya:guya-scribe arch:.
+- [2026-04-10] Post-commit-scribe missed 4 commits from today's skill session (49a5359–0234387). Marker stuck at 4b83f53. Root cause under investigation — likely 3s PostToolUse timeout being exceeded after pre-commit LLM gate runs. STATUS.md repaired manually, HEAD marker updated to 0234387.
 - [2026-04-08] MAX_FUNC_LINES bumped from 50→80 (50 was too aggressive for orchestrator functions)

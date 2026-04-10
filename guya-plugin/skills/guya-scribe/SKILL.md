@@ -49,9 +49,25 @@ One sentence: what is actively being worked on right now.
 
 ### Track 2: ARCHITECTURE.md (spawn guya-document agent)
 
-Spawn `guya:guya-document` with this task:
+If ARCHITECTURE.md does not exist, create it with this skeleton before spawning the agent:
 
-> Read ARCHITECTURE.md if it exists. Read the most recent decision doc in `.guya/decisions/` if present. Read `git log --oneline -10`. Update the Current Architecture and Target Architecture sections to reflect the current state. Do not touch the Decision Log — that is append-only and managed separately. Write the result back to ARCHITECTURE.md.
+```markdown
+# [Project Name] — Architecture
+
+> Last updated: YYYY-MM-DD HH:MM PT
+
+## Current Architecture
+(to be filled)
+
+## Target Architecture
+(to be filled)
+
+## Decision Log
+```
+
+Then spawn `guya:guya-document` with this task:
+
+> Read ARCHITECTURE.md. Read the most recent decision doc in `.guya/decisions/` if present. Read `git log --oneline -10` and the project's CLAUDE.md for architectural context. Write a snapshot of the Current Architecture (modules, data flow, key boundaries) and Target Architecture (decisions made but not yet implemented). Do not touch the Decision Log — that is append-only. Write the result back to ARCHITECTURE.md.
 
 After the agent completes, append any new architectural decisions from the session to the Decision Log mechanically (date + one-line summary).
 
@@ -81,9 +97,11 @@ Only update CLAUDE.md for directories where module *responsibilities* changed �
 
 To determine scope: read the git log and diff summaries. If commits suggest structural change (new file, module split, interface change, new export), include that directory.
 
+If CLAUDE.md does not exist in an in-scope directory, create it — do not skip. A missing CLAUDE.md in a structurally changed directory is a documentation gap, not a reason to skip.
+
 For each in-scope directory, spawn `guya:guya-document` with this task:
 
-> Read the existing CLAUDE.md in [directory] if it exists. Read the source files in this directory to understand what the module does now, its public interface, and its role in the larger system. Update CLAUDE.md to reflect the current state — purpose, key behaviors, calling specs, constraints. Preserve any sections the user manually wrote unless they're factually outdated.
+> Read the existing CLAUDE.md in [directory] if it exists (create from scratch if not). Read the source files in this directory to understand what the module does now, its public interface, and its role in the larger system. Write CLAUDE.md to reflect the current state — purpose, key behaviors, calling specs, constraints. If creating from scratch, include a header with the module name and one-line purpose. Preserve any sections the user manually wrote unless they're factually outdated.
 
 ---
 
