@@ -1,37 +1,45 @@
 ---
 name: guya-evolve
-description: Trigger manual guideline consolidation. Use when asked "evolve", "consolidate", or "clean up guidelines".
+description: Trigger manual guideline consolidation — merge duplicates, promote validated tactics to strategy, prune stale or low-confidence rules, and re-rank by confidence and recency. Use when asked to "evolve", "consolidate", or "clean up guidelines". Trigger proactively when the guideline set feels noisy or contradictory.
 ---
 
-# Guya Evolve
+# Evolve
 
-Trigger the consolidation pipeline to clean up and optimize the guideline set.
+Manual consolidation of Guya's guideline set. Without consolidation, the guideline set accumulates duplicates, stale rules, and contradictions — signal decays into noise. Run this to keep the set sharp.
 
-## When This Triggers
+## Step 1 — Load Guidelines
 
-- User says "evolve", "consolidate", "clean up guidelines", "optimize guidelines"
+Read in parallel:
+- `~/.claude/guya/guidelines/strategic/` — all strategic guidelines
+- `.guya/evolution/guidelines/tactical/` — all tactical guidelines
 
-## What To Do
+## Step 2 — Consolidate
 
-1. Read ALL strategic guidelines from `~/.claude/guya/guidelines/strategic/`
-2. Read ALL tactical guidelines from `.guya/evolution/guidelines/tactical/`
-3. Use the `evolve_consolidate` MCP tool if available, otherwise do it manually:
+Prefer the `evolve_consolidate` MCP tool if available — it runs the full pipeline automatically. If unavailable, spawn `guya:guya-consolidator` (opus) with the loaded guidelines. If neither is available, run manually using the four operations below.
 
-### Consolidation Steps
+### Merge
 
-**Merge**: Find guidelines that say the same thing differently. Keep the clearer one, combine source traces, average confidence.
+Duplicate guidelines dilute confidence scores and create false contradictions. Find guidelines that say the same thing differently. Keep the clearer one, combine source traces, average confidence scores.
 
-**Promote**: Tactical guidelines with confidence >= 0.85 that have been validated across sessions → move to strategic.
+### Promote
 
-**Prune**: Remove guidelines with confidence < 0.5 that haven't been validated in 30+ days. Remove guidelines about projects/contexts that no longer exist.
+Tactical guidelines that have been validated across multiple sessions should graduate to strategic — they're no longer project-specific observations, they're durable behavioral principles. Promote tactical guidelines with confidence ≥ 0.85 that have been validated across sessions.
 
-**Re-rank**: Sort remaining guidelines by (confidence * recency_weight). Lower rank = higher priority.
+### Prune
 
-### Report
+Stale low-confidence guidelines add noise without adding signal. Remove:
+- Guidelines with confidence < 0.5 not validated in 30+ days
+- Guidelines about projects, contexts, or patterns that no longer exist
 
-After consolidation, report:
-- How many guidelines existed before
-- How many were merged, pruned, promoted
-- How many remain
-- The top 5 highest-confidence guidelines
-- Any conflicts that need Daniel's input
+### Re-rank
+
+Sort remaining guidelines by `(confidence × recency_weight)`. Lower rank = higher priority in context injection. This ensures the most validated and recent guidelines surface first.
+
+## Step 3 — Report
+
+After consolidation, report to Daniel:
+- Guidelines before → after (how many merged, pruned, promoted)
+- Top 5 highest-confidence guidelines (these are the ones shaping behavior most)
+- Any conflicts that need Daniel's input — don't resolve these automatically, surface them
+
+If there are conflicts, ask Daniel to resolve them before closing out.

@@ -1,48 +1,76 @@
 ---
 name: guya-optimize
-description: Analyze the code at $ARGUMENTS for simplification and optimization opportunities. Report findings only — do not apply fixes. Use when asked to find performance or complexity issues.
+description: Analyze code for simplification, performance, and resource efficiency opportunities. Reports findings only — no auto-fixes, because optimizations involve trade-offs that require judgment (readability vs speed, complexity vs throughput). Use when asked to "optimize", "find performance issues", or "simplify". Trigger proactively on code that looks algorithmically inefficient or resource-heavy.
+argument-hint: "<file-path or directory>"
 ---
 
-Analyze the code at $ARGUMENTS for simplification and optimization opportunities. Report findings only — do not apply fixes.
+# Optimize
 
-## Simplification
-- Is there dead code, unused imports, or unreachable branches?
-- Are there overly complex conditionals that could be flattened or simplified?
-- Are there unnecessary abstractions, wrappers, or indirection layers?
-- Can any logic be replaced with standard library functions or builtins?
-- Are there duplicated code blocks that should be consolidated?
-- Are variable/function names clear and self-documenting?
+A report-only analysis of simplification and optimization opportunities. No fixes are applied — optimizations involve trade-offs that require Daniel's judgment before touching working code.
 
-## Performance
-- Are there blocking calls on async hot paths?
-- Are there unnecessary allocations, copies, or conversions in loops?
-- Is there repeated work that should be cached or memoized?
-- Are there N+1 query patterns or unbatched operations?
-- Are there sequential operations that could be parallelized (asyncio.gather, etc.)?
-- Are there string concatenations in loops instead of joins?
+## Step 1 — Read the Target
 
-## Resource Efficiency
-- Are there memory leaks: unbounded lists, dicts, or caches that grow forever?
-- Are DB connections, file handles, and network sessions properly closed in all paths?
-- For LLM calls: is the prompt unnecessarily verbose, wasting tokens?
-- For LLM calls: could a cheaper/faster model be used for this task?
-- Are batch sizes tuned, or is it processing one-at-a-time when batching is possible?
-- Are there redundant I/O operations (reading the same file/key multiple times)?
+Read the file or directory at `$ARGUMENTS`. If a directory, focus on the most computationally active files — orchestrators, hot paths, and anything doing I/O or LLM calls. Understand what the code is doing before evaluating it.
 
-## Async-Specific
-- Are there `await` calls inside loops that should use `asyncio.gather`?
-- Are there sync operations (file I/O, CPU-bound work) blocking the event loop?
-- Are semaphores or rate limiters properly scoped to avoid bottlenecks?
-- Could any sequential async pipeline stages run concurrently?
+## Step 2 — Analysis Categories
 
-Format your output as:
+Work through each category. If a category is clean, say so.
 
+### Simplicity
+
+Unnecessary complexity slows down reading, testing, and debugging — and often hides bugs. Check:
+- Dead code, unused imports, or unreachable branches?
+- Overly complex conditionals that could be flattened or simplified?
+- Unnecessary abstractions, wrappers, or indirection layers added speculatively?
+- Logic that could be replaced with standard library functions or builtins?
+- Duplicated code blocks that should be consolidated?
+- Variable or function names that require reading the body to understand?
+
+### Performance
+
+Inefficiency at small scale becomes a bottleneck at production scale — and async code hides latency issues until load hits. Check:
+- Blocking calls on async hot paths?
+- Unnecessary allocations, copies, or conversions inside loops?
+- Repeated work that should be cached or memoized?
+- N+1 query patterns or unbatched operations?
+- Sequential operations that could be parallelized (`asyncio.gather`, etc.)?
+- String concatenations in loops instead of joins?
+
+### Resource Efficiency
+
+Resource leaks are invisible until they cause failures far from the origin — and LLM cost waste is easy to miss. Check:
+- Unbounded lists, dicts, or caches that grow forever without eviction?
+- DB connections, file handles, and network sessions closed in all paths?
+- LLM prompts unnecessarily verbose, wasting tokens per call?
+- Could a cheaper/faster model handle this task without quality loss?
+- Batch sizes untuned — processing one-at-a-time when batching is possible?
+- Redundant I/O: reading the same file or cache key multiple times per operation?
+
+### Async-Specific
+
+Async code that looks concurrent often isn't — sequential `await` in loops is a common source of unnecessary latency. Check:
+- `await` calls inside loops that should use `asyncio.gather`?
+- Sync operations (file I/O, CPU-bound work) blocking the event loop?
+- Semaphores or rate limiters misscoped, creating unintended bottlenecks?
+- Sequential async pipeline stages that could run concurrently?
+
+## Step 3 — Output Findings
+
+Use this format for every finding:
+
+```
 ### [Category]
 **[file:line]** — [Brief title]
-Impact: [Low/Medium/High] — [What improves: speed, memory, readability, tokens, etc.]
+Impact: [Low / Medium / High] — [What improves: speed, memory, readability, tokens]
 Current: [What the code does now]
 Better: [What it should do instead and why]
 
-If no issues are found in a category, state "No issues found."
+No issues found. (if clean)
+```
 
-At the end, provide a **Priority Summary**: rank the top 5 findings by impact, with estimated effort (trivial/small/medium/large) for each.
+End with a **Priority Summary** — top 5 findings ranked by impact, with estimated effort:
+
+```
+1. [file:line] — [Title] | Impact: High | Effort: Trivial
+2. ...
+```

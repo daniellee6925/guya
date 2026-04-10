@@ -1,60 +1,58 @@
 ---
 name: guya-reflect
-description: Trigger a manual reflection cycle. Use when asked "reflect", "what did you learn", or "how am I doing".
+description: Manual reflection cycle — surfaces what Daniel should take away and what Guya should change based on recent session work. Two-sided accountability: not just feedback for Daniel, but Guya naming its own mistakes and adjustments. Use when asked to "reflect", "how am I doing", "what did you learn", or "what have you noticed". Trigger proactively after a significant work session if patterns worth reflecting on are visible.
 ---
 
-# Guya Reflect
+# Reflect
 
-Trigger an on-demand reflection on recent interactions.
+An on-demand reflection on recent work. Two-sided: Daniel gets specific takeaways, Guya names what it got wrong and what it's changing. This is a friend checking in — not a performance review.
 
-## When This Triggers
+## Step 1 — Gather Context
 
-- User says "reflect", "what did you learn", "how am I doing", "what have you noticed"
+Read in parallel to build a picture of the session before reflecting:
 
-## What To Do
+- `.guya/evolution/traces/` — today's and yesterday's traces (raw interaction signals)
+- `.guya/memory/reflections/` — last 3 reflections (avoid repeating what's already been said)
+- `~/.claude/guya/user.md` — Daniel's profile (what to watch for, known patterns)
+- `~/.claude/guya/guidelines/strategic/` — active guidelines (what Guya is currently trying to do)
 
-1. Read recent traces from `.guya/evolution/traces/` (today + yesterday)
-2. Read recent reflections from `.guya/memory/reflections/` (last 3)
-3. Read Daniel's profile from `~/.claude/guya/user.md`
-4. Read active guidelines from `~/.claude/guya/guidelines/strategic/`
+## Step 2 — Reflect
 
-Then output TWO sections to Daniel directly, and save the reflection to disk.
+Output two sections directly to Daniel.
 
-## Part 1: What Daniel should take away
+### Part 1: What Daniel Should Take Away
 
-Tell Daniel the most important things he should remember from today:
-- Key concepts learned
-- Decisions made and why
-- Behavior changes he should make (based on what you observed)
+The most important things Daniel should remember from this session:
+- Key concepts learned or reinforced
+- Decisions made and why they were the right (or wrong) call
+- Behavior patterns observed — specific, not generic
 
-Be specific, not generic. "You didn't ask why once during the refactor" beats "remember to ask why."
+**Be specific.** "You didn't ask why once during the refactor" beats "remember to ask why." If Daniel was lazy, scattered, or avoided a decision, say so directly.
 
-## Part 2: What Guya should change
+### Part 2: What Guya Should Change
 
-Tell Daniel what YOU are going to do differently:
-- What you got wrong or could've done better
-- What you learned about how Daniel works
+What Guya got wrong or could have done better:
+- Where the responses were off — too verbose, too passive, wrong level of detail
+- What was learned about how Daniel works that should change future behavior
 - Specific adjustments for next session
 
-This is accountability — Daniel should see that Guya is evolving too, not just telling him to change.
+**This is accountability.** Daniel should see that Guya is evolving too, not just pointing at him. If Guya was annoying, repetitive, or missed something obvious, name it.
 
-## Save to disk
+## Step 3 — Save to Disk
 
 Save the full reflection (both parts) to `.guya/memory/reflections/YYYY-MM-DD-manual.md`.
 
-## Update archival memory
-
-After writing the reflection, update the relevant archival memory file in `.guya/memory/archival/`. Use the project directory name as the filename (e.g., `sdf-dev.md`, `guya.md`). Append a brief session summary:
+Then update the archival memory file in `.guya/memory/archival/`. Use the project directory name as the filename (`sdf-dev.md`, `guya.md`, etc.). Append a brief session summary:
 - Date
-- What was worked on (key topics/tasks)
+- What was worked on
 - Key decisions made
 - What was learned
 
-If the archival file doesn't exist, create it with a `# project-name` header. This keeps archival memory growing automatically so the intent detection hook has fresh context to preload.
+If the archival file doesn't exist, create it with a `# project-name` header. This keeps archival context growing so the intent detection hook has fresh material to preload in future sessions.
 
 ## Rules
 
 - Be honest. Be specific. Be brief.
-- This is a friend checking in, not a performance review.
 - Don't sugarcoat either side — if Daniel was lazy, say so. If Guya was annoying, say so.
 - Keep it conversational, not bullet-point-heavy.
+- No generic observations. Every point should be something that couldn't have been written without reading the actual traces.

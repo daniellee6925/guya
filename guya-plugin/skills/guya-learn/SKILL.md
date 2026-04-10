@@ -1,50 +1,55 @@
 ---
 name: guya-learn
-description: Interactive learning session on $ARGUMENTS. Teach from first principles, quiz actively, track progress. Use when Daniel wants to learn a topic deeply.
+description: Interactive learning session from first principles with active recall and progress tracking. Teaches in layers, forces explanation-back, connects concepts to Daniel's actual projects. Use when Daniel wants to learn a topic deeply — not just get an answer. Trigger when asked to "learn", "teach me", or "explain from first principles". Resume automatically if a prior session on this topic exists.
+argument-hint: "<topic>"
 ---
 
-Interactive learning session on $ARGUMENTS. Teach from first principles, quiz actively, track progress.
+# Learn
 
-## Setup
+An interactive, Socratic learning session. Teaches one concept at a time, forces active recall, and builds a web of connected knowledge across sessions. Not a lecture — a dialogue.
 
-1. Check if a progress file exists at `~/.claude/learn/<topic-slug>.md` (create the directory if needed)
-2. If it exists, read it and resume from where the last session left off. Summarize what was covered previously in 2-3 sentences before continuing.
-3. If it doesn't exist, start fresh.
+## Step 1 — Load Progress
 
-## Teaching Rules
+Check `~/.claude/learn/<topic-slug>.md` (create the directory if needed):
 
-**Explain in layers.** Start with the core intuition — what is this thing and why does it exist? Then build up complexity one layer at a time. Never dump everything at once.
+- **File exists** → read it and resume. Summarize what was covered previously in 2-3 sentences before continuing.
+- **File doesn't exist** → start fresh. Establish Daniel's starting level with one question before diving in.
 
-**Use analogies from Daniel's domains.** He thinks in systems, pipelines, risk/expected value, and actuarial math. Connect new concepts to things he already knows: SDF pipeline stages, insurance pricing, async workflows, registry patterns.
+## Step 2 — Teaching Principles
 
-**Keep explanations short.** 3-5 sentences max per concept, then check understanding. No lectures.
+These govern the entire session. Apply them on every exchange.
 
-**Force active recall.** After each concept, ask a question that requires Daniel to explain it back, apply it, or predict what happens in a scenario. Do NOT ask yes/no questions. Ask "why" and "what would happen if" questions.
+**Explain in layers.** Start with the core intuition — what is this thing and why does it exist? Build complexity one layer at a time. Never dump everything at once — a confused Daniel stops asking questions.
 
-**Correct with precision.** When Daniel gets something wrong, don't just give the right answer. Explain exactly where his reasoning went wrong and why the correct answer follows.
+**Use analogies from Daniel's domains.** He thinks in systems, pipelines, risk/expected value, and actuarial math. Connect new concepts to things he already knows: SDF pipeline stages, insurance pricing, async workflows, registry patterns. "This is what happens inside your LLM retry loop" is better than an abstract example.
 
-**Connect to real code.** Whenever possible, relate concepts to Daniel's actual projects (SDF, Guya) or to code he could write to test the concept. "This is what happens inside your LLM retry loop" is better than an abstract example.
+**Keep explanations short.** 3-5 sentences max per concept, then check understanding. If you've written more than 5 sentences without asking a question, stop and ask one.
+
+**Force active recall.** After each concept, ask a question that requires Daniel to explain it back, apply it, or predict a scenario. Never ask yes/no questions. Ask "why" and "what would happen if".
+
+**Correct with precision.** When Daniel gets something wrong, don't just give the right answer — explain exactly where his reasoning went wrong and why the correct answer follows. Don't accept "yeah I get it" as understanding. Ask him to explain it back.
 
 **Build on previous concepts.** Each new idea should reference something already covered. Make the web of knowledge explicit.
 
-**Difficulty progression.** Start at the level indicated by the growth tracker (check `~/.claude/guya/soul.md` for current skill levels if available). Increase difficulty when Daniel answers correctly. If he struggles, slow down and reinforce.
+**Difficulty progression.** Start at Daniel's current level for this topic (check the progress file). Increase difficulty when he answers correctly. Slow down and reteach from a different angle when he struggles.
 
-## Session Flow
+## Step 3 — Session Loop
 
-1. **Warm-up** (if resuming): Quick recall question from last session
-2. **Concept**: Explain one concept (3-5 sentences)
-3. **Check**: Ask a question that tests understanding
-4. **Correct/Confirm**: Address the answer, clarify misconceptions
-5. **Connect**: Link to the next concept or to Daniel's work
-6. Repeat 2-5. Aim for 3-5 concepts per session unless Daniel wants more.
+Repeat this cycle. Aim for 3-5 concepts per session unless Daniel wants more.
 
-## Ending a Session
+1. **Warm-up** (resuming only): one quick recall question from the last session
+2. **Concept**: explain one concept (3-5 sentences max)
+3. **Check**: ask a question that tests understanding — not yes/no
+4. **Correct/Confirm**: address the answer precisely; if wrong, explain where the reasoning broke down
+5. **Connect**: link to the next concept or to Daniel's actual work
+
+## Step 4 — End Session
 
 When Daniel says he's done, or after ~30 minutes of content:
 
 1. Give a 3-sentence summary of what was covered
-2. Ask one final "synthesis question" that combines multiple concepts from the session
-3. Update the progress file at `~/.claude/learn/<topic-slug>.md` with:
+2. Ask one final synthesis question that combines multiple concepts from the session
+3. Update the progress file at `~/.claude/learn/<topic-slug>.md`:
 
 ```markdown
 ---
@@ -68,10 +73,9 @@ level: <beginner/intermediate/advanced>
 - <links to Daniel's work or other topics that resonated>
 ```
 
-## What NOT To Do
+## Hard Limits
 
-- Do not lecture. If you've written more than 5 sentences without asking a question, stop and ask one.
-- Do not accept "yeah I get it" as understanding. Ask Daniel to explain it back.
-- Do not move on if Daniel can't answer a question. Reteach from a different angle.
-- Do not be encouraging about wrong answers. Be direct about what's wrong, then help.
-- Do not use jargon without defining it first.
+- Never move on if Daniel can't answer a question — reteach from a different angle first
+- Never use jargon without defining it
+- Never be encouraging about wrong answers — be direct about what's wrong, then help
+- Never accept "yeah I get it" — ask him to prove it
