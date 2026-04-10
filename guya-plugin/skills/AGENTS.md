@@ -39,8 +39,8 @@ Staff-engineer-level decision harnesses for major decisions:
 
 | File | Skill | Purpose |
 |-----------|-------|---------|
-| `guya-karpathy-review/SKILL.md` | guya-karpathy-review | Review code using Karpathy guidelines + silent errors, scalability, security, race conditions |
-| `guya-review-followup/SKILL.md` | guya-review-followup | Deep follow-up review: logic correctness, state management, data integrity, observability |
-| `guya-cr/SKILL.md` | guya-cr | Comprehensive review combining Claude + Karpathy guidelines + Codex independent pass |
+| `guya-review/SKILL.md` | guya-review | Review code using Karpathy guidelines + silent errors, scalability, security, race conditions |
+| `guya-deep-review/SKILL.md` | guya-deep-review | Deep second-pass review: logic correctness, state management, data integrity, performance, observability |
+| `guya-pr/SKILL.md` | guya-pr | Pre-PR preparation: Codex fresh-eyes pass, readiness checklist, cross-diff consistency, PR summary |
 | `guya-optimize/SKILL.md` | guya-optimize | Find simplification and optimization opportunities — report only, no fixes |
 | `guya-learn/SKILL.md` | guya-learn | Interactive learning session from first principles with active recall and progress tracking |

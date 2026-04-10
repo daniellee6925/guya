@@ -24,7 +24,7 @@
  * -------------------------
  * A commit is "reviewed" iff ALL of the following hold at commit time:
  *
- *   1. Both `/karpathy-review` and `/review-followup` have been run in
+ *   1. Both `/guya-review` and `/guya-deep-review` have been run in
  *      the current gate window (age-bounded by gateMaxAgeMinutes, default 30).
  *   2. Followup came after initial (timestamp order).
  *   3. The current staged tree SHA either:
@@ -94,15 +94,15 @@
  *
  * Failure modes (all fail CLOSED with a specific reason)
  * -----------------------------------------------------
- *   - No evidence file                   → "No review evidence found. Run /karpathy-review."
+ *   - No evidence file                   → "No review evidence found. Run /guya-review."
  *   - Corrupt evidence file (IO error)   → "Evidence file unreadable: <err>"
  *   - Every line corrupt                 → "Evidence file unreadable: no valid entries"
- *   - Missing `initial` step             → "Missing initial review. Run /karpathy-review first."
- *   - Missing `followup` step            → "Missing followup review. Run /review-followup after fixing issues."
+ *   - Missing `initial` step             → "Missing initial review. Run /guya-review first."
+ *   - Missing `followup` step            → "Missing followup review. Run /guya-deep-review after fixing issues."
  *   - Followup before initial            → "Followup must come after initial review."
  *   - Stale (age > gateMaxAgeMinutes)    → "Review expired (Xmin ago, max Ymin)."
  *   - Missing treeSha on latest step     → "Evidence file pre-dates content-hash check. Re-run both review steps."
- *   - Tree mismatch, delta > threshold   → "X lines changed since review (max Y). Re-run /review-followup or reduce scope."
+ *   - Tree mismatch, delta > threshold   → "X lines changed since review (max Y). Re-run /guya-deep-review or reduce scope."
  *   - Tree mismatch, delta ≤ threshold   → PASS (logs note, accepts as small post-review fix)
  *   - Tree match                         → PASS
  *
@@ -378,13 +378,13 @@ export function validateForCommit(directory, config, options = {}) {
 
   const read = readEvidence(directory);
   if (read.missing) {
-    return { valid: false, reason: 'No review evidence found. Run /karpathy-review.' };
+    return { valid: false, reason: 'No review evidence found. Run /guya-review.' };
   }
   if (read.error) {
     return { valid: false, reason: `Evidence file unreadable: ${read.error}` };
   }
   if (read.steps.length === 0) {
-    return { valid: false, reason: 'Evidence file has no valid entries. Run /karpathy-review.' };
+    return { valid: false, reason: 'Evidence file has no valid entries. Run /guya-review.' };
   }
 
   // --- Step presence + order ---
@@ -393,12 +393,12 @@ export function validateForCommit(directory, config, options = {}) {
   const latestFollowup = read.steps.findLast((s) => s.step === 'followup');
 
   if (!latestInitial) {
-    return { valid: false, reason: 'Missing initial review. Run /karpathy-review first.' };
+    return { valid: false, reason: 'Missing initial review. Run /guya-review first.' };
   }
   if (!latestFollowup) {
     return {
       valid: false,
-      reason: 'Missing followup review. Run /review-followup after fixing issues.',
+      reason: 'Missing followup review. Run /guya-deep-review after fixing issues.',
     };
   }
   if (latestFollowup.timestamp <= latestInitial.timestamp) {
@@ -406,7 +406,7 @@ export function validateForCommit(directory, config, options = {}) {
     // the followup no longer applies to the post-initial state.
     return {
       valid: false,
-      reason: 'Initial review ran after followup. Re-run /review-followup on the current state.',
+      reason: 'Initial review ran after followup. Re-run /guya-deep-review on the current state.',
     };
   }
 
@@ -421,7 +421,7 @@ export function validateForCommit(directory, config, options = {}) {
   if (age > maxAgeMs) {
     return {
       valid: false,
-      reason: `Review expired (${Math.round(age / 60000)}min ago, max ${maxAgeMinutes}min). Re-run /karpathy-review.`,
+      reason: `Review expired (${Math.round(age / 60000)}min ago, max ${maxAgeMinutes}min). Re-run /guya-review.`,
     };
   }
 
@@ -480,7 +480,7 @@ export function validateForCommit(directory, config, options = {}) {
       if (added === '-' || removed === '-') {
         return {
           valid: false,
-          reason: 'Binary file changed since review. Re-run /review-followup.',
+          reason: 'Binary file changed since review. Re-run /guya-deep-review.',
         };
       }
       const a = parseInt(added, 10);
@@ -491,7 +491,7 @@ export function validateForCommit(directory, config, options = {}) {
   } catch (err) {
     return {
       valid: false,
-      reason: `Could not compute delta since review: ${err?.message || String(err)}. Re-run /review-followup.`,
+      reason: `Could not compute delta since review: ${err?.message || String(err)}. Re-run /guya-deep-review.`,
     };
   }
 
@@ -507,7 +507,7 @@ export function validateForCommit(directory, config, options = {}) {
 
   return {
     valid: false,
-    reason: `${deltaLines} lines changed since review (max ${maxDeltaLines}). Re-run /review-followup or reduce scope.`,
+    reason: `${deltaLines} lines changed since review (max ${maxDeltaLines}). Re-run /guya-deep-review or reduce scope.`,
   };
 }
 

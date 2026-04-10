@@ -8,7 +8,7 @@
  *   Output: { continue: true } or { decision: "block", reason: "..." }
  *
  *   Three jobs:
- *     1. On Skill call (karpathy-review / review-followup) → record evidence
+ *     1. On Skill call (guya-review / guya-deep-review) → record evidence
  *     2. On git commit --no-verify → block
  *     3. On git commit → check exemptions, small change, evidence → allow or block
  *
@@ -160,7 +160,7 @@ function loadConfig(directory, userConfigPath = USER_CONFIG_PATH) {
 // spec. This file only wires user-facing skill detection into the module's
 // appendStep API.
 
-const REVIEW_SKILLS = ['karpathy-review', 'review-followup', 'cr'];
+const REVIEW_SKILLS = ['guya-review', 'deep-review'];
 
 function isReviewSkill(toolName, toolInput) {
   if (toolName !== 'Skill' && toolName !== 'skill') return false;
@@ -170,7 +170,7 @@ function isReviewSkill(toolName, toolInput) {
 
 function getSkillStep(toolInput) {
   const skill = typeof toolInput === 'string' ? toolInput : (toolInput?.skill || toolInput?.name || '');
-  if (skill.includes('review-followup')) return 'followup';
+  if (skill.includes('deep-review')) return 'followup';
   return 'initial';
 }
 
@@ -305,9 +305,9 @@ function formatReviewPrompt(stagedFiles, config) {
   const maxAgeMinutes = Number.isFinite(n) && n >= 0 ? n : DEFAULT_GATE_MAX_AGE_MINUTES;
   return `Review required for ${stagedFiles.length} non-exempt files. Follow this process:
 
-1. Run /karpathy-review on the staged files
+1. Run /guya-review on the staged files
 2. Fix any issues found
-3. Run /review-followup on the staged files
+3. Run /guya-deep-review on the staged files
 4. Fix any issues found
 5. Retry the commit
 

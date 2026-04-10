@@ -124,10 +124,10 @@ describe('pre-commit-review e2e: evidence recording via Skill calls', () => {
   beforeEach(() => { dir = initFixtureRepo(); });
   afterEach(() => { try { rmSync(dir, { recursive: true, force: true }); } catch {} });
 
-  it('karpathy-review skill call records an initial step with real treeSha', () => {
+  it('guya-review skill call records an initial step with real treeSha', () => {
     const r = runHook(dir, {
       tool_name: 'Skill',
-      tool_input: { skill: 'karpathy-review' },
+      tool_input: { skill: 'guya-review' },
     });
     assert.equal(r.status, 0);
     assert.ok(existsSync(evidenceFile(dir)));
@@ -139,24 +139,14 @@ describe('pre-commit-review e2e: evidence recording via Skill calls', () => {
     assert.match(entry.treeSha, /^[0-9a-f]{40}$/);
   });
 
-  it('review-followup skill call records a followup step', () => {
+  it('guya-deep-review skill call records a followup step', () => {
     const r = runHook(dir, {
       tool_name: 'Skill',
-      tool_input: { skill: 'review-followup' },
+      tool_input: { skill: 'guya-deep-review' },
     });
     assert.equal(r.status, 0);
     const entry = JSON.parse(readFileSync(evidenceFile(dir), 'utf-8').trim());
     assert.equal(entry.step, 'followup');
-  });
-
-  it('/cr skill call records an initial step (cr is aliased to initial)', () => {
-    const r = runHook(dir, {
-      tool_name: 'Skill',
-      tool_input: { skill: 'cr' },
-    });
-    assert.equal(r.status, 0);
-    const entry = JSON.parse(readFileSync(evidenceFile(dir), 'utf-8').trim());
-    assert.equal(entry.step, 'initial');
   });
 
   it('non-review Skill call is a no-op', () => {
@@ -199,10 +189,10 @@ describe('pre-commit-review e2e: happy path and failure modes', () => {
     });
   }
 
-  it('happy path: stage → karpathy-review → review-followup → commit allowed', () => {
+  it('happy path: stage → guya-review → guya-deep-review → commit allowed', () => {
     stageLargeChange();
-    recordReview('karpathy-review');
-    recordReview('review-followup');
+    recordReview('guya-review');
+    recordReview('guya-deep-review');
     const r = attemptCommit();
     const decision = parseDecision(r.stdout);
     assert.ok(decision.continue, `expected continue:true, got ${r.stdout}`);
@@ -219,7 +209,7 @@ describe('pre-commit-review e2e: happy path and failure modes', () => {
 
   it('blocks commit with only initial step (missing followup)', () => {
     stageLargeChange();
-    recordReview('karpathy-review');
+    recordReview('guya-review');
     const r = attemptCommit();
     const decision = parseDecision(r.stdout);
     assert.equal(decision.decision, 'block');
@@ -228,8 +218,8 @@ describe('pre-commit-review e2e: happy path and failure modes', () => {
 
   it('allows commit with small delta since followup (within threshold)', () => {
     stageLargeChange();
-    recordReview('karpathy-review');
-    recordReview('review-followup');
+    recordReview('guya-review');
+    recordReview('guya-deep-review');
 
     // Add a tiny post-review fix: 3 new lines
     writeFileSync(join(dir, 'tiny.txt'), 'a\nb\nc\n');
@@ -244,8 +234,8 @@ describe('pre-commit-review e2e: happy path and failure modes', () => {
 
   it('blocks commit with large delta since followup (over threshold)', () => {
     stageLargeChange();
-    recordReview('karpathy-review');
-    recordReview('review-followup');
+    recordReview('guya-review');
+    recordReview('guya-deep-review');
 
     // Add 30 lines of unreviewed content — above maxLines=10
     writeFileSync(join(dir, 'sneak.py'), 'x = 1\n'.repeat(30));
@@ -259,8 +249,8 @@ describe('pre-commit-review e2e: happy path and failure modes', () => {
 
   it('--no-verify is unconditionally blocked (before evidence check)', () => {
     stageLargeChange();
-    recordReview('karpathy-review');
-    recordReview('review-followup');
+    recordReview('guya-review');
+    recordReview('guya-deep-review');
     // Even with valid evidence, --no-verify is still blocked.
     const r = runHook(dir, {
       tool_name: 'Bash',
@@ -385,8 +375,8 @@ describe('pre-commit-review e2e: corrupt evidence lines are reported to stderr',
     execSync('git add feature.py', { cwd: dir });
 
     // Use the real skill flow to populate evidence
-    runHook(dir, { tool_name: 'Skill', tool_input: { skill: 'karpathy-review' } });
-    runHook(dir, { tool_name: 'Skill', tool_input: { skill: 'review-followup' } });
+    runHook(dir, { tool_name: 'Skill', tool_input: { skill: 'guya-review' } });
+    runHook(dir, { tool_name: 'Skill', tool_input: { skill: 'guya-deep-review' } });
 
     const r = runHook(dir, {
       tool_name: 'Bash',
