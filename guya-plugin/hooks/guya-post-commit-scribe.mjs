@@ -238,6 +238,12 @@ async function main() {
     const toolInput = input.tool_input || input.toolInput || '';
     const directory = resolveProjectRoot(input.cwd || input.directory || process.cwd());
 
+    // DEBUG — log raw payload to file so we can see what Claude Code sends
+    try {
+      const { appendFileSync } = await import('fs');
+      appendFileSync('/tmp/guya-scribe-debug.jsonl', JSON.stringify({ toolName, toolInputKeys: Object.keys(typeof toolInput === 'object' ? toolInput : {}), toolInputType: typeof toolInput, rawKeys: Object.keys(input), isGitCommitResult: isGitCommit(toolName, toolInput) }) + '\n');
+    } catch {}
+
     if (!isGitCommit(toolName, toolInput)) {
       return output({ continue: true, suppressOutput: true });
     }
