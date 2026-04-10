@@ -212,9 +212,7 @@ function getStagedFiles(directory, toolInput) {
   const cmd = typeof toolInput === 'string' ? toolInput : (toolInput?.command || '');
   const addMatch = cmd.match(/\bgit\s+add\s+(.+?)(?:\s*&&|\s*;|\s*\||\s*$)/);
   if (addMatch) {
-    addMatch[1].trim().split(/\s+/)
-      .filter(f => !f.startsWith('-') && f.length > 0)
-      .forEach(f => staged.add(f));
+    parseAddArgs(addMatch[1]).forEach(f => staged.add(f));
   }
 
   return [...staged];
@@ -405,6 +403,21 @@ if (isMain) {
   main();
 }
 
+// Shell-aware tokenizer for git add argument strings. Handles double-quoted,
+// single-quoted, and unquoted paths. Exported for unit testing.
+// Input: raw arg string after `git add` (e.g. '"file with spaces.js" normal.js')
+// Output: array of filename strings with flags filtered out
+function parseAddArgs(argStr) {
+  const tokens = [];
+  const re = /"([^"]+)"|'([^']+)'|(\S+)/g;
+  let m;
+  while ((m = re.exec(argStr)) !== null) {
+    const token = (m[1] ?? m[2] ?? m[3]).trim();
+    if (!token.startsWith('-') && token.length > 0) tokens.push(token);
+  }
+  return tokens;
+}
+
 // Exports for testing — loadConfig is the primary unit under test;
 // USER_CONFIG_PATH is exported so tests can point it at a tmp fixture.
-export { loadConfig, USER_CONFIG_PATH };
+export { loadConfig, USER_CONFIG_PATH, parseAddArgs };
