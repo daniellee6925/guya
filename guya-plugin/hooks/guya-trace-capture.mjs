@@ -16,6 +16,7 @@ import { existsSync, appendFileSync, mkdirSync, statSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
 import { randomUUID } from 'crypto';
+import { resolveProjectRoot } from './hook-utils.mjs';
 
 const MAX_TRACE_FILE_BYTES = 5 * 1024 * 1024; // 5MB cap
 const GLOBAL_TRACES_DIR = join(homedir(), '.claude', 'guya', 'traces');
@@ -94,7 +95,7 @@ async function main() {
     const toolName = input.tool_name || input.toolName || 'unknown';
     const toolInput = input.tool_input || input.toolInput || '';
     const sessionId = input.session_id || input.sessionId || '';
-    const directory = input.cwd || input.directory || process.cwd();
+    const directory = resolveProjectRoot(input.cwd || input.directory || process.cwd());
 
     // Only trace significant file edits — skip noise
     if (!isSignificantEdit(toolInput)) {

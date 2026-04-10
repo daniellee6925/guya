@@ -18,7 +18,7 @@ import { join } from 'path';
 import { homedir } from 'os';
 import { randomUUID } from 'crypto';
 import { fileURLToPath } from 'url';
-import { isHarnessActive, FEEDBACK_TRACE_TYPE_SET } from './hook-utils.mjs';
+import { isHarnessActive, FEEDBACK_TRACE_TYPE_SET, resolveProjectRoot } from './hook-utils.mjs';
 
 const GLOBAL_TRACES_DIR = join(homedir(), '.claude', 'guya', 'traces');
 
@@ -129,7 +129,7 @@ async function main() {
 
     const prompt = input.prompt || input.message || '';
     const sessionId = input.session_id || input.sessionId || '';
-    const directory = input.cwd || input.directory || process.cwd();
+    const directory = resolveProjectRoot(input.cwd || input.directory || process.cwd());
 
     // Decision harness in progress — user is answering domain questions,
     // not giving behavior feedback to Guya. Suppress to prevent

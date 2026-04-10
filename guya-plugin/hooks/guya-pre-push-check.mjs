@@ -19,6 +19,7 @@
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { execSync } from 'child_process';
+import { resolveProjectRoot } from './hook-utils.mjs';
 
 // --- stdin ---
 
@@ -189,7 +190,7 @@ async function main() {
 
     const toolName = input.tool_name || input.toolName || '';
     const toolInput = input.tool_input || input.toolInput || '';
-    const directory = input.cwd || input.directory || process.cwd();
+    const directory = resolveProjectRoot(input.cwd || input.directory || process.cwd());
 
     if (!isGitPush(toolName, toolInput)) {
       return output({ continue: true, suppressOutput: true });

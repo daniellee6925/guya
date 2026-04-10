@@ -15,7 +15,7 @@
 import { existsSync, readFileSync, readdirSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
-import { isHarnessActive } from './hook-utils.mjs';
+import { isHarnessActive, resolveProjectRoot } from './hook-utils.mjs';
 
 const GLOBAL_DIR = join(homedir(), '.claude', 'guya');
 
@@ -91,7 +91,7 @@ async function main() {
     try { input = JSON.parse(stdinData); } catch {}
 
     const prompt = input.prompt || input.message || '';
-    const directory = input.cwd || input.directory || process.cwd();
+    const directory = resolveProjectRoot(input.cwd || input.directory || process.cwd());
 
     if (!prompt || prompt.length < 3) {
       console.log(JSON.stringify({ continue: true, suppressOutput: true }));

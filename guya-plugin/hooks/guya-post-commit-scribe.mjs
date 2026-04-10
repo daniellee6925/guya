@@ -17,7 +17,7 @@ import { join, basename, dirname } from 'path';
 import { randomUUID } from 'crypto';
 import { execSync } from 'child_process';
 import { fileURLToPath } from 'url';
-import { isGitCommit } from './hook-utils.mjs';
+import { isGitCommit, resolveProjectRoot } from './hook-utils.mjs';
 
 // --- stdin ---
 
@@ -236,7 +236,7 @@ async function main() {
 
     const toolName = input.tool_name || input.toolName || '';
     const toolInput = input.tool_input || input.toolInput || '';
-    const directory = input.cwd || input.directory || process.cwd();
+    const directory = resolveProjectRoot(input.cwd || input.directory || process.cwd());
 
     if (!isGitCommit(toolName, toolInput)) {
       return output({ continue: true, suppressOutput: true });

@@ -4,6 +4,10 @@
  * CALLING SPEC:
  *   Exports:
  *     - readStdin(timeoutMs) -> Promise<string>
+ *     - resolveProjectRoot(cwd) -> string — resolves any subdirectory to the
+ *       git repo root via `git rev-parse --show-toplevel`; falls back to raw
+ *       cwd for non-repo paths. Prevents phantom .guya/ state dirs when
+ *       Claude Code's cwd is a subdirectory (e.g. guya-plugin/).
  *     - isHarnessActive(cwd) -> boolean
  *     - FEEDBACK_TRACE_TYPES / FEEDBACK_TRACE_TYPE_SET — user-feedback
  *       trace-type enum shared by correction-detect (producer) and
@@ -19,9 +23,29 @@
 
 import { existsSync, statSync, unlinkSync } from 'fs';
 import { join } from 'path';
+import { execSync } from 'child_process';
 
 // Harness markers older than this are treated as crash debris and removed.
 const HARNESS_MARKER_TTL_MS = 2 * 60 * 60 * 1000; // 2 hours
+
+/**
+ * Resolve any cwd to the git repo root, preventing phantom .guya/ state dirs
+ * when Claude Code fires hooks from a subdirectory (e.g. guya-plugin/).
+ */
+export function resolveProjectRoot(cwd) {
+  try {
+    return execSync('git rev-parse --show-toplevel', {
+      cwd, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'],
+    }).trim();
+  } catch (e) {
+    // git exits 128 for "not a git repository" — expected, no log needed.
+    // Any other failure (git not installed, permissions) is unexpected.
+    if (e.status !== 128) {
+      process.stderr.write(`[guya] resolveProjectRoot failed (${cwd}): ${e.message}\n`);
+    }
+    return cwd; // not a git repo — use raw cwd as fallback
+  }
+}
 
 /**
  * User-feedback trace types that always represent learning signal.

@@ -26,7 +26,7 @@ import { join, extname } from 'path';
 import { homedir } from 'os';
 import { execSync } from 'child_process';
 import { fileURLToPath } from 'url';
-import { readStdin, isGitCommit } from './hook-utils.mjs';
+import { readStdin, isGitCommit, resolveProjectRoot } from './hook-utils.mjs';
 import {
   appendStep,
   validateForCommit,
@@ -297,7 +297,7 @@ async function main() {
 
     const toolName = input.tool_name || input.toolName || '';
     const toolInput = input.tool_input || input.toolInput || '';
-    const directory = input.cwd || input.directory || process.cwd();
+    const directory = resolveProjectRoot(input.cwd || input.directory || process.cwd());
 
     // Pre-refactor evidence file lived at `.guya/evolution/review-evidence.json`.
     // Delete it on sight so there's only one authoritative file and nobody
