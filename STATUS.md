@@ -1,22 +1,21 @@
 # guya — Status
 
-> Last updated: 2026-04-10
+> Last updated: 2026-04-10 23:00 PT
 
 ## Current Focus
-**Post-commit scribe delivery fixed via git hook.** Root cause: PostToolUse:Bash never dispatches in Claude Code (confirmed with wildcard `*` matcher + debug log — hook process never spawned). Fix: invoke scribe directly from `.git/hooks/post-commit` after sync-plugin runs, via synthetic payload. No more dependency on PostToolUse:Bash.
+**Post-commit scribe working end-to-end via git hook.** Root cause confirmed: PostToolUse:Bash never dispatches in Claude Code regardless of matcher (wildcard `*` + debug log proved process never spawns). Fix: scribe is now invoked directly from `.git/hooks/post-commit` via synthetic payload, after sync-plugin runs. Added `guya-setup` skill to install this hook in any new guya-enabled repo with one command.
 
 ## Recent Changes
+- [2026-04-10] `b937926` — feat: add guya-setup skill + remove dead PostToolUse:Bash scribe hook
+- [2026-04-10] `c1b9108` — fix: invoke post-commit scribe via git hook — PostToolUse:Bash never dispatches in Claude Code
+- [2026-04-10] `0b758aa` — fix: remove stray test heading, update STATUS.md focus, sync archival memory
+- [2026-04-10] `add7ab4` — fix: remove debug probe blocking post-commit-scribe hook
 - [2026-04-10] `4f14e9b` — fix: bump post-commit-scribe PostToolUse timeout from 3s to 5s
+- [2026-04-10] `b48ecce` — fix: repair STATUS.md, update HEAD marker, fix guya-scribe to create missing docs
 - [2026-04-10] `0234387` — feat: update decision harnesses with architecture validation and post-impl workflow
 - [2026-04-10] `14bcbf8` — refactor: rewrite guya-learn, guya-optimize, guya-reflect, guya-evolve skills
 - [2026-04-10] `cfaa7bb` — refactor: rename and rewrite all three review skills
 - [2026-04-10] `49a5359` — feat: add 4 workflow agents, rewrite all agents, extend scribe, improve skills
-- [2026-04-10] `4b83f53` — fix: harden pre-commit gate against TOCTOU, ghost files, and path skew
-- [2026-04-10] `4c771a1` — fix: shell-aware tokenizer for getStagedFiles quoted-path bypass
-- [2026-04-10] `2f22658` — fix: resolve hooks cwd to git repo root, prevent phantom state dirs
-- [2026-04-10] `40750fa` — fix: auto-sync plugin cache on commit via post-commit hook
-- [2026-04-09] `5cce60f` — refactor: extract review-evidence module with content-identity fingerprint
-- [2026-04-09] `abaf6f0` — fix: drive scribe gate-reset from HEAD marker, harden isGitCommit
 
 ## In Progress
 - [ ] Comprehensive logging system for guya plugin hooks — original ask from 2026-04-08 late night, never scoped, still outstanding
@@ -38,7 +37,7 @@
 - [ ] **[MED] `hasLearningSignal` reads fields no producer writes.** `trace.context` and `trace.toolOutput` — neither is written by any known trace producer. Dead code paths in the filter. Either remove them or start writing the fields.
 - [ ] **[LOW] `~/.claude/guya/.env` may still have corrupted ANTHROPIC_API_KEY.** Hex-confirmed a trailing Unicode `≈` (U+2248, 0xe28988) on the key today. Daniel provided a clean replacement at `Desktop/guya/.env` but the home-dir copy may still need manual fix. Verify: `grep ANTHROPIC_API_KEY ~/.claude/guya/.env | tail -c 20 | xxd`
 - [ ] Follow-up commit: apply review findings from 2026-04-08 karpathy-review pass — add `console.error` logging to silent catches in `hook-utils.mjs:36,40`, `intent-detect.mjs:91`, `correction-detect.mjs:101`; consolidate the 3 remaining duplicate `readStdin` implementations to use the shared `hook-utils.mjs` version
-- [ ] Clean up stray `# test` heading at `guya-plugin/CLAUDE.md:46`
+- [x] **[FIXED 2026-04-10]** Clean up stray `# test` heading at `guya-plugin/CLAUDE.md:46`
 - [ ] Decide fate of line 52 in `~/.claude/guya/traces/2026-04-09.jsonl` — "I have noticed while working on SDF" preference, borderline real signal
 - [ ] Growth tracker milestone #2: read and critique someone else's code
 - [ ] Growth tracker milestone #5: review code Guya writes — pick one function per session
@@ -61,3 +60,5 @@
 - [2026-04-10] Decision harnesses updated: all 4 now read ARCHITECTURE.md + CLAUDE.md before plan generation as a validation gate. Post-implementation workflow added (pre-commit hook is the evaluator, guya-deep-review for complex changes, guya-pr before PR). No standalone evaluator skill needed. Scribe command fixed from /scribe arch to /guya:guya-scribe arch:.
 - [2026-04-10] Post-commit-scribe missed 4 commits from today's skill session (49a5359–0234387). Marker stuck at 4b83f53. Root cause under investigation — likely 3s PostToolUse timeout being exceeded after pre-commit LLM gate runs. STATUS.md repaired manually, HEAD marker updated to 0234387.
 - [2026-04-08] MAX_FUNC_LINES bumped from 50→80 (50 was too aggressive for orchestrator functions)
+- [2026-04-10] **PostToolUse:Bash confirmed non-dispatching.** Exhaustive diagnosis: tried specific matcher ("Bash"), combined matcher ("Write|Edit|Bash"), wildcard ("*"), and added debug log-file write at top of main() before any stdin read. Hook process was never spawned. PostToolUse dispatches for Write/Edit (confirmed), not for Bash. Root cause unknown — likely a Claude Code runtime constraint. Workaround: invoke scribe directly from git post-commit hook via synthetic JSON payload.
+- [2026-04-10] **guya-setup skill added.** Installs the post-commit scribe hook into any repo's `.git/hooks/post-commit` in one command. Handles existing hooks (appends rather than overwrites), idempotent (checks for existing guya block before writing). Intended as the first piece of a future `guya setup` onboarding flow for new repos.
