@@ -227,6 +227,8 @@ function appendCommit(directory, commit) {
 // --- main ---
 
 async function main() {
+  // DEBUG PROBE — sync write before anything else; confirms process is spawned
+  try { writeFileSync('/tmp/guya-spawn-probe', new Date().toISOString() + '\n', { flag: 'a' }); } catch {}
   try {
     const stdinData = await readStdinSync(3000);
     let input = {};
