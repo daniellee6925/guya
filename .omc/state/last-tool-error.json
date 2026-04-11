@@ -1,7 +1,0 @@
-{
-  "tool_name": "Read",
-  "tool_input_preview": "{\"file_path\":\"/Users/daniel/Desktop/lod-planner\"}",
-  "error": "EISDIR: illegal operation on a directory, read '/Users/daniel/Desktop/lod-planner'",
-  "timestamp": "2026-04-09T05:08:03.020Z",
-  "retry_count": 1
-}
