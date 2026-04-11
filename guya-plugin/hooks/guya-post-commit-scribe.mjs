@@ -227,8 +227,6 @@ function appendCommit(directory, commit) {
 // --- main ---
 
 async function main() {
-  // DEBUG PROBE — sync write before anything else; confirms process is spawned
-  try { writeFileSync('/tmp/guya-spawn-probe', new Date().toISOString() + '\n', { flag: 'a' }); } catch {}
   try {
     const stdinData = await readStdinSync(3000);
     let input = {};
@@ -239,12 +237,6 @@ async function main() {
     const toolName = input.tool_name || input.toolName || '';
     const toolInput = input.tool_input || input.toolInput || '';
     const directory = resolveProjectRoot(input.cwd || input.directory || process.cwd());
-
-    // DEBUG — log raw payload to file so we can see what Claude Code sends
-    try {
-      const { appendFileSync } = await import('fs');
-      appendFileSync('/tmp/guya-scribe-debug.jsonl', JSON.stringify({ toolName, toolInputKeys: Object.keys(typeof toolInput === 'object' ? toolInput : {}), toolInputType: typeof toolInput, rawKeys: Object.keys(input), isGitCommitResult: isGitCommit(toolName, toolInput) }) + '\n');
-    } catch {}
 
     if (!isGitCommit(toolName, toolInput)) {
       return output({ continue: true, suppressOutput: true });
