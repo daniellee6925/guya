@@ -3,7 +3,7 @@
 > Last updated: 2026-04-10
 
 ## Current Focus
-**Post-commit scribe verified and fixed.** Root cause: debug touch probe was position #1 in PostToolUse:Bash array, blocking scribe at position #2. Claude Code only runs the first hook per matcher array. Fixed by removing probe, making scribe the sole hook. Also confirmed: Claude Code does not hot-reload hooks.json mid-session — changes take effect on next session start. Verified clean on fresh session load.
+**Post-commit scribe delivery fixed via git hook.** Root cause: PostToolUse:Bash never dispatches in Claude Code (confirmed with wildcard `*` matcher + debug log — hook process never spawned). Fix: invoke scribe directly from `.git/hooks/post-commit` after sync-plugin runs, via synthetic payload. No more dependency on PostToolUse:Bash.
 
 ## Recent Changes
 - [2026-04-10] `4f14e9b` — fix: bump post-commit-scribe PostToolUse timeout from 3s to 5s
