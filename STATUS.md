@@ -1,11 +1,12 @@
 # guya — Status
 
-> Last updated: 2026-04-10 12:00 PT
+> Last updated: 2026-04-10
 
 ## Current Focus
-**Decision harness skill system update.** All 4 decision harnesses (bugfix, feature, refactor, kickoff) updated: now read ARCHITECTURE.md + CLAUDE.md before plan generation as a validation gate, post-implementation workflow added (pre-commit hook handles review, guya-deep-review for complex changes, guya-pr before PR), scribe command fixed to correct namespace, guya-document offer added to feature + kickoff. Also investigating post-commit-scribe hook timeout: STATUS.md missed 4 commits from today's skill rewrite session despite hook being wired correctly.
+**Post-commit scribe verified and fixed.** Root cause: debug touch probe was position #1 in PostToolUse:Bash array, blocking scribe at position #2. Claude Code only runs the first hook per matcher array. Fixed by removing probe, making scribe the sole hook. Also confirmed: Claude Code does not hot-reload hooks.json mid-session — changes take effect on next session start. Verified clean on fresh session load.
 
 ## Recent Changes
+- [2026-04-10] `4f14e9b` — fix: bump post-commit-scribe PostToolUse timeout from 3s to 5s
 - [2026-04-10] `0234387` — feat: update decision harnesses with architecture validation and post-impl workflow
 - [2026-04-10] `14bcbf8` — refactor: rewrite guya-learn, guya-optimize, guya-reflect, guya-evolve skills
 - [2026-04-10] `cfaa7bb` — refactor: rename and rewrite all three review skills

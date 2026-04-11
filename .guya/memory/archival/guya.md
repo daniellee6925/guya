@@ -198,3 +198,25 @@ Post-commit scribe creates duplicate entries in STATUS.md when there's a `pendin
 - Tools used: unknown, correction: no, that is wrong, Edit: guya-pre-commit-review.mjs, Edit: pre-commit-review-e2e.test.mjs, Edit: parse-add-args.test.mjs, Write: 2026-04-10-manual-2.md, Edit: guya.md, Edit: STATUS.md
 - Domains: general
 - Traces: 529
+
+
+## Session 2026-04-10 (skill rewrite session)
+
+Rewrote all review skills and four core skills following Anthropic's doc-skill.md format. Two commits: `cfaa7bb` (review skills), `14bcbf8` (core skills).
+
+**Review skill stack redesigned:**
+- `guya-karpathy-review` → `guya-review`: inlined Karpathy's 3 principles as distinct categories (Simplicity, Surgical Changes, Goal Verification); expanded Security/Race Conditions; added auto-fix step (Step 4) for unambiguous structural issues
+- `guya-review-followup` → `guya-deep-review`: added Performance category (algorithmic complexity, hot path allocations); added auto-fix step with behavioral fix patterns; flags test gaps to guya-tester
+- `guya-cr` → `guya-pr`: redesigned from redundant 3-pass review to pre-PR preparation skill — Codex fresh-eyes pass, readiness checklist (scope, breaking changes, migrations), PR summary generation. Removed from pre-commit gate entirely.
+
+**Core skills rewritten:** guya-learn, guya-optimize, guya-reflect, guya-evolve — all reformatted with Steps structure, WHY framing, and argument-hints.
+
+**Key decisions:**
+- guya-pr is report-only (optimizations have trade-offs requiring judgment); guya-review/guya-deep-review auto-fix (unambiguous findings)
+- "report vs fix" is now an explicit design decision for each skill, not a default
+- Skill descriptions are the primary trigger mechanism — must be pushy and specific
+
+**What was learned:**
+- Always read source material before rewriting a skill that references it — I reconstructed Karpathy guidelines from memory and missed Goal Verification entirely; Daniel caught it
+- Format mismatch (agent format vs skill format) causes rewrites — confirm format before writing
+- Daniel's guya-pr redundancy call: systems-level insight that the pre-commit gate already enforces review on every commit, so re-running categories at PR level adds no value
