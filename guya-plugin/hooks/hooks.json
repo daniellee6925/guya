@@ -73,6 +73,11 @@
         "hooks": [
           {
             "type": "command",
+            "command": "touch /tmp/guya-posttool-bash-probe",
+            "timeout": 5
+          },
+          {
+            "type": "command",
             "command": "node \"$CLAUDE_PLUGIN_ROOT\"/hooks/run.cjs \"$CLAUDE_PLUGIN_ROOT\"/hooks/guya-post-commit-scribe.mjs",
             "timeout": 5
           }
