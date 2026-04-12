@@ -17,9 +17,10 @@
  *   Completes in under 5 seconds
  */
 
-import { existsSync, readFileSync, readdirSync, mkdirSync } from 'fs';
+import { existsSync, readFileSync, readdirSync, mkdirSync, statSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
+import { fileURLToPath } from 'url';
 
 const GLOBAL_DIR = join(homedir(), '.claude', 'guya');
 const TOKEN_BUDGET = 2000;
@@ -107,6 +108,80 @@ function ensureProjectLocal(cwd) {
   }
 }
 
+// --- Reflection backlog (Phase 2 nudge) ---
+
+/**
+ * Compute the soft nudge for /guya-evolve based on accumulated reflections
+ * since the last manual evolve run.
+ *
+ * Returns null when there's nothing to nudge about (no backlog, or last
+ * evolve was today). Otherwise returns a one-line string suitable for
+ * prepending to the <guya-context> block.
+ *
+ * Pure-ish — only reads the filesystem. Tested by unit + verified end-to-end
+ * by running /guya-evolve and checking the next session start sees a fresh
+ * timestamp + zero backlog.
+ */
+export function computeReflectionNudge(cwd, opts = {}) {
+  const globalDir = opts.globalDir || GLOBAL_DIR;
+  const now = opts.now || (() => Date.now());
+  const reflectionsDir = join(cwd, '.guya', 'memory', 'reflections');
+  const lastEvolvedPath = join(globalDir, '.last-evolved');
+
+  let lastEvolvedMs = 0;
+  try {
+    if (existsSync(lastEvolvedPath)) {
+      const raw = readFileSync(lastEvolvedPath, 'utf-8');
+      const parsed = JSON.parse(raw);
+      lastEvolvedMs = parsed?.ts ? Date.parse(parsed.ts) : 0;
+      if (!Number.isFinite(lastEvolvedMs)) lastEvolvedMs = 0;
+    }
+  } catch {
+    // Treat unreadable/missing as "never evolved" — gives the nudge
+    // a chance to surface instead of silently swallowing the signal.
+    lastEvolvedMs = 0;
+  }
+
+  let reflectionFiles = [];
+  try {
+    if (existsSync(reflectionsDir)) {
+      reflectionFiles = readdirSync(reflectionsDir).filter(f => f.endsWith('.md'));
+    }
+  } catch (err) {
+    // readdirSync can only fail here for non-ENOENT reasons (permissions,
+    // filesystem error) since we existsSync'd above. Silently returning null
+    // would rot the backlog nudge — Daniel would never know evolve was
+    // accumulating state. Surface it to stderr so a failing dir shows up
+    // in hook debug output instead of disappearing.
+    process.stderr.write(`[guya-session-start] computeReflectionNudge: readdir failed for ${reflectionsDir}: ${err.message}\n`);
+    return null;
+  }
+  if (reflectionFiles.length === 0) return null;
+
+  // Count reflections newer than last-evolved (or all reflections if never evolved).
+  let backlog = 0;
+  for (const f of reflectionFiles) {
+    try {
+      const stat = statSync(join(reflectionsDir, f));
+      if (stat.mtimeMs > lastEvolvedMs) backlog++;
+    } catch {}
+  }
+  if (backlog === 0) return null;
+
+  // Days since last evolve (or null if never).
+  let daysClause;
+  if (lastEvolvedMs === 0) {
+    daysClause = 'no prior /guya-evolve runs recorded';
+  } else {
+    const days = Math.floor((now() - lastEvolvedMs) / (24 * 60 * 60 * 1000));
+    daysClause = days === 0
+      ? 'last evolve earlier today'
+      : `${days} day${days === 1 ? '' : 's'} since last evolve`;
+  }
+
+  return `📝 ${backlog} reflection${backlog === 1 ? '' : 's'} accumulated (${daysClause}). Run /guya-evolve to process them.`;
+}
+
 // --- Context Assembly ---
 
 function assembleContext(cwd) {
@@ -192,6 +267,15 @@ function assembleContext(cwd) {
     sections.push({ label: 'session-context', content: sessionCtx, priority: 5 });
   }
 
+  // 8. Reflection backlog nudge — soft signal that /guya-evolve is overdue.
+  // Highest priority so Daniel sees it before scrolling. Single line, only
+  // present when there's actually a backlog (computeReflectionNudge returns
+  // null otherwise to avoid noisy "all clear" messages every session).
+  const nudge = computeReflectionNudge(cwd);
+  if (nudge) {
+    sections.push({ label: 'reflection-nudge', content: nudge, priority: -1 });
+  }
+
   // Sort by priority (lower = higher priority, included first)
   sections.sort((a, b) => a.priority - b.priority);
 
@@ -260,4 +344,15 @@ async function main() {
   }
 }
 
-main();
+// Only invoke main() when this file is executed directly as a hook script,
+// NOT when it's imported for testing. Without this guard, importing
+// computeReflectionNudge from the test suite triggers main() at module load
+// — which opens a stdin listener that hangs the test process (caught during
+// Phase 2 guya-review verification). fileURLToPath is the cross-platform
+// equivalent of comparing __filename === process.argv[1].
+const isMain = (() => {
+  try { return fileURLToPath(import.meta.url) === process.argv[1]; }
+  catch { return false; }
+})();
+
+if (isMain) main();
