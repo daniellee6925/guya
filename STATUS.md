@@ -1,13 +1,12 @@
 # guya — Status
 
-> Last updated: 2026-04-13 10:00 PT
+> Last updated: 2026-04-13
 
 ## Current Focus
 **Skill expansion session.** Added `guya-scout` (2-phase codebase onboarding: Explore subagent → `scout-report.md` → bidirectional Q&A session). Updated `guya-decision-kickoff` to scaffold project docs (`context/core-beliefs.md`, `context/vision.md`, `ARCHITECTURE.md`, `STATUS.md`) and prompt `guya-setup` for clean repos before plan generation. Plan output aligned to `docs/plans/PLAN_*/` to match lod-planner format.
 
 ## Recent Changes
-- [2026-04-13] *(uncommitted)* — feat: add guya-scout skill (codebase onboarding, 2-phase with evals)
-- [2026-04-13] *(uncommitted)* — feat: update guya-decision-kickoff with project scaffold phase + lod-planner delegation
+- [2026-04-13] `f22037d` — feat: add guya-scout skill, update kickoff + decision harnesses
 - [2026-04-11] `1c7e0f2` — feat(guya): Phase 2 — manual /guya-evolve workflow + SessionStart nudge
 - [2026-04-11] `93a2308` — feat(guya): Phase 1 — reflection-driven self-edit synthesis (dry-run)
 - [2026-04-11] `8e5ae6a` — chore: remove OMC state files from tracking

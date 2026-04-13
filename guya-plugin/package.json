@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "type": "module",
   "description": "Guya self-evolving personal agent - Claude Code plugin",
+  "license": "MIT",
   "main": "tools/server.js",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.36.0",

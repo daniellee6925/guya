@@ -23,3 +23,6 @@ guya-plugin/skills/.omc/
 # OS
 .DS_Store
 **/.DS_Store
+
+# Personal drafts
+thoughts.txt
