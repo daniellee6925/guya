@@ -1,6 +1,6 @@
 # guya — Architecture
 
-> Last updated: 2026-04-10 23:00 PT
+> Last updated: 2026-04-13
 
 ## Current Architecture
 
@@ -36,7 +36,7 @@ guya/
 │   │   ├── guya-setup        # Install git hooks into any repo
 │   │   ├── guya-scribe       # Update STATUS.md / ARCHITECTURE.md / CLAUDE.md
 │   │   ├── guya-reflect      # Manual reflection cycle
-│   │   ├── guya-evolve       # Manual guideline consolidation
+│   │   ├── guya-evolve       # Combined synthesis → review → apply → consolidate
 │   │   ├── guya-learn        # Interactive teaching sessions
 │   │   ├── guya-review       # Code review (Karpathy principles)
 │   │   ├── guya-deep-review  # Second-pass review after fixes
@@ -46,7 +46,9 @@ guya/
 │   │   ├── guya-forget       # Remove a guideline or memory entry
 │   │   ├── guya-obsidian-sync # Sync knowledge to Obsidian
 │   │   ├── guya-skill-creator # Create/improve skills
-│   │   ├── guya-decision-bugfix / feature / kickoff / refactor  # Decision harnesses
+│   │   ├── guya-decision-bugfix / feature / refactor  # Decision harnesses
+│   │   ├── guya-decision-kickoff  # Kickoff harness: 12-question alignment → Project Setup scaffold → lod-planner delegation
+│   │   ├── guya-scout        # 2-phase codebase onboarding: Explore subagent → scout-report.md → bidirectional Q&A
 │   │   └── AGENTS.md         # Agent catalog (spawnable via Agent tool)
 │   └── agents/               # Agent definition files
 ├── scripts/
@@ -64,10 +66,18 @@ guya/
 │   │   └── review-evidence.jsonl  # Evidence accumulated by pre-commit review hook
 │   └── decisions/
 │       └── .active-session   # Active decision harness session marker
-├── ~/.claude/guya/           # Global Guya identity (works across all projects)
-│   ├── identity files        # Soul, creed, personality
-│   ├── guidelines/strategic/ # Strategic guidelines (cross-project, LLM-synthesized)
-│   └── user profile          # Daniel's profile, interests, growth tracking
+├── ~/.claude/guya/           # Global Guya identity — GIT REPO (versioned since 2026-04-11)
+│   ├── .git/                 # Full history of identity edits; every /guya-evolve creates commits
+│   ├── .commit-log           # NDJSON audit trail of every commit-identity.mjs invocation
+│   ├── .last-evolved         # JSON timestamp + summary of last /guya-evolve run
+│   ├── .last-consolidated    # ISO timestamp of last consolidator run
+│   ├── soul.md               # Identity anchor — the bear, the commitments, session behaviors
+│   ├── identity.md           # Presentation: name, origin, vibe
+│   ├── user.md               # Daniel's profile, patterns, growth areas
+│   ├── growth-tracker.md     # Grades, trajectory, milestones (Karpathy target)
+│   ├── pre-commit-config.json # Review gate thresholds (shared across projects)
+│   ├── guidelines/strategic/ # Strategic guidelines (cross-project, reflection-synthesized)
+│   └── traces/               # Daily JSONL trace files (gitignored, machine state)
 └── .git/hooks/post-commit    # Git hook: sync-plugin.sh → guya-post-commit-scribe.mjs
 ```
 
@@ -107,20 +117,26 @@ Edit guya-plugin/ source
 
 The scribe is invoked from the git hook rather than PostToolUse:Bash because PostToolUse with specific tool names (including Bash) does not dispatch in Claude Code. A synthetic JSON payload `{"tool_name":"Bash","tool_input":{"command":"git commit"},"cwd":"..."}` is piped to the scribe so it passes `isGitCommit()` detection.
 
-### Evolution Pipeline (session-end)
+### Evolution Pipeline (manual via /guya-evolve)
 
 ```
-traces/ (raw tool-use events)
+.guya/memory/reflections/ (manual reflections via /guya-reflect)
         │
-        ▼ guya-observer (haiku) — classify: tactical/strategic, domain, confidence
+        ▼ guya-reflection-synthesizer (sonnet) — blast-radius routing
         │
-        ▼ guya-synthesizer (sonnet) — generate candidate guidelines
-        │
-        ├─ tactical → .guya/evolution/guidelines/ (project-local)
-        └─ strategic → ~/.claude/guya/guidelines/strategic/ (global)
+        ├─ guidelineEdits       → auto-apply to ~/.claude/guya/guidelines/strategic/
+        ├─ userProfileAdditions → auto-append to ~/.claude/guya/user.md
+        └─ identityProposals    → per-item review with diff (soul.md, growth-tracker.md)
+                │                  ≥2 source reflections required (anti-oscillation)
                 │
-                ▼ (manual or triggered) guya-consolidator (opus) — merge, prune, re-rank
+                ▼ guya-consolidator (opus) — merge, prune, re-rank (runs if stale >7d)
+                │
+                ▼ commit-identity.mjs → git commit to ~/.claude/guya/ (versioned repo)
 ```
+
+**Key decision (2026-04-11):** Manual invocation over auto session-end trigger. Reflections are written deliberately (via /guya-reflect), so consumption should be deliberate too. Auto-fire invited silent rot — the API key died for 6 days with no one noticing because the auto loop ran unattended. SessionStart surfaces a backlog nudge ("📝 N reflections accumulated") when /guya-evolve hasn't run recently.
+
+Legacy trace-driven pipeline (guya-observer → guya-synthesizer in session-end) is still wired but produced near-zero useful output. The reflection-driven pipeline replaces it as the primary evolution mechanism.
 
 ### Context Assembly (session-start)
 
@@ -187,3 +203,12 @@ The soul spec includes convergence tracking (detecting when Daniel is scattered 
 | 2026-04-10 | sync-plugin.sh + git post-commit hook together form the plugin delivery pipeline | Claude Code reads from plugin cache, not source; sync must happen before scribe runs the latest scripts |
 | 2026-04-10 | guya-setup skill added: installs post-commit hook into any guya-enabled repo | Makes scribe portable without requiring full guya source tree |
 | 2026-04-10 | PostToolUse hooks.json simplified to Write\|Edit only; Bash entry removed as dead code | Removes maintenance burden of a non-dispatching entry |
+| 2026-04-11 | `~/.claude/guya/` initialized as git repo | Every /guya-evolve self-edit lands as a discrete commit; full revert history for identity-layer changes |
+| 2026-04-11 | Reflection-driven synthesis replaces trace-driven synthesis | Reflections are pre-distilled high-signal input; traces were raw noise that produced near-zero useful guidelines over 6 days |
+| 2026-04-11 | Manual /guya-evolve invocation, not auto session-end trigger (amends ADR-002) | Auto-fire invited silent rot (API key died for 6 days unnoticed). Reflections are deliberate; consumption should be too |
+| 2026-04-11 | Tiered blast-radius routing: auto-apply for guidelines + user.md additions; per-item approval for soul/identity/growth-tracker edits | Low-blast edits don't need per-item gates; identity edits do |
+| 2026-04-11 | Anti-oscillation guardrail: identity proposals require ≥2 source reflections | Single-reflection identity edits risk mood-of-the-day oscillation; momentum threshold filters noise |
+| 2026-04-11 | guya-evolve and guya-self-edit merged into single skill | Less complexity; the review IS the application; no proposed-edits queue needed |
+| 2026-04-11 | SessionStart backlog nudge: soft one-liner showing reflection count + days since last evolve | Prevents "forgot to evolve" drift without being aggressive; computeReflectionNudge reads .last-evolved marker |
+| 2026-04-13 | guya-scout skill added: 2-phase codebase onboarding (Explore subagent → scout-report.md → bidirectional Q&A) | Eval-validated: ~17% token efficiency gain; Phase 2 bidirectional Q&A is primary differentiator over baseline |
+| 2026-04-13 | guya-decision-kickoff updated: Project Setup phase scaffolds context/core-beliefs.md, context/vision.md, ARCHITECTURE.md, STATUS.md for clean repos; guya-setup prompted for fresh repos; plan path aligned to docs/plans/PLAN_*/ (lod-planner format) | New repos need standard scaffolding to be guya-compatible from day 1; plan path alignment removes friction with lod-planner delegation |

@@ -34,6 +34,7 @@ Staff-engineer-level decision harnesses for major decisions:
 | `guya-decision-bugfix/SKILL.md` | guya-decision-bugfix | Staff-engineer-level decision harness for bug fixes |
 | `guya-decision-kickoff/SKILL.md` | guya-decision-kickoff | Staff-engineer-level decision harness for project kickoffs |
 | `guya-decision-refactor/SKILL.md` | guya-decision-refactor | Staff-engineer-level decision harness for refactors |
+| `guya-distinguished-engineer/SKILL.md` | guya-distinguished-engineer | Project direction harness — discuss, update, and review alignment against core beliefs and vision |
 
 ## Code Review Skills
 

@@ -71,6 +71,8 @@ After I collect your answers, I'll:
 **Before generating the plan**, read:
 1. `ARCHITECTURE.md` — check the proposed feature direction against existing architectural decisions and the Decision Log. Flag if this contradicts or duplicates a prior ADR.
 2. `CLAUDE.md` — check against LOD rules, file size constraints, module responsibilities, and project guidelines. Flag violations before proceeding.
+3. `context/core-beliefs.md` (if present) — treat these as hard invariants. Flag any plan element that violates a core belief before proceeding.
+4. `context/vision.md` (if present) — check that the feature moves toward the stated vision, not away from it.
 
 Surface any conflicts in the alignment confirmation: "Here's where this plan bumps against existing architecture or constraints — do you want to proceed or adjust?" Only generate the plan after alignment is confirmed.
 

@@ -93,20 +93,53 @@ After I collect your answers, I'll:
 **Before generating the plan**, read:
 1. `ARCHITECTURE.md` — if this project extends an existing system, check the proposed architecture against existing decisions and the Decision Log. Flag conflicts with prior ADRs.
 2. `CLAUDE.md` — check the proposed stack and file structure against LOD rules, module responsibility constraints, and project guidelines. A new project should start compliant.
+3. `context/core-beliefs.md` (if present) — treat these as hard invariants. Flag any architecture element that violates a core belief before proceeding.
+4. `context/vision.md` (if present) — check that the kickoff plan is pointed at the stated vision. A new project that starts misaligned won't correct itself later.
 
 Surface any conflicts in the alignment confirmation: "Here's where this plan bumps against existing architecture or constraints — do you want to proceed or adjust?" Only generate the plan after alignment is confirmed.
+
+## Project Setup (runs after alignment is confirmed, before plan generation)
+
+For new/clean repos this is mandatory. For existing repos, only scaffold what's missing.
+
+**Detect a clean repo:** check for absence of `ARCHITECTURE.md`, `context/`, `STATUS.md`, `.guya/`.
+
+### 1. Scaffold missing docs
+
+Create these files if they don't exist, seeded with content from the 12-question answers:
+
+**`context/core-beliefs.md`** — use the template from `guya-plugin/skills/guya-distinguished-engineer/SKILL.md`. Seed with: project name and one-liner (Q1), differentiator vs alternatives (Q4 stack justification), and 2-3 seed beliefs derived directly from the architecture choices in Q5-Q7. Leave the rest for Daniel to fill in over time. Tell him: "Seeded with 3 beliefs from your architecture decisions — flesh it out with `/guya:guya-distinguished-engineer` once the system has more shape."
+
+**`context/vision.md`** — use the template from `guya-plugin/skills/guya-distinguished-engineer/SKILL.md`. Seed with: one-liner from Q1, MVP capabilities from Q3, and acceptance criteria derived from Q8 (first working slice = first acceptance criterion). Tell him: "Seeded with your MVP scope — add acceptance criteria for each capability as they solidify."
+
+**`ARCHITECTURE.md`** — create with sections: Overview (one paragraph from Q1+Q2), Key Decisions (pre-fill with Phase 0 decisions from Q4-Q7 as ADR entries), Module Map (from Q5 file tree), and a Decision Log header. The post-commit scribe will append to this.
+
+**`STATUS.md`** — create with sections: Current Focus (`Kickoff complete — entering Phase 0`), Recent Changes (empty), In-Progress, TODO, and Known Issues. The post-commit scribe appends here automatically.
+
+### 2. Run guya-setup for clean repos
+
+If `.guya/` doesn't exist (fresh repo), tell Daniel:
+
+> "Fresh repo detected — running `/guya:guya-setup` to wire the post-commit scribe and pre-commit review gate. Do this before your first commit."
+
+Prompt him to run it now, before plan generation, so the hooks are in place from commit 1.
+
+---
 
 ## Output
 
 - **Decision doc**: `.guya/decisions/kickoff-{YYYYMMDD-HHMM}.md`
-- **Full Plan**: `.guya/plans/kickoff-{name}/` (all 6 files, ready for TDD)
+- **LOD Plan**: `docs/plans/PLAN_{name}/` (all 6 files, following lod-planner format)
   - `00-overview.md` — metadata, test strategy, architecture decisions
   - `01-phase0-architecture.md` — file tree, calling specs, LOD pattern evaluation
   - `02-phase1-*.md` through phase N — TDD implementation phases
   - `checklist.md` — final LOD compliance
   - `risks.md` — risk table + rollback
   - `notes.md` — living implementation log
+- **Scaffolded docs**: `context/core-beliefs.md`, `context/vision.md`, `ARCHITECTURE.md`, `STATUS.md` (if new repo)
 - **Task**: Created with plan path
+
+Generate the plan using lod-planner's full workflow — read `lod-planner/SKILL.md` from the plugin or Desktop for the exact phase format, pattern detection guide, and quality gate standards. The 12-question answers give you everything lod-planner needs: requirements (Q1-Q3), stack (Q4), file tree (Q5), calling specs (Q6), patterns (Q7), first slice (Q8), constraints (Q9), test strategy (Q10), risks (Q11).
 
 This is the most detailed output of all harnesses because new projects have the longest runway.
 

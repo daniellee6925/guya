@@ -75,6 +75,8 @@ After I collect your answers, I'll:
 **Before generating the plan**, read:
 1. `ARCHITECTURE.md` — check the proposed target state against existing architectural decisions and the Decision Log. Flag if the refactor contradicts a prior ADR or the stated target architecture.
 2. `CLAUDE.md` — check against LOD rules, file size limits, module responsibilities, and project constraints. The refactor should move the codebase *toward* compliance, not away from it.
+3. `context/core-beliefs.md` (if present) — the target state after refactor should be *more* aligned with core beliefs, not less. Flag if the proposed target state drifts from them.
+4. `context/vision.md` (if present) — check that the refactor moves toward the stated vision. A refactor that improves code quality while moving away from vision is still the wrong refactor.
 
 Surface any conflicts in the alignment confirmation: "Here's where this plan bumps against existing architecture or constraints — do you want to proceed or adjust?" Only generate the plan after alignment is confirmed.
 

@@ -1,0 +1,44 @@
+{
+  "skill_name": "guya-scout",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "scout this",
+      "expected_output": "A scout-report.md file at the repo root with all 6 sections: What Is This, System Architecture, Design Philosophy, Component Catalog, Key Files, Non-Obvious Things. Then a prompt asking Daniel to read and say ready.",
+      "files": [],
+      "assertions": [
+        "scout-report.md exists at target directory",
+        "report contains a System Architecture section",
+        "report contains a Component Catalog section (table format)",
+        "report contains a Design Philosophy section derived from actual files (CLAUDE.md, core-beliefs.md, etc)",
+        "report contains a Key Files section with specific file names",
+        "report contains a Non-Obvious Things section",
+        "model waits for user to say 'ready' before continuing"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "help me understand the guya-plugin/skills directory — what skills exist and how are they structured",
+      "expected_output": "Scoped report on just the skills directory: lists all skills with descriptions, explains SKILL.md structure, explains the anatomy pattern (scripts/, references/, assets/).",
+      "files": [],
+      "assertions": [
+        "scout-report.md or equivalent output is written to disk",
+        "all skills in guya-plugin/skills/ are listed",
+        "SKILL.md frontmatter structure is explained",
+        "skill anatomy (scripts/, references/, assets/) is described"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "onboard me to this codebase, I've never seen it before",
+      "expected_output": "Same as eval 1 — full report + interactive session prompt. Tests that natural-language phrasing triggers the same structured flow.",
+      "files": [],
+      "assertions": [
+        "scout-report.md is written",
+        "report has at least 5 of the 6 required sections",
+        "interactive session is offered after report",
+        "report cites actual file names from the codebase (not generic placeholders)"
+      ]
+    }
+  ]
+}

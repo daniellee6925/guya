@@ -45,6 +45,22 @@ One sentence: what is actively being worked on right now.
 (Append-only. Never remove unless user asks.)
 ```
 
+When removing completed TODO items (after 3 days) or Decisions & Notes entries older than 30 days, move them to `context/archive.md` instead of deleting. Create the file if it doesn't exist.
+
+```markdown
+# [Project Name] — Archive
+
+Completed work and historical decisions moved from STATUS.md.
+
+## Archived TODOs
+
+- [archived YYYY-MM-DD] [x] original item
+
+## Archived Decisions
+
+- [YYYY-MM-DD] original decision entry
+```
+
 ---
 
 ### Track 2: ARCHITECTURE.md (spawn guya-document agent)

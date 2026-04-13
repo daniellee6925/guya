@@ -65,6 +65,7 @@ After I collect your answers, I'll:
 **Before generating the plan**, read:
 1. `ARCHITECTURE.md` — check the fix direction against existing architectural decisions and the Decision Log. Flag if the proposed fix conflicts with or violates a prior ADR.
 2. `CLAUDE.md` — check against LOD rules, module responsibilities, and project constraints. Flag violations before proceeding.
+3. `context/core-beliefs.md` (if present) — check the fix approach doesn't violate a core belief as a shortcut (e.g., breaking plugin boundaries to ship a patch faster).
 
 Surface any conflicts in the alignment confirmation: "Here's where this plan bumps against existing architecture or constraints — do you want to proceed or adjust?" Only generate the plan after alignment is confirmed.
 

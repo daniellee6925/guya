@@ -1,5 +1,8 @@
 # Guya — Self-Evolving Personal Agent System
 
+@context/core-beliefs.md
+@context/vision.md
+
 ## Goal
 
 I open Claude Code and Guya already knows who I am, what I care about, and gets better every session without me telling it to. Everything in this project serves that sentence.
@@ -25,7 +28,7 @@ I open Claude Code and Guya already knows who I am, what I care about, and gets 
 
 | ADR | Decision | Why |
 |-----|----------|-----|
-| 001 | Hybrid platform (standalone core + Claude Code interface) | Core owns identity; Claude Code provides OMC/hooks/skills |
+| 001 | Hybrid platform (standalone core + Claude Code interface) | Core owns identity; Claude Code provides hooks/skills/MCP |
 | 002 | Fully autonomous evolution (no approval gates) | Fastest evolution without friction |
 | 003 | Universal scope (all domains, not just coding) | Daniel uses this for everything |
 | 004 | Hook-native v1 (plugin + MCP + markdown, no daemon) | Minimal infra; daemon deferred to v2 |
@@ -33,8 +36,6 @@ I open Claude Code and Guya already knows who I am, what I care about, and gets 
 | 006 | Two-track learning (fast regex heuristics + slow LLM classification) | Immediate corrections + async pattern learning |
 | 007 | Challenge first, support second (soul = unconditional care + hard truth) | Named after Daniel's teddy bear — genuine care + growth |
 | 008 | Daniel-specific amendments (convergence tracking, custom SCOPE domains, teaching, emotional awareness) | Generic agent behavior doesn't serve Daniel's growth needs |
-
-Full plan: `.omc/plans/guya-architecture.md`
 
 ## Research Foundations
 
@@ -47,7 +48,7 @@ Architecture synthesizes ideas from: Letta/MemGPT (three-tier memory), EvolveCla
 - [x] Key decisions: Hybrid platform, fully autonomous evolution, universal scope
 - [x] Architectural synthesis complete
 - [x] CLAUDE.md created
-- [x] Architecture design — ralplan consensus (Planner → Architect R1 ITERATE → Critic R1 REVISE → R2 revisions → Architect R2 APPROVE → Critic R2 ACCEPT). Full plan: `.omc/plans/guya-architecture.md`
+- [x] Architecture design — Planner/Architect/Critic consensus loop (R1 iterate → R2 approve)
 - [x] **Phase 1**: Foundation (Identity + Core Memory + Context Assembly) — commit c26821e
 - [x] **Phase 2**: Bootstrap (First-Run Interview) — guya-bootstrap skill
 - [x] **Phase 3**: Memory Tools (MCP Server + Self-Editing) — 14 MCP tools, server.js, @modelcontextprotocol/sdk
@@ -61,4 +62,4 @@ Architecture synthesizes ideas from: Letta/MemGPT (three-tier memory), EvolveCla
 - TypeScript for standalone components, markdown for identity/memory/skills
 - Every architectural decision gets an ADR entry in this file
 - Every session should update the "Current Status" section before ending
-- Use `.omc/` for OMC integration state, `guya/` for Guya's own state
+- Use `.guya/` for Guya's project-local state (memory, evolution, reflections)

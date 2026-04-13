@@ -35,6 +35,7 @@ Staff-engineer-level decision harnesses. Each forces structured thinking before 
 | `guya-decision-feature/` | guya-decision-feature | Feature harness. Forces requirements, design, and test-plan thinking before implementation. |
 | `guya-decision-bugfix/` | guya-decision-bugfix | Bug-fix harness. Forces root-cause analysis and reproduction before any fix. |
 | `guya-decision-refactor/` | guya-decision-refactor | Refactor harness. Forces scoping, behavior-preservation contract, and rollback plan. |
+| `guya-distinguished-engineer/` | guya-distinguished-engineer | Project direction harness. Discusses what the program fundamentally IS, challenges drift against core beliefs, and maintains `context/core-beliefs.md` and `context/vision.md`. |
 
 ### Code Review and Quality
 
@@ -50,6 +51,12 @@ Staff-engineer-level decision harnesses. Each forces structured thinking before 
 | Directory | Skill | Purpose |
 |-----------|-------|---------|
 | `guya-learn/` | guya-learn | Interactive learning session from first principles with active recall and progress tracking. |
+
+### Codebase Exploration
+
+| Directory | Skill | Purpose |
+|-----------|-------|---------|
+| `guya-scout/` | guya-scout | Codebase onboarding: Explore subagent generates scout-report.md (8 sections incl. Directory Map + Where to Start), then bidirectional Q&A session. |
 
 ## guya-setup Detail
 
