@@ -6,6 +6,7 @@
 **Skill expansion session.** Added `guya-scout` (2-phase codebase onboarding: Explore subagent → `scout-report.md` → bidirectional Q&A session). Updated `guya-decision-kickoff` to scaffold project docs (`context/core-beliefs.md`, `context/vision.md`, `ARCHITECTURE.md`, `STATUS.md`) and prompt `guya-setup` for clean repos before plan generation. Plan output aligned to `docs/plans/PLAN_*/` to match lod-planner format.
 
 ## Recent Changes
+- [2026-04-13] `cf5283a` — docs: add README, PHILOSOPHY, MIT license, and hero image
 - [2026-04-13] `f22037d` — feat: add guya-scout skill, update kickoff + decision harnesses
 - [2026-04-11] `1c7e0f2` — feat(guya): Phase 2 — manual /guya-evolve workflow + SessionStart nudge
 - [2026-04-11] `93a2308` — feat(guya): Phase 1 — reflection-driven self-edit synthesis (dry-run)

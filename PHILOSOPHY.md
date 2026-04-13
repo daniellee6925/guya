@@ -1,4 +1,14 @@
-# Guya
+# Creation Philosophy
+
+
+## TL;DR
+
+Most people are chasing the best setup. I think the thing worth chasing is the best *workflow* — and that only comes from looking honestly at what you specifically struggle with, what you specifically repeat, what you specifically want to get better at, and building toward that.
+
+Use AI to improve your workflow. Don't bend your workflow to fit what other people's AI setups look like.
+
+---
+
 
 A personal AI coding harness. Built for one rider, by that rider.
 
@@ -8,6 +18,8 @@ A personal AI coding harness. Built for one rider, by that rider.
 > - **Plugin** — in Claude Code, a bundle of commands, hooks, and tools you can install to extend the agent. Guya is a plugin.
 
 ---
+
+
 
 ## Why this exists
 
@@ -53,28 +65,32 @@ The ralplan thing was the origin story, but once I started paying attention, I s
 
 *Guya's fix:* `/guya-reflect` at the end of a session writes down what happened. `/guya-evolve` reads accumulated reflections and proposes updates to Guya's own guidelines. I review, approve, and the next session actually behaves differently. The realization becomes permanent instead of evaporating.
 
-**Sneaking past my own quality gates.** I built a pre-commit review hook specifically because I wanted every commit to get reviewed. Then I'd be in a rush, run `git add && git commit`, and the hook wouldn't fire because of how I'd wired it. I was literally designing a safeguard and then routing around it whenever it was inconvenient. Classic.
-
-*Guya's fix:* the hook now runs unconditionally and actually blocks. Not a suggestion, not a warning. If the review fails, the commit doesn't land. The version of me who's tired at 1 a.m. doesn't get to negotiate with it.
-
-Different failures, same underlying shape every time: I know the right thing, I don't do the right thing, I need a system that makes the wrong thing harder than the right thing.
+Different failures, same underlying shape: I know the right thing, I don't do the right thing, I need a system that makes the wrong thing harder than the right thing.
 
 ## What a session actually looks like
 
 Before Guya, starting a feature looked like:
 
 > **Me:** add a retry layer to the API client
+>
 > **Claude:** *writes 200 lines*
+>
 > **Me:** okay cool, commit it
+>
 > *(three days later I'm debugging why it retries on 4xx errors)*
 
 With Guya, it looks like:
 
 > **Me:** `/guya-decision-feature` add a retry layer to the API client
+>
 > **Guya:** What's the scope — which calls, which error classes? What's out of scope? What does success look like? What's the blast radius if this is wrong?
+>
 > **Me:** *stuck for a minute, then actually answers*
+>
 > **Guya:** Okay, here are three approaches with tradeoffs. You pick.
+>
 > **Me:** *picks one, now actually understands why*
+>
 > **Claude:** *writes the code*
 
 Same model. Same repo. The difference is that I thought before Claude typed. That's the whole product.
@@ -85,14 +101,6 @@ Same model. Same repo. The difference is that I thought before Claude typed. Tha
 - **Accumulates a model of me.** A user profile, a growth tracker, and a set of guidelines that come from watching how I actually work. Over time the harness fits better because it knows more about the rider it's on.
 - **Evolves from reflection.** After sessions I write a short reflection on what went well and what didn't. The system reads those reflections and proposes updates to its own behavior. I review, approve, and the applied changes show up in the next session automatically. The personalization compounds instead of evaporating.
 - **Grows the rider, not just compensates for one.** This is the part I care most about. A harness that just papers over my weaknesses turns into a crutch. The growth tracker watches specific areas I'm trying to improve (code review, architecture, debugging from first principles) so the system knows which parts of me are supposed to need less scaffolding over time, not more.
-
-## The two-sided bet
-
-There's a line I almost put at the top: *don't adapt yourself to AI, adapt AI to you*. It's catchy but half-right.
-
-If I only adapt AI to me, the harness cements my current weaknesses. I stay a newbie rider forever, just with a really comfortable saddle.
-
-The actual bet is both directions at once. Shape the harness to fit who I am today, and let the harness push me toward being someone who needs less of it tomorrow. Personalization on one side, growth on the other. Neither alone is enough.
 
 ## The mental model underneath all this
 
@@ -116,10 +124,8 @@ And that's why Guya is built mostly out of three primitives:
 
 Agents for isolation. Skills for repeatability. Hooks for things that have to happen whether you feel like it or not.
 
-## The point
 
-Most people are chasing the best setup. I think the thing worth chasing is the best *workflow* — and that only comes from looking honestly at what you specifically struggle with, what you specifically repeat, what you specifically want to get better at, and building toward that.
 
-Use AI to improve your workflow. Don't bend your workflow to fit what other people's AI setups look like.
+## Don't blindly adapt yourself to AI — see how AI can adapt to you too.
 
-That's the whole idea.
+
