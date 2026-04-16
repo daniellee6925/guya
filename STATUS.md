@@ -3,9 +3,10 @@
 > Last updated: 2026-04-13
 
 ## Current Focus
-**Skill expansion session.** Added `guya-scout` (2-phase codebase onboarding: Explore subagent → `scout-report.md` → bidirectional Q&A session). Updated `guya-decision-kickoff` to scaffold project docs (`context/core-beliefs.md`, `context/vision.md`, `ARCHITECTURE.md`, `STATUS.md`) and prompt `guya-setup` for clean repos before plan generation. Plan output aligned to `docs/plans/PLAN_*/` to match lod-planner format.
+**Public-facing docs + licensing.** Created `PHILOSOPHY.md` (personal thesis doc from `thoughts.txt` — rider > harness, ralplan failure story, two-sided adaptation, context/memory/planning mental model). Created product-style `README.md` modeled after oh-my-claudecode (badges, hero image, quick start, command tables, architecture overview). Added MIT `LICENSE`; updated `plugin.json` + `guya-plugin/package.json` license fields. Moved `image.png` → `assets/guya.png`. Removed 930 lines of `guya-scout-workspace/` iteration-1 eval scratch from the shipped plugin. `thoughts.txt` added to `.gitignore` as a personal draft.
 
 ## Recent Changes
+- [2026-04-13] `2d0f6c3` — chore: remove guya-scout-workspace eval artifacts
 - [2026-04-13] `dc994b1` — docs: restructure PHILOSOPHY — TL;DR on top, tighter closing
 - [2026-04-13] `cf5283a` — docs: add README, PHILOSOPHY, MIT license, and hero image
 - [2026-04-13] `f22037d` — feat: add guya-scout skill, update kickoff + decision harnesses
@@ -76,3 +77,7 @@
 - [2026-04-11] **Dead `review-gate.json` identified.** Pre-commit hook now uses `review-evidence.jsonl` (JSONL with initial + followup steps). The old single-boolean `review-gate.json` is only referenced by the post-commit scribe. Deletion deferred to Phase 5.
 - [2026-04-13] **`guya-scout` skill added.** 2-phase codebase onboarding: Explore subagent generates `scout-report.md` (8 sections incl. Directory Map, Where to Start) → bidirectional interactive Q&A (Guya quizzes Daniel + Daniel asks questions). Eval showed ~17% token efficiency gain over baseline; Phase 2 (interactive session) is the primary differentiator — baseline has zero concept of it.
 - [2026-04-13] **`guya-decision-kickoff` updated.** Added Project Setup phase: scaffolds `context/core-beliefs.md` and `context/vision.md` (seeded from 12-question answers), `ARCHITECTURE.md`, and `STATUS.md` for clean repos. Prompts `guya-setup` for fresh repos before plan generation. Plan output path changed from `.guya/plans/` to `docs/plans/PLAN_*/` to align with lod-planner format. Explicit lod-planner delegation added.
+- [2026-04-13] **Public-facing docs split.** Turned `thoughts.txt` into `PHILOSOPHY.md` as the personal thesis doc. Created a separate product-style `README.md` (oh-my-claudecode layout) so first-time readers get commands + install up top and can click through to PHILOSOPHY for the *why*. Two audiences, two docs.
+- [2026-04-13] **MIT license chosen.** Added `LICENSE` at root and set `license: MIT` in both `guya-plugin/.claude-plugin/plugin.json` and `guya-plugin/package.json` (was `UNLICENSED`). Matches the "open for reading + forking" posture stated in the README.
+- [2026-04-13] **`guya-scout-workspace` removed from shipped plugin.** 8 files (930 lines) of iteration-1 eval outputs were checked in under `guya-plugin/skills/guya-scout-workspace/`. Eval scratch artifacts don't belong in the distributed plugin. Deleted via `git rm -r`.
+- [2026-04-13] **Image relocated to `assets/guya.png`.** Also added `thoughts.txt` to `.gitignore` — it's a personal draft, superseded by `PHILOSOPHY.md`.
