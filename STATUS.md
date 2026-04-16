@@ -1,11 +1,12 @@
 # guya — Status
 
-> Last updated: 2026-04-13
+> Last updated: 2026-04-16
 
 ## Current Focus
 **Public-facing docs + licensing.** Created `PHILOSOPHY.md` (personal thesis doc from `thoughts.txt` — rider > harness, ralplan failure story, two-sided adaptation, context/memory/planning mental model). Created product-style `README.md` modeled after oh-my-claudecode (badges, hero image, quick start, command tables, architecture overview). Added MIT `LICENSE`; updated `plugin.json` + `guya-plugin/package.json` license fields. Moved `image.png` → `assets/guya.png`. Removed 930 lines of `guya-scout-workspace/` iteration-1 eval scratch from the shipped plugin. `thoughts.txt` added to `.gitignore` as a personal draft.
 
 ## Recent Changes
+- [2026-04-16] `c42fc5c` — chore(guya): record Apr 13 docs + licensing session in memory/status
 - [2026-04-13] `2d0f6c3` — chore: remove guya-scout-workspace eval artifacts
 - [2026-04-13] `dc994b1` — docs: restructure PHILOSOPHY — TL;DR on top, tighter closing
 - [2026-04-13] `cf5283a` — docs: add README, PHILOSOPHY, MIT license, and hero image
