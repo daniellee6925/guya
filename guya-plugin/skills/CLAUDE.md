@@ -10,7 +10,7 @@ Skills are invoked via `/guya-skill-name` or by matching trigger phrases listed 
 
 | Directory | Skill | Purpose |
 |-----------|-------|---------|
-| `guya-setup/` | guya-setup | Install Guya git hooks into any repo. Writes `.git/hooks/post-commit` to wire the post-commit scribe. Run once per repo. |
+| `guya-setup/` | guya-setup | Bootstrap Guya in any repo — creates `.guya/` directory tree, writes `pre-commit-config.json`, installs post-commit scribe and pre-commit quality gate. Run once per repo. |
 
 ### Core / Identity
 
@@ -62,14 +62,16 @@ Staff-engineer-level decision harnesses. Each forces structured thinking before 
 
 `guya-setup` exists because `PostToolUse:Bash` does not dispatch in Claude Code (platform constraint). The post-commit scribe (`guya-post-commit-scribe.mjs`) therefore cannot be driven by a Claude Code hook — it must be registered as a native git hook.
 
-`guya-setup` installs that git hook. It must be run once in each repo where Guya should be active:
+`guya-setup` bootstraps Guya in a repo. It must be run once where Guya should be active:
 
 1. Verifies the directory is a git repo.
-2. Checks whether `.git/hooks/post-commit` already contains the scribe block.
-3. Writes a fresh hook or appends the scribe block to an existing one.
-4. Makes the hook executable.
+2. Creates the `.guya/` directory tree (`memory/{core,recall,archival,reflections}`, `evolution/{traces,guidelines}`, `decisions/`).
+3. Copies `pre-commit-config.json` into `.guya/` if none exists.
+4. Installs `.git/hooks/post-commit` (scribe) — fresh or appended if a non-guya hook exists.
+5. Installs `.git/hooks/pre-commit` (quality gate) — only if no existing pre-commit hook is present. Never clobbers.
+6. Verifies and reports what changed.
 
-The installed hook is a self-contained bash script that locates the Guya plugin in the Claude Code plugin cache at runtime, then invokes `guya-post-commit-scribe.mjs` via `run.cjs`. It exits silently if `.guya/` does not exist in the repo root, so it is safe to install in repos that are not yet Guya-enabled.
+Templates for both hooks and the default config live in `skills/guya-setup/templates/`. The post-commit hook is a self-contained bash script that locates the Guya plugin in the cache at runtime and invokes `guya-post-commit-scribe.mjs` via `run.cjs`; it exits silently if `.guya/` does not exist. The pre-commit hook reads `.guya/pre-commit-config.json` and enforces test-file existence, file/function LOC limits, and a cleanup scan.
 
 Trigger phrases: "guya setup", "install guya hooks", "set up guya in this repo", "add guya hooks here".
 

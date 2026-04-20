@@ -1,0 +1,29 @@
+{
+  "reviewExempt": ["*.yaml", "*.yml", "*.md", "*.json", "*.toml", "*.css", "*.html", "*.txt", "*.cfg", "*.ini", "*.env.example"],
+  "pathExempt": ["docs/", ".guya/", ".omc/", ".claude/"],
+  "testRequired": {
+    "extensions": [".py"],
+    "patterns": [
+      "tests/{dir}/test_{base}.py",
+      "tests/{stripped}/test_{base}.py",
+      "tests/test_{base}.py",
+      "{dir}/test_{base}.py"
+    ],
+    "exclude": ["__init__.py", "conftest.py", "fixture*.py", "*.config.py"]
+  },
+  "complexity": {
+    "maxFileLOC": 800,
+    "maxFunctionLines": 80
+  },
+  "cleanup": {
+    "patterns": {
+      "python": ["HACK", "FIXME", "breakpoint()", "pdb.set_trace"],
+      "javascript": ["HACK", "FIXME", "debugger"]
+    }
+  },
+  "smallChange": {
+    "maxLines": 10
+  },
+  "skipOnMerge": true,
+  "gateMaxAgeMinutes": 30
+}

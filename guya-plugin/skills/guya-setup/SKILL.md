@@ -1,80 +1,111 @@
 ---
 name: guya-setup
-description: Install Guya git hooks into the current repo. Run once in any guya-enabled repo to get post-commit scribe and pre-commit review. Use when asked "guya setup", "install guya hooks", "set up guya here".
+description: Bootstrap Guya in the current repo — creates .guya/ directory tree, writes pre-commit-config.json, installs post-commit scribe and pre-commit quality hooks. Use when asked "guya setup", "install guya", "set up guya here", "bootstrap guya in this repo".
 ---
 
 # Guya Setup
 
-Install Guya's git hooks into the current repo's `.git/hooks/` directory.
+One-shot bootstrap for a repo. Leaves it with everything Guya needs to operate: `.guya/` directory tree, pre-commit config, and both git hooks installed.
 
 ## When This Triggers
 
-- User says "guya setup", "install guya hooks", "set up guya in this repo", "add guya hooks here"
+- "guya setup", "install guya", "set up guya in this repo", "bootstrap guya here", "add guya hooks"
 
-## What To Do
+## Plugin Root Resolution
 
-### Step 1 — Verify this is a git repo
-
-```bash
-git rev-parse --show-toplevel
-```
-
-If this fails, stop and tell the user: "This directory isn't a git repo. Run `git init` first."
-
-Store the output as REPO_ROOT.
-
-### Step 2 — Check existing post-commit hook
+Resolve once at the start, referenced by every step below:
 
 ```bash
-cat "$REPO_ROOT/.git/hooks/post-commit" 2>/dev/null || echo "NONE"
-```
-
-- If output contains `guya-post-commit-scribe` → already installed. Skip Step 3, report "already installed".
-- If output is `NONE` → write fresh hook (Step 3a).
-- If output has other content → append guya block (Step 3b).
-
-### Step 3a — Write fresh post-commit hook
-
-Write this exact content to `$REPO_ROOT/.git/hooks/post-commit`:
-
-```bash
-#!/usr/bin/env bash
-# guya — post-commit scribe (auto-logs commits to STATUS.md)
-
-REPO_ROOT="$(git rev-parse --show-toplevel)"
-[ -d "$REPO_ROOT/.guya" ] || exit 0
-
 CACHE_BASE="$HOME/.claude/plugins/cache/guya/guya"
 VERSION_DIR=$(find "$CACHE_BASE" -mindepth 1 -maxdepth 1 -type d 2>/dev/null \
   | xargs -I{} basename {} | sort -V | tail -1)
-if [ -n "$VERSION_DIR" ]; then
-  PLUGIN_ROOT="$CACHE_BASE/$VERSION_DIR"
-  printf '{"tool_name":"Bash","tool_input":{"command":"git commit"},"cwd":"%s"}' "$REPO_ROOT" \
-    | node "$PLUGIN_ROOT/hooks/run.cjs" "$PLUGIN_ROOT/hooks/guya-post-commit-scribe.mjs" \
-    || true
+PLUGIN_ROOT="$CACHE_BASE/$VERSION_DIR"
+TEMPLATES="$PLUGIN_ROOT/skills/guya-setup/templates"
+```
+
+If `$VERSION_DIR` is empty, stop — the plugin cache isn't populated. Tell the user to reinstall the guya plugin.
+
+## Step 1 — Verify git repo
+
+```bash
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)"
+```
+
+If empty, stop: "Not a git repo. Run `git init` first."
+
+## Step 2 — Create `.guya/` directory tree
+
+```bash
+mkdir -p "$REPO_ROOT/.guya/memory/core" \
+         "$REPO_ROOT/.guya/memory/recall" \
+         "$REPO_ROOT/.guya/memory/archival" \
+         "$REPO_ROOT/.guya/memory/reflections" \
+         "$REPO_ROOT/.guya/evolution/traces" \
+         "$REPO_ROOT/.guya/evolution/guidelines" \
+         "$REPO_ROOT/.guya/decisions"
+```
+
+Safe to re-run — `mkdir -p` is idempotent.
+
+## Step 3 — Write `pre-commit-config.json` (if missing)
+
+```bash
+if [ ! -f "$REPO_ROOT/.guya/pre-commit-config.json" ]; then
+  cp "$TEMPLATES/pre-commit-config.json" "$REPO_ROOT/.guya/pre-commit-config.json"
 fi
 ```
 
-Then make it executable:
-```bash
-chmod +x "$REPO_ROOT/.git/hooks/post-commit"
-```
+Don't overwrite an existing config — the user may have tuned it.
 
-### Step 3b — Append to existing post-commit hook
-
-Append the guya block (from Step 3a, minus the shebang line) to the end of the existing hook. Then `chmod +x`.
-
-### Step 4 — Verify
+## Step 4 — Install post-commit hook (scribe)
 
 ```bash
-cat "$REPO_ROOT/.git/hooks/post-commit"
+HOOK="$REPO_ROOT/.git/hooks/post-commit"
+if [ ! -f "$HOOK" ]; then
+  cp "$TEMPLATES/post-commit.sh" "$HOOK"
+elif ! grep -q "guya-post-commit-scribe" "$HOOK"; then
+  # Append guya block to existing hook (skip shebang line)
+  tail -n +2 "$TEMPLATES/post-commit.sh" >> "$HOOK"
+fi
+chmod +x "$HOOK"
 ```
 
-Confirm the scribe block is present.
+The installed hook locates the Guya plugin in the cache at runtime and invokes `guya-post-commit-scribe.mjs`. It exits silently if `.guya/` is missing, so it's safe to leave in place.
 
-### Step 5 — Report
+## Step 5 — Install pre-commit hook (quality gate)
 
-Tell the user:
-- What was done (fresh install / appended / already present)
-- That the scribe will now auto-log commits to `STATUS.md` after every `git commit`
-- Reminder: the hook only activates if `.guya/` exists in the repo root
+```bash
+HOOK="$REPO_ROOT/.git/hooks/pre-commit"
+if [ ! -f "$HOOK" ]; then
+  cp "$TEMPLATES/pre-commit.sh" "$HOOK"
+  chmod +x "$HOOK"
+elif grep -q "Guya Git Pre-Commit Hook" "$HOOK"; then
+  : # already ours
+else
+  echo "Non-Guya pre-commit hook present at $HOOK — skipping."
+fi
+```
+
+If a non-guya pre-commit hook is present, do NOT overwrite. Report it and ask the user whether to back it up and replace, or leave it alone.
+
+The pre-commit gate reads `.guya/pre-commit-config.json` and enforces: test-file existence, file/function LOC limits, and a cleanup scan for `HACK`/`FIXME`/`debugger`/`breakpoint()`/`pdb.set_trace`. Bypass with `git commit --no-verify` when needed.
+
+## Step 6 — Verify
+
+```bash
+ls -la "$REPO_ROOT/.guya"
+ls -la "$REPO_ROOT/.git/hooks/" | grep -E "(pre|post)-commit"
+```
+
+Confirm the directory tree exists, the config is present, and both hooks are executable.
+
+## Step 7 — Report
+
+Tell the user in one short block what changed vs what already existed:
+
+- `.guya/` directory tree: created / already existed
+- `pre-commit-config.json`: written / preserved existing
+- post-commit scribe: installed / appended to existing / already present
+- pre-commit quality gate: installed / already present / skipped (non-guya hook exists)
+
+Mention that the scribe activates on every `git commit` once `.guya/` is present, and that the pre-commit gate can be bypassed with `git commit --no-verify` when necessary.
