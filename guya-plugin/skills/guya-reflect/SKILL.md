@@ -50,6 +50,46 @@ Then update the archival memory file in `.guya/memory/archival/`. Use the projec
 
 If the archival file doesn't exist, create it with a `# project-name` header. This keeps archival context growing so the intent detection hook has fresh material to preload in future sessions.
 
+## Step 4 — Write to Constantia
+
+Read `~/.claude/guya/constantia.json` to get the Constantia repo path. If the config or path doesn't exist, warn Daniel and skip this step.
+
+Write a log entry to `{constantia}/log/YYYY-MM-DD-guya-{first 8 chars of session ID, or "manual"}.md`. If the file already exists (same session reflected twice), append to it.
+
+The log entry MUST have this exact YAML frontmatter format:
+
+```yaml
+---
+date: YYYY-MM-DD
+author: guya
+session_project: {project directory name}
+tasks_progressed: [TASK-NNN, ...]
+tasks_proposed: [TASK-NNN, ...]
+---
+```
+
+For `tasks_progressed`: check if any Constantia tasks were worked on this session. Read `{constantia}/tasks/MANIFEST.md` to find active task IDs, and list any that were progressed. If none, use `[]`.
+
+For `tasks_proposed`: if the session surfaced bugs or work that should become tasks, create proposed task files in `{constantia}/tasks/TASK-NNN.md` with `status: proposed` and list them here. Only propose tasks for meaningful work — not every minor observation.
+
+After frontmatter, write the body with these sections:
+
+```markdown
+## Summary
+
+{2-3 sentences: what was done, what decisions were made, and why they matter}
+
+## Key decisions
+
+{Bulleted list of decisions with reasoning — this is the high-signal content Telos will read}
+
+## Artifacts produced
+
+{List of commits, files created/modified, PRs — the evidence surface}
+```
+
+After writing, `git add` the log entry (and any proposed task files), then `git commit` and `git push` to the Constantia remote. If the commit or push fails, warn Daniel but don't block the reflection.
+
 ## Rules
 
 - Be honest. Be specific. Be brief.
