@@ -22,8 +22,9 @@ import { join } from 'path';
 import { homedir } from 'os';
 import { fileURLToPath } from 'url';
 
+import { resolveConstantiaPath, readTaskManifest } from './constantia-sync.mjs';
+
 const GLOBAL_DIR = join(homedir(), '.claude', 'guya');
-const CONSTANTIA_CONFIG = join(GLOBAL_DIR, 'constantia.json');
 const TOKEN_BUDGET = 2000;
 const CHAR_BUDGET = TOKEN_BUDGET * 4;
 
@@ -90,44 +91,6 @@ function estimateTokens(text) {
 function truncateToFit(text, maxChars) {
   if (text.length <= maxChars) return text;
   return text.slice(0, maxChars - 20) + '\n\n[...truncated]';
-}
-
-// --- Constantia Integration ---
-
-function resolveConstantiaPath() {
-  try {
-    if (!existsSync(CONSTANTIA_CONFIG)) return { path: null, error: 'constantia.json not found at ~/.claude/guya/' };
-    const config = JSON.parse(readFileSync(CONSTANTIA_CONFIG, 'utf-8'));
-    if (!config.path) return { path: null, error: 'constantia.json has no "path" field' };
-    if (!existsSync(config.path)) return { path: null, error: `Constantia path does not exist: ${config.path}` };
-    return { path: config.path, error: null };
-  } catch (e) {
-    return { path: null, error: `Failed to read constantia.json: ${e.message}` };
-  }
-}
-
-function readConstantiaTaskManifest(constantiaPath) {
-  const manifestPath = join(constantiaPath, 'tasks', 'MANIFEST.md');
-  const content = readFileSafe(manifestPath);
-  if (!content) return null;
-
-  const lines = content.split('\n').filter(l => l.startsWith('|') && !l.startsWith('| ID') && !l.startsWith('|--'));
-  if (lines.length === 0) return null;
-
-  const activeTasks = lines.filter(l => {
-    const cols = l.split('|').map(c => c.trim()).filter(Boolean);
-    const status = cols[1];
-    return status === 'assigned' || status === 'in-progress';
-  });
-
-  if (activeTasks.length === 0) return null;
-
-  const formatted = activeTasks.map(l => {
-    const cols = l.split('|').map(c => c.trim()).filter(Boolean);
-    return `- ${cols[0]} [${cols[1]}] P${cols[2]}: ${cols[5]}`;
-  }).join('\n');
-
-  return `## Constantia — Active Tasks\n\n${formatted}`;
 }
 
 // --- Lazy Init ---
@@ -311,7 +274,7 @@ function assembleContext(cwd) {
   if (constantia.error) {
     sections.push({ label: 'constantia-alert', content: `⚠️ Constantia unavailable: ${constantia.error}`, priority: -1 });
   } else {
-    const taskManifest = readConstantiaTaskManifest(constantia.path);
+    const taskManifest = readTaskManifest(constantia.path);
     if (taskManifest) {
       sections.push({ label: 'constantia-tasks', content: taskManifest, priority: 0 });
     }

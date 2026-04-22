@@ -26,6 +26,8 @@ import { fileURLToPath } from 'url';
 import Anthropic from '@anthropic-ai/sdk';
 import { hasLearningSignal } from './hook-utils.mjs';
 
+import { writeSessionLog } from './constantia-sync.mjs';
+
 const GLOBAL_DIR = join(homedir(), '.claude', 'guya');
 const OBSIDIAN_VAULT = join(homedir(), 'Desktop', 'secrets');
 
@@ -710,6 +712,10 @@ async function main() {
 
   try { await updateArchivalMemory(directory, sessionTraces, classificationResults); }
   catch (err) { process.stderr.write(`[guya-session-end] Archival update failed: ${err.message}\n`); }
+
+  // Write to Constantia shared memory
+  try { await writeSessionLog(directory, sessionId, sessionTraces, classificationResults); }
+  catch (err) { process.stderr.write(`[guya-session-end] Constantia log write failed: ${err.message}\n`); }
 
   // Sync to Obsidian vault
   try { await syncObsidianVault(directory); }
