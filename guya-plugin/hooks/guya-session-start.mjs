@@ -22,8 +22,10 @@ import { join } from 'path';
 import { homedir } from 'os';
 import { fileURLToPath } from 'url';
 
+import { resolveConstantiaPath, readTaskManifest } from './constantia-sync.mjs';
+
 const GLOBAL_DIR = join(homedir(), '.claude', 'guya');
-const TOKEN_BUDGET = 2000;
+const TOKEN_BUDGET = 3000;
 const CHAR_BUDGET = TOKEN_BUDGET * 4;
 
 // --- Helpers ---
@@ -267,7 +269,18 @@ function assembleContext(cwd) {
     sections.push({ label: 'session-context', content: sessionCtx, priority: 5 });
   }
 
-  // 8. Reflection backlog nudge — soft signal that /guya-evolve is overdue.
+  // 8. Constantia active tasks (shared memory — cross-agent truth)
+  const constantia = resolveConstantiaPath();
+  if (constantia.error) {
+    sections.push({ label: 'constantia-alert', content: `⚠️ Constantia unavailable: ${constantia.error}`, priority: -1 });
+  } else {
+    const taskManifest = readTaskManifest(constantia.path);
+    if (taskManifest) {
+      sections.push({ label: 'constantia-tasks', content: taskManifest, priority: 0 });
+    }
+  }
+
+  // 9. Reflection backlog nudge — soft signal that /guya-evolve is overdue.
   // Highest priority so Daniel sees it before scrolling. Single line, only
   // present when there's actually a backlog (computeReflectionNudge returns
   // null otherwise to avoid noisy "all clear" messages every session).

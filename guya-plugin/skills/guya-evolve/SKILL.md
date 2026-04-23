@@ -40,6 +40,8 @@ import('@anthropic-ai/sdk').then(({ default: Anthropic }) => {
 
 Pass `REFLECTIONS_DIR` as the project's reflections path (use `git rev-parse --show-toplevel` then append `.guya/memory/reflections` if invoked from a guya-enabled repo, otherwise default to `/Users/daniel/Desktop/guya/.guya/memory/reflections`).
 
+The synthesizer automatically reads Telos's profile assessments from Constantia (via `constantia-sync.mjs`). If Telos has written evidence-grounded claims about Daniel's strengths, weaknesses, or trajectory, those are included in the synthesis input so Guya can calibrate its own proposals against Telos's assessments.
+
 The result has three streams:
 - `guidelineEdits[]` — low-blast operating heuristics
 - `userProfileAdditions[]` — additive Daniel-facts

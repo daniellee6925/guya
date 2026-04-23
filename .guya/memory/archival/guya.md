@@ -232,3 +232,28 @@ Rewrote all review skills and four core skills following Anthropic's doc-skill.m
 - Repo hygiene: moved image.png → assets/guya.png; added thoughts.txt to .gitignore as personal draft; removed guya-plugin/skills/guya-scout-workspace/ (930 lines of iteration-1 eval scratch artifacts that didn't belong in shipped plugin).
 - Pattern observed: accept-all-pushbacks in one message. Daniel got 4 substantive critiques of thoughts.txt (co-adaptation reframe, scaffold-vs-crutch tension, rider/horse metaphor breaking, missing "why a plugin") and accepted all without tradeoff-testing. Editorial instincts on structural calls (TLDR to top, closer to end, cutting sneaking-past-gates story) were strong though — contrast suggests the accept-first pattern hits hardest when being agreed with, not when being asked to execute.
 - Commits: cf5283a (docs scaffold + LICENSE + image move), dc994b1 (PHILOSOPHY restructure — TLDR top, closing revised), 2d0f6c3 (scout-workspace removal).
+
+
+### 2026-04-20 (Constantia architecture + repo creation)
+- Designed three-identity system: Guya (executor) + Telos (mentor on Mac Mini) + Constantia (shared git memory repo). Constantia is "model of Daniel" — not a message bus.
+- Created Constantia repo at ~/Desktop/constantia with structure: `log/`, `tasks/`, `evidence/`, `profile/`, `goals/rubrics/`, `goals/plans/`, `hooks/`.
+- Built pre-commit hook (6 schema validations) and post-commit hook (manifest rebuild + auto-push). Fixed `set -e` + `grep` and empty-rows bugs.
+- Defined 3 pillars: (1) LLM Serving + Inference, (2) Production Agentic Systems, (3) Eval Methodology. North star: staff-level architect.
+- Created grading rubrics per pillar (A/B/C). Task lifecycle: proposed → assigned → in-progress → complete → graded | rejected.
+- Pushed to GitHub private repo: daniellee6925/constantia.
+
+### 2026-04-22 (Guya-Constantia migration)
+- Created `constantia-sync.mjs` shared module (path resolution, task manifest reading, session log writing).
+- Wired session-start to read Constantia tasks (priority 0 to avoid truncation by token budget).
+- Added then reverted session-end auto-write — Daniel decided only /guya-reflect writes meaningful content to Constantia log.
+- Updated guya-reflect SKILL.md with Step 4: Write to Constantia (log entry with frontmatter + git commit/push).
+- Distinguished engineer stress-test of architecture: ownership model (no shared-write files), sync protocol (Guya push on reflect, Telos pull before tick), evidence = interpreted assessments citing source logs.
+- Key decisions: Guya proposes tasks, Telos assigns. Config at `~/.claude/guya/constantia.json`. Alert (not silent degrade) if Constantia unavailable.
+- Pending: growth-tracker migration to Constantia profile, guya-evolve reads Constantia profile.
+
+### 2026-04-23 (Constantia polish + evolve integration)
+- Fixed log filename convention: `YYYY-MM-DD-{author}-{project}-{session}.md`. Added pre-commit validation for the pattern. Renamed existing logs.
+- Expanded Constantia log body: added session metadata, reflection content (Daniel takeaways + Guya self-critique), growth observations (pillar-tagged), and open threads. Backfilled today's log as reference.
+- Raised session-start token budget from 2000→3000 to fit tasks + growth tracker + guidelines.
+- Wired guya-evolve synthesizer to read Telos profile from Constantia via `readConstantiaProfile()`. No migration needed — Guya keeps its growth-tracker, reads Telos's profile as additional input.
+- Key decision: growth-tracker stays with Guya (session-level observations), Telos profile stays in Constantia (longitudinal assessment). Different purposes, one reads the other. No bidirectional sync needed.

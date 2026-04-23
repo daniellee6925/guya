@@ -29,6 +29,8 @@ import { join, dirname } from 'path';
 import { homedir } from 'os';
 import { fileURLToPath } from 'url';
 
+import { resolveConstantiaPath } from './constantia-sync.mjs';
+
 const DEFAULT_GLOBAL_DIR = join(homedir(), '.claude', 'guya');
 const DEFAULT_MAX_REFLECTIONS = 5;
 const DEFAULT_MIN_REFLECTIONS_FOR_IDENTITY_CHANGE = 2;
@@ -146,6 +148,29 @@ export function readRecentTraces(tracesDir, hours = 24) {
   return traces;
 }
 
+// --- Constantia profile reader ---
+
+/**
+ * Read Telos's profile assessments from Constantia.
+ * Returns a combined string of all non-stub profile files, or empty string
+ * if Constantia is unavailable or profile is empty.
+ */
+export function readConstantiaProfile() {
+  const constantia = resolveConstantiaPath();
+  if (constantia.error) return '';
+
+  const profileDir = join(constantia.path, 'profile');
+  const files = listMdFiles(profileDir);
+  const sections = [];
+  for (const file of files) {
+    const content = readFileSafe(join(profileDir, file));
+    if (content && !content.includes('(Awaiting')) {
+      sections.push(`### ${file.replace('.md', '')}\n${content}`);
+    }
+  }
+  return sections.length > 0 ? `## Telos Profile Assessments\n\n${sections.join('\n\n')}` : '';
+}
+
 // --- Agent prompt loader ---
 
 function readAgentPrompt(pluginRoot, name) {
@@ -261,6 +286,7 @@ export async function synthesizeFromReflections({
   const currentGrowth = readFileSafe(join(globalDir, 'growth-tracker.md')) || '';
   const currentGuidelines = readGuidelines(join(globalDir, 'guidelines', 'strategic'));
   const recentTraces = readRecentTraces(join(globalDir, 'traces'), 24);
+  const telosProfile = readConstantiaProfile();
 
   const inputPayload = {
     reflections,
@@ -269,12 +295,14 @@ export async function synthesizeFromReflections({
     currentGrowth,
     currentGuidelines,
     recentTraces: recentTraces.slice(0, 100), // cap to keep input bounded
+    telosProfile: telosProfile || undefined,
   };
 
   process.stderr.write(
     `${LOG_PREFIX} synthesizing from ${reflections.length} reflections ` +
     `(${reflections.filter(r => r.isManual).length} manual), ` +
-    `${currentGuidelines.length} guidelines, ${recentTraces.length} traces\n`
+    `${currentGuidelines.length} guidelines, ${recentTraces.length} traces` +
+    `${telosProfile ? ', with Telos profile' : ', no Telos profile'}\n`
   );
 
   let response;
