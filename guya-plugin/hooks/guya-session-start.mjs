@@ -25,7 +25,7 @@ import { fileURLToPath } from 'url';
 import { resolveConstantiaPath, readTaskManifest } from './constantia-sync.mjs';
 
 const GLOBAL_DIR = join(homedir(), '.claude', 'guya');
-const TOKEN_BUDGET = 2000;
+const TOKEN_BUDGET = 3000;
 const CHAR_BUDGET = TOKEN_BUDGET * 4;
 
 // --- Helpers ---
