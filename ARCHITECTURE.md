@@ -1,6 +1,6 @@
 # guya — Architecture
 
-> Last updated: 2026-04-13
+> Last updated: 2026-04-24
 
 ## Current Architecture
 
@@ -21,10 +21,12 @@ guya/
 │   │   ├── guya-trace-capture.mjs      # PostToolUse(Write|Edit): record tool use traces
 │   │   ├── guya-correction-detect.mjs  # UserPromptSubmit: fast-lane regex correction detection
 │   │   ├── guya-intent-detect.mjs      # UserPromptSubmit: detect user intent signals
-│   │   ├── guya-pre-commit-review.mjs  # PreToolUse(Bash|Skill): enforce review gate before commit
-│   │   ├── guya-pre-push-check.mjs     # PreToolUse(Bash): block push if review gate not cleared
+│   │   ├── guya-pre-bash-dispatch.mjs  # PreToolUse(Bash): single dispatcher → review + push subprocesses (defeats 2.1.101+ matcher dedup)
+│   │   ├── guya-pre-commit-review.mjs  # Invoked by dispatcher (Bash) and directly (Skill): enforce review gate before commit
+│   │   ├── guya-pre-push-check.mjs     # Invoked by dispatcher: block push if quality checks fail
 │   │   ├── guya-post-commit-scribe.mjs # Invoked from git post-commit hook (NOT Claude Code hook)
-│   │   └── hook-utils.mjs              # Shared utilities (isGitCommit, resolveProjectRoot)
+│   │   ├── hook-utils.mjs              # Shared utilities (isGitCommit, resolveProjectRoot)
+│   │   └── constantia-sync.mjs         # Shared Constantia integration (path resolution, task reading, log writing)
 │   ├── tools/                # MCP server (guya-tools)
 │   │   ├── server.js         # MCP stdio server; registers all tool groups
 │   │   ├── memory-tools.js   # memory_core_update/append, memory_archival_store/search, memory_recall_note, memory_reflect
@@ -35,7 +37,7 @@ guya/
 │   │   ├── guya-bootstrap    # First-run interview
 │   │   ├── guya-setup        # Install git hooks into any repo
 │   │   ├── guya-scribe       # Update STATUS.md / ARCHITECTURE.md / CLAUDE.md
-│   │   ├── guya-reflect      # Manual reflection cycle
+│   │   ├── guya-reflect      # Manual reflection cycle + Constantia log write
 │   │   ├── guya-evolve       # Combined synthesis → review → apply → consolidate
 │   │   ├── guya-learn        # Interactive teaching sessions
 │   │   ├── guya-review       # Code review (Karpathy principles)
@@ -78,6 +80,7 @@ guya/
 │   ├── pre-commit-config.json # Review gate thresholds (shared across projects)
 │   ├── guidelines/strategic/ # Strategic guidelines (cross-project, reflection-synthesized)
 │   └── traces/               # Daily JSONL trace files (gitignored, machine state)
+├── ~/.claude/guya/constantia.json  # Constantia repo path config (cross-project discovery)
 └── .git/hooks/post-commit    # Git hook: sync-plugin.sh → guya-post-commit-scribe.mjs
 ```
 
@@ -85,17 +88,36 @@ guya/
 
 | Event | Matcher | Handler |
 |-------|---------|---------|
-| SessionStart | * | guya-session-start.mjs — assemble `<guya-context>` |
+| SessionStart | * | guya-session-start.mjs — assemble `<guya-context>` + read Constantia tasks |
 | UserPromptSubmit | * | guya-correction-detect.mjs — fast regex correction |
 | UserPromptSubmit | * | guya-intent-detect.mjs — intent signals |
-| PreToolUse | Bash | guya-pre-commit-review.mjs — review gate check |
-| PreToolUse | Bash | guya-pre-push-check.mjs — push gate check |
-| PreToolUse | Skill | guya-pre-commit-review.mjs — review gate check |
+| PreToolUse | Bash | guya-pre-bash-dispatch.mjs — single entry; spawns review then push as subprocesses |
+| PreToolUse | Skill | guya-pre-commit-review.mjs — review gate check (Skill matcher safe from dedup) |
 | PostToolUse | Write\|Edit | guya-trace-capture.mjs — record trace |
 | PreCompact | * | guya-session-end.mjs — evolution pipeline |
 | SessionEnd | * | guya-session-end.mjs — evolution pipeline |
 
 **Key constraint discovered 2026-04-10:** PostToolUse with a specific tool name (e.g. `Bash`) does not dispatch in Claude Code. The `*` wildcard and `Write|Edit` compound matchers work. PostToolUse:Bash was removed as dead code.
+
+**Key constraint discovered 2026-04-24:** Claude Code 2.1.101+ semantically deduplicates `PreToolUse` entries by matcher. Multiple top-level entries with `matcher: "Bash"`, or multiple `hooks[]` items inside one matcher block, collapse so only one hook runs per invocation — even when the matcher *strings* differ but compile to equivalent regex. The pre-commit-review gate silently bypassed itself for ~16 days under this regression. Workaround: a single dispatcher (`guya-pre-bash-dispatch.mjs`) is registered under `matcher: "Bash"` and fans out to review + push as subprocesses. Cost: ~150 ms extra Node cold-start per Bash invocation. **Do not re-split into separate hooks.json entries** — the dedup will silently bypass review again.
+
+### PreToolUse:Bash Dispatch Flow
+
+```
+Bash tool invocation
+        │
+        ▼
+guya-pre-bash-dispatch.mjs (single registered hook)
+        │ readStdin() once
+        │
+        ├─► spawn guya-pre-commit-review.mjs (5s timeout)
+        │     └─ if decision: "block" → return immediately
+        │
+        └─► spawn guya-pre-push-check.mjs (145s timeout)
+              └─ return its decision (or fall through to review's allow)
+
+On any wrapper-level error: fail-open ({continue: true}) — never block on dispatcher crash.
+```
 
 ### Plugin Delivery Pipeline
 
@@ -122,6 +144,8 @@ The scribe is invoked from the git hook rather than PostToolUse:Bash because Pos
 ```
 .guya/memory/reflections/ (manual reflections via /guya-reflect)
         │
+        ├── + Telos profile from Constantia (if available)
+        │
         ▼ guya-reflection-synthesizer (sonnet) — blast-radius routing
         │
         ├─ guidelineEdits       → auto-apply to ~/.claude/guya/guidelines/strategic/
@@ -138,20 +162,49 @@ The scribe is invoked from the git hook rather than PostToolUse:Bash because Pos
 
 Legacy trace-driven pipeline (guya-observer → guya-synthesizer in session-end) is still wired but produced near-zero useful output. The reflection-driven pipeline replaces it as the primary evolution mechanism.
 
+### Constantia Integration (three-identity architecture)
+
+```
+Guya (executor)                    Telos (mentor)
+   │                                  │
+   ├── session-start reads ◄──────── tasks/MANIFEST.md
+   ├── /guya-reflect writes ──────► log/YYYY-MM-DD-guya-{project}-{session}.md
+   ├── /guya-evolve reads ◄──────── profile/ (strengths, weaknesses, trajectory)
+   │                                  │
+   └────────── Constantia ────────────┘
+               (shared git repo)
+```
+
+**Constantia** (`~/Desktop/constantia`) is the shared memory repo between Guya and Telos. Path resolved via `~/.claude/guya/constantia.json`. The `constantia-sync.mjs` module provides shared utilities for path resolution, task manifest reading, and log writing.
+
+**Write ownership (no shared-write files):**
+- Guya: `log/` (via /guya-reflect), task status updates
+- Telos: `evidence/`, `profile/`, `goals/`, task assignments + grades
+
+**Session-start:** reads `tasks/MANIFEST.md`, injects active tasks at priority 0 (same as soul/user). Alerts if Constantia unavailable — never silently degrades.
+
+**Reflect:** writes structured log entries with YAML frontmatter + full body (session metadata, reflection content, growth observations, open threads). Filename includes project + session ID to prevent cross-repo collisions. Append logic for same-session re-reflects.
+
+**Evolve:** `readConstantiaProfile()` reads Telos's non-stub profile assessments as additional synthesis input, so Guya can calibrate proposals against Telos's longitudinal view.
+
 ### Context Assembly (session-start)
 
-At every SessionStart, `guya-session-start.mjs` reads and assembles into a `<guya-context>` system-reminder block (2000 token budget / ~8000 chars):
+At every SessionStart, `guya-session-start.mjs` reads and assembles into a `<guya-context>` system-reminder block (3000 token budget / ~12000 chars):
 
-1. Global identity files from `~/.claude/guya/` (soul, creed, personality, user profile)
-2. Strategic guidelines from `~/.claude/guya/guidelines/strategic/`
-3. Project-local core memory from `.guya/memory/core/`
-4. Project-local tactical guidelines from `.guya/evolution/guidelines/tactical/`
+1. Global identity files from `~/.claude/guya/` (soul, user profile, growth tracker)
+2. Constantia active tasks from `tasks/MANIFEST.md` (via `constantia-sync.mjs`)
+3. Strategic guidelines from `~/.claude/guya/guidelines/strategic/`
+4. Project-local core memory from `.guya/memory/core/`
+5. Project-local tactical guidelines from `.guya/evolution/guidelines/tactical/`
+6. Reflection backlog nudge (if /guya-evolve hasn't run recently)
 
 The assembled block is injected as a system-reminder; Guya does not need to manually read identity files during a session.
 
 ### Pre-Commit Review Gate
 
-`guya-pre-commit-review.mjs` fires on every `git commit` Bash command. It checks `review-gate.json` and `review-evidence.jsonl`. If no review evidence exists or the gate is not cleared, the hook blocks the commit and instructs Daniel to run a review first. After a successful commit, the post-commit scribe resets the gate and deletes the evidence file.
+`guya-pre-commit-review.mjs` is invoked by `guya-pre-bash-dispatch.mjs` on every Bash command (and directly on `PreToolUse:Skill`). It checks `review-gate.json` and `review-evidence.jsonl`. If no review evidence exists or the gate is not cleared, the hook returns a `block` decision and instructs Daniel to run a review first. After a successful commit, the post-commit scribe resets the gate and deletes the evidence file.
+
+The dispatcher pattern was introduced 2026-04-24 specifically because the gate was silently bypassed for 16 days under Claude Code's 2.1.101+ matcher-dedup regression — same failure mode as ADR-011 (auto-fire silently breaks): rely on hook execution, verify hook execution.
 
 ### MCP Server (guya-tools)
 
@@ -212,3 +265,11 @@ The soul spec includes convergence tracking (detecting when Daniel is scattered 
 | 2026-04-11 | SessionStart backlog nudge: soft one-liner showing reflection count + days since last evolve | Prevents "forgot to evolve" drift without being aggressive; computeReflectionNudge reads .last-evolved marker |
 | 2026-04-13 | guya-scout skill added: 2-phase codebase onboarding (Explore subagent → scout-report.md → bidirectional Q&A) | Eval-validated: ~17% token efficiency gain; Phase 2 bidirectional Q&A is primary differentiator over baseline |
 | 2026-04-13 | guya-decision-kickoff updated: Project Setup phase scaffolds context/core-beliefs.md, context/vision.md, ARCHITECTURE.md, STATUS.md for clean repos; guya-setup prompted for fresh repos; plan path aligned to docs/plans/PLAN_*/ (lod-planner format) | New repos need standard scaffolding to be guya-compatible from day 1; plan path alignment removes friction with lod-planner delegation |
+| 2026-04-22 | Three-identity architecture: Guya (executor) + Telos (mentor) + Constantia (shared git repo) | Single source of truth between two independent agents; no memory divergence |
+| 2026-04-22 | Constantia write ownership: no shared-write files. Guya writes log + task status; Telos writes evidence + profile + goals + grades | Eliminates merge conflicts by design |
+| 2026-04-22 | Meaningful-only Constantia writes via /guya-reflect, not auto session-end | Signal over noise; every log entry has actual content |
+| 2026-04-22 | Guya proposes tasks, Telos assigns | Clear authority boundary; no shared-write contention on task files |
+| 2026-04-23 | Token budget raised from 2000→3000 tokens | Soul+user consumed 92% of old budget; no room for tasks or growth tracker |
+| 2026-04-23 | Growth-tracker stays with Guya; guya-evolve reads Telos profile as additional input | Different purposes (session-level vs longitudinal); one reads the other, no sync needed |
+| 2026-04-23 | Log filename: YYYY-MM-DD-{author}-{project}-{session_id}.md with pre-commit enforcement | Prevents cross-repo overwrites; each session gets its own file |
+| 2026-04-24 | Single PreToolUse:Bash dispatcher (`guya-pre-bash-dispatch.mjs`) fans out to pre-commit-review + pre-push-check (ADR-012) | Claude Code 2.1.101+ semantically dedups matcher entries; multiple hooks per matcher silently collapse. Same failure mode as ADR-011 — silent rot of trusted enforcement |
