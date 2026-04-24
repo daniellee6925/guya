@@ -36,6 +36,7 @@ I open Claude Code and Guya already knows who I am, what I care about, and gets 
 | 006 | Two-track learning (fast regex heuristics + slow LLM classification) | Immediate corrections + async pattern learning |
 | 007 | Challenge first, support second (soul = unconditional care + hard truth) | Named after Daniel's teddy bear — genuine care + growth |
 | 008 | Daniel-specific amendments (convergence tracking, custom SCOPE domains, teaching, emotional awareness) | Generic agent behavior doesn't serve Daniel's growth needs |
+| 012 | Single PreToolUse:Bash dispatcher hook (`guya-pre-bash-dispatch.mjs`) | Claude Code 2.1.101+ dedups matchers; multiple hooks per matcher silently collapse. Same failure mode as ADR-011 — silent rot of trusted enforcement. |
 
 ## Research Foundations
 

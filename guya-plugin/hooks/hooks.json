@@ -7,12 +7,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$CLAUDE_PLUGIN_ROOT\"/hooks/run.cjs \"$CLAUDE_PLUGIN_ROOT\"/hooks/guya-pre-commit-review.mjs",
-            "timeout": 5
-          },
-          {
-            "type": "command",
-            "command": "node \"$CLAUDE_PLUGIN_ROOT\"/hooks/run.cjs \"$CLAUDE_PLUGIN_ROOT\"/hooks/guya-pre-push-check.mjs",
+            "command": "node \"$CLAUDE_PLUGIN_ROOT\"/hooks/run.cjs \"$CLAUDE_PLUGIN_ROOT\"/hooks/guya-pre-bash-dispatch.mjs",
             "timeout": 150
           }
         ]

@@ -10,13 +10,22 @@ Consequence: the post-commit scribe cannot be driven by a `PostToolUse:Bash` hoo
 
 The `PostToolUse` entry in `hooks.json` uses matcher `Write|Edit` — the only tool names that reliably dispatch this event in Claude Code.
 
+## Dispatch Constraint: PreToolUse Matcher Dedup (Claude Code 2.1.101+)
+
+Starting in Claude Code 2.1.101, `PreToolUse` entries are deduplicated semantically by matcher — multiple top-level entries with `"matcher": "Bash"`, or multiple `hooks[]` items inside one matcher block, collapse so that only **one** hook script runs per tool invocation. Distinct matcher *strings* that compile to equivalent regexes (e.g. `"Bash"` vs `"^Bash$"`) also collapse — confirmed empirically.
+
+Symptom of the bug: a hook that's wired up correctly returns `{ continue: true }` reliably during manual replay, but never appears in the session transcript's hook records, while a sibling hook on the same matcher does. The pre-commit-review gate silently bypassed itself for ~16 days under this regression before being caught.
+
+Workaround in this codebase: a single dispatcher script (`guya-pre-bash-dispatch.mjs`) is registered under `matcher: "Bash"`. It reads stdin once, then runs `guya-pre-commit-review.mjs` and `guya-pre-push-check.mjs` as subprocesses, returning the first blocking decision. **Do not "clean up" by re-splitting these into separate hooks.json entries** — the dedup will silently bypass review again.
+
+Cost: ~2× Node cold-start per Bash tool invocation (~150 ms total in practice). Each sub-hook still no-ops fast on commands it doesn't care about.
+
 ## Hook Registry (hooks.json)
 
 | Event | Matcher | Script | Timeout | Purpose |
 |-------|---------|--------|---------|---------|
-| `PreToolUse` | `Bash` | `guya-pre-commit-review.mjs` | 5s | Block commits that lack review evidence |
-| `PreToolUse` | `Bash` | `guya-pre-push-check.mjs` | 150s | Block pushes that fail quality checks |
-| `PreToolUse` | `Skill` | `guya-pre-commit-review.mjs` | 3s | Same review gate when commit runs via a skill |
+| `PreToolUse` | `Bash` | `guya-pre-bash-dispatch.mjs` | 150s | Single entry that fans out to pre-commit-review + pre-push-check (see dedup constraint above) |
+| `PreToolUse` | `Skill` | `guya-pre-commit-review.mjs` | 3s | Review gate when commit runs via a skill |
 | `SessionStart` | `*` | `guya-session-start.mjs` | 5s | Assemble and inject `<guya-context>` |
 | `UserPromptSubmit` | `*` | `guya-correction-detect.mjs` | 1s | Detect correction signals in user prompts |
 | `UserPromptSubmit` | `*` | `guya-intent-detect.mjs` | 1s | Detect decision-harness intent in user prompts |
@@ -35,11 +44,14 @@ Runs on every user prompt. Detects correction signals (phrases like "no", "wrong
 ### guya-intent-detect.mjs
 Runs on every user prompt. Detects intent that should route through a decision harness (feature, bugfix, refactor, kickoff). Injects a `<guya-intent>` system-reminder to prime the appropriate skill. No LLM calls.
 
+### guya-pre-bash-dispatch.mjs
+Single registered hook for `PreToolUse:Bash`. Reads stdin once, then invokes `guya-pre-commit-review.mjs` and `guya-pre-push-check.mjs` as subprocesses with the same payload. If pre-commit-review returns `decision: "block"`, that's returned immediately. Otherwise pre-push-check's decision is returned. Fail-open on any wrapper-level error so a crashed dispatcher never blocks the user. Exists solely to work around the 2.1.101+ matcher-dedup regression — it would not exist if Claude Code honored multiple hooks per matcher.
+
 ### guya-pre-commit-review.mjs
-Intercepts `git commit` Bash commands before they execute. Reads `.guya/evolution/review-evidence.jsonl` to confirm a review was performed this cycle. Blocks the commit with an explanatory message if evidence is missing or stale. The gate is reset by `guya-post-commit-scribe.mjs` after each successful commit.
+Intercepts `git commit` Bash commands before they execute. Reads `.guya/evolution/review-evidence.jsonl` to confirm a review was performed this cycle. Blocks the commit with an explanatory message if evidence is missing or stale. The gate is reset by `guya-post-commit-scribe.mjs` after each successful commit. Invoked by the dispatcher on `PreToolUse:Bash`, and directly on `PreToolUse:Skill` (skill matcher does not collide with the dedup bug).
 
 ### guya-pre-push-check.mjs
-Intercepts `git push` Bash commands. Runs quality checks (timeout: 150s) and blocks the push if they fail. Intended as the last-mile safety net before code leaves the local repo.
+Intercepts `git push` Bash commands. Runs quality checks (timeout: 150s) and blocks the push if they fail. Intended as the last-mile safety net before code leaves the local repo. Invoked by the dispatcher; no-ops fast for non-push commands.
 
 ### guya-post-commit-scribe.mjs
 Invoked by `.git/hooks/post-commit` (not by a Claude Code hook — see dispatch constraint above). After a real `git commit` lands:
@@ -75,4 +87,9 @@ Development utility. Prints the raw stdin payload a hook receives, for diagnosin
 - All hooks must complete within their registered timeout. Exceeding it causes Claude Code to kill the process and treat the hook as failed.
 - Hooks must write their response JSON to stdout and any diagnostics to stderr.
 - `PostToolUse:Bash` never dispatches — do not register hooks against it.
+- `PreToolUse:Bash` deduplicates by matcher in Claude Code 2.1.101+ — register exactly one hook against `matcher: "Bash"` and fan out internally if you need multiple checks. See "Dispatch Constraint: PreToolUse Matcher Dedup" above.
 - The scribe's idempotency contract depends on the marker file at `.guya/evolution/last-scribe-head`. Do not delete this file manually unless you intend to force a re-process of the current HEAD.
+
+## Regression History
+
+- **2026-04-08 → 2026-04-24**: PreToolUse:Bash review gate silently bypassed (`guya-pre-commit-review.mjs` registered but never dispatched). Root cause: Claude Code 2.1.101 introduced semantic dedup of `PreToolUse` matcher entries; our `hooks.json` had two entries under `matcher: "Bash"` (review + push-check), and dedup kept only the last. Detected when the gate failed to block 7 unreviewed `.py` commits in `auto_eval`. Fixed by introducing the dispatcher pattern. Same lesson as ADR-011 (auto-fire silently breaks): rely on hook execution, verify hook execution.
