@@ -18,6 +18,8 @@ node "$CLAUDE_PLUGIN_ROOT/hooks/record-review-step.mjs" initial
 
 This writes the review-evidence entry the pre-commit gate checks. Do not skip, do not edit `.guya/evolution/review-evidence.jsonl` by hand, do not infer "the hook will handle it" — it has not. If the command fails, stop and surface the error; do not proceed with the review.
 
+**Critical timing:** the recorder captures the current staged tree SHA (`git write-tree`). The gate later compares against the tree at commit time. If you stage files **after** running Step 0, the tree changes and the gate blocks with a "lines changed since review" error. Order must be: stage all files first → run Step 0 → review → commit. If you've already changed staged files since recording, re-run Step 0 right before committing.
+
 ## Step 1 — Read the Target
 
 Read the file or directory at `$ARGUMENTS`. If a directory, identify the most important files by size and complexity and focus there. Understand what the code is trying to do before evaluating it — a review without context produces false positives.
