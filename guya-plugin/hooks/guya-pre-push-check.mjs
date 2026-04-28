@@ -11,6 +11,9 @@
  *     1. Ruff lint (Python projects)
  *     2. Tests (pytest for Python, npm test for Node)
  *     3. WIP commit detection
+ *     4. Guya hook smoke test (if guya-plugin/hooks/__tests__/hooks-smoke.test.mjs exists)
+ *        — catches the silent-no-op class of bug (isMain / matcher dedup /
+ *        auto-fire silent-rot). See hooks/CLAUDE.md "Meta-pattern".
  *
  *   If any check fails: blocks with report.
  *   If all pass: allows push.
@@ -116,6 +119,29 @@ function checkNodeTests(directory) {
   }
 }
 
+// --- Check: Guya hook smoke ---
+
+// Runs the symlink-path smoke test that asserts every registered hook's main()
+// actually executes. Targets the silent-no-op class of bug (isMain symlink
+// mismatch, matcher dedup, etc) — see hooks/CLAUDE.md "Meta-pattern". No-op
+// in repos that don't ship the smoke test file.
+function checkGuyaHookSmoke(directory) {
+  const smokePath = join(directory, 'guya-plugin', 'hooks', '__tests__', 'hooks-smoke.test.mjs');
+  if (!existsSync(smokePath)) {
+    return { pass: true, issues: [], skipped: 'no guya hook smoke test in this repo' };
+  }
+  try {
+    execSync(`node --test ${JSON.stringify(smokePath)}`, {
+      cwd: directory, encoding: 'utf-8', timeout: 30000, stdio: 'pipe',
+    });
+    return { pass: true, issues: [] };
+  } catch (err) {
+    const out = ((err.stdout || '') + (err.stderr || '')).trim();
+    const lines = out.split('\n').filter(Boolean).slice(-20);
+    return { pass: false, issues: lines };
+  }
+}
+
 // --- Check 3: WIP commits ---
 
 function checkWipCommits(directory) {
@@ -165,6 +191,7 @@ function runAllChecks(directory) {
   const results = {};
 
   results.wip = checkWipCommits(directory);
+  results['guya-hook-smoke'] = checkGuyaHookSmoke(directory);
 
   if (hasPython) {
     results.ruff = checkRuff(directory);
