@@ -17,7 +17,7 @@
  *   Completes in under 5 seconds
  */
 
-import { existsSync, readFileSync, readdirSync, mkdirSync, statSync } from 'fs';
+import { existsSync, readFileSync, readdirSync, mkdirSync, statSync, realpathSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
 import { fileURLToPath } from 'url';
@@ -363,8 +363,13 @@ async function main() {
 // — which opens a stdin listener that hangs the test process (caught during
 // Phase 2 guya-review verification). fileURLToPath is the cross-platform
 // equivalent of comparing __filename === process.argv[1].
+//
+// Compare realpaths on both sides — Node resolves import.meta.url to the
+// realpath, but argv[1] keeps the symlink path (Claude Code plugin marketplace
+// installs are symlinks to the source tree). A naive == would silently disable
+// main() under symlinked installs. See hooks/CLAUDE.md "Regression History".
 const isMain = (() => {
-  try { return fileURLToPath(import.meta.url) === process.argv[1]; }
+  try { return realpathSync(fileURLToPath(import.meta.url)) === realpathSync(process.argv[1]); }
   catch { return false; }
 })();
 

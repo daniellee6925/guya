@@ -12,7 +12,7 @@
  *   No LLM calls — pure file I/O. Completes in under 50ms.
  */
 
-import { existsSync, readFileSync, writeFileSync, mkdirSync, renameSync, unlinkSync } from 'fs';
+import { existsSync, readFileSync, writeFileSync, mkdirSync, renameSync, unlinkSync, realpathSync } from 'fs';
 import { join, basename, dirname } from 'path';
 import { randomUUID } from 'crypto';
 import { execSync } from 'child_process';
@@ -349,8 +349,12 @@ async function main() {
 // Only run main() when executed as a script (not when imported by tests).
 // Matches the pattern in guya-session-end.mjs / guya-correction-detect.mjs /
 // guya-pre-commit-review.mjs — lets appendCommit be unit-tested in isolation.
+// Compare realpaths on both sides — Node resolves import.meta.url to the
+// realpath, but argv[1] keeps the symlink path (Claude Code plugin marketplace
+// installs are symlinks to the source tree). A naive == would silently disable
+// main() under symlinked installs. See hooks/CLAUDE.md "Regression History".
 const isMain = (() => {
-  try { return fileURLToPath(import.meta.url) === process.argv[1]; }
+  try { return realpathSync(fileURLToPath(import.meta.url)) === realpathSync(process.argv[1]); }
   catch { return false; }
 })();
 

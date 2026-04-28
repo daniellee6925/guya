@@ -93,3 +93,15 @@ Development utility. Prints the raw stdin payload a hook receives, for diagnosin
 ## Regression History
 
 - **2026-04-08 → 2026-04-24**: PreToolUse:Bash review gate silently bypassed (`guya-pre-commit-review.mjs` registered but never dispatched). Root cause: Claude Code 2.1.101 introduced semantic dedup of `PreToolUse` matcher entries; our `hooks.json` had two entries under `matcher: "Bash"` (review + push-check), and dedup kept only the last. Detected when the gate failed to block 7 unreviewed `.py` commits in `auto_eval`. Fixed by introducing the dispatcher pattern. Same lesson as ADR-011 (auto-fire silently breaks): rely on hook execution, verify hook execution.
+
+- **PreToolUse:Skill auto-evidence silently no-op'd (caught 2026-04-27)**: The auto-evidence path on `PreToolUse:Skill` for `/guya-review` and `/guya-deep-review` never wrote to `.guya/evolution/review-evidence.jsonl`, even though the hook was registered, dispatched, and the matcher logic was correct. Root cause: every hook script used the idiom `fileURLToPath(import.meta.url) === process.argv[1]` to gate `main()` for test isolation. Claude Code installs plugins as a symlinked tree under `~/.claude/plugins/marketplaces/`, and Node 24 resolves `import.meta.url` to the **realpath** while `process.argv[1]` keeps the **symlink path** — so the equality always failed and `main()` was never called. The script imported cleanly, exited 0, wrote nothing. Affected every hook with the same guard: `guya-pre-commit-review`, `guya-correction-detect`, `guya-post-commit-scribe`, `guya-session-start`, `guya-session-end`. Fixed by wrapping both sides in `realpathSync()`. Step 0 (manual `record-review-step.mjs` call from each review SKILL.md) had been the workaround; removed once auto-evidence verified.
+
+### Meta-pattern: silent rot of trusted enforcement
+
+Three regressions, same shape:
+
+1. **ADR-011** — `/guya-evolve` auto-fire on session-end silently broke for 6 days when the API key died. The pipeline existed, the trigger fired, but the work never completed and nothing surfaced. Fixed by making `/guya-evolve` manual.
+2. **ADR-012** — `PreToolUse:Bash` review gate silently bypassed for 16 days under matcher dedup. The hook was registered but never dispatched. Fixed with the dispatcher pattern.
+3. **isMain symlink** — `PreToolUse:Skill` auto-evidence silently no-op'd from the moment the symlinked plugin install became the dispatch path. The hook was registered, dispatched, and the code was correct — `main()` was never reached. Fixed with `realpathSync` on both sides.
+
+In every case the failure was in a "this can't fail" guard or assumption (auto-fire will run; matcher dedup is benign; `import.meta.url === argv[1]` is identity). The defense is not "make the guard smarter" — it's **never trust silent enforcement**. If a hook is supposed to do something on every invocation, it must produce a verifiable side-effect (log line, stderr write, evidence file) that another check can confirm. The next regression of this class is already lurking in some other "obviously equivalent" comparison; assume it exists and add observability before it bites.

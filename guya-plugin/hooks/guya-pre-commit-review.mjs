@@ -21,7 +21,7 @@
  *   .git/hooks/pre-commit which runs with accurate staged file state.
  */
 
-import { existsSync, readFileSync } from 'fs';
+import { existsSync, readFileSync, realpathSync } from 'fs';
 import { join, extname } from 'path';
 import { homedir } from 'os';
 import { execSync } from 'child_process';
@@ -429,8 +429,12 @@ async function main() {
 // Only run main() when executed as a script (not when imported by tests).
 // Matches the pattern in guya-session-end.mjs / guya-correction-detect.mjs —
 // lets loadConfig be unit-tested in isolation.
+// Compare realpaths on both sides — Node resolves import.meta.url to the
+// realpath, but argv[1] keeps the symlink path (Claude Code plugin marketplace
+// installs are symlinks to the source tree). A naive == would silently disable
+// main() under symlinked installs. See hooks/CLAUDE.md "Regression History".
 const isMain = (() => {
-  try { return fileURLToPath(import.meta.url) === process.argv[1]; }
+  try { return realpathSync(fileURLToPath(import.meta.url)) === realpathSync(process.argv[1]); }
   catch { return false; }
 })();
 
