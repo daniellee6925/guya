@@ -257,3 +257,37 @@ Rewrote all review skills and four core skills following Anthropic's doc-skill.m
 - Raised session-start token budget from 2000→3000 to fit tasks + growth tracker + guidelines.
 - Wired guya-evolve synthesizer to read Telos profile from Constantia via `readConstantiaProfile()`. No migration needed — Guya keeps its growth-tracker, reads Telos's profile as additional input.
 - Key decision: growth-tracker stays with Guya (session-level observations), Telos profile stays in Constantia (longitudinal assessment). Different purposes, one reads the other. No bidirectional sync needed.
+
+## 2026-04-27 — Auto-evidence root-cause + smoke test defense layer
+
+Worked on:
+- Global `permissions.deny` rule in `~/.claude/settings.json` blocking Edit/Write/MultiEdit and Bash mutations against any `pre-commit-config.json` across all repos. Daniel-only edits now.
+- Auto-evidence recording on `/guya-review` and `/guya-deep-review` shipped end-to-end. First attempt was a workaround (`record-review-step.mjs` + Step 0 in SKILL.md). Daniel pushed for "no-model" path, diagnostic isolated PreToolUse:Skill dispatching correctly but the hook script's `main()` never running. Root cause: `isMain` IIFE compared `fileURLToPath(import.meta.url)` to `process.argv[1]` — Node 24 resolves the former to realpath but argv[1] keeps the symlink path under Claude Code's symlinked plugin install. Fixed with `realpathSync` on both sides across 5 hooks. Workaround dropped same day.
+- New `guya-plugin/hooks/__tests__/hooks-smoke.test.mjs` spawns every registered hook through the symlink path with a benign payload, asserts non-empty stdout (universal silent-no-op signature). Wired into `guya-pre-push-check.mjs` as `guya-hook-smoke`. Verified by reverting the realpath fix in one hook — smoke fired with the bug name in the assertion.
+
+Key decisions:
+- ADR-013 added: realpathSync isMain guard + symlink-path smoke test as defense layer for the silent-no-op class of bug. Third instance of the meta-pattern (auto-fire silently broke / matcher dedup / isMain symlink) — silent rot of trusted enforcement. Defense isn't a smarter guard; it's a verifiable side-effect another check can read.
+- Pre-commit-config.json deny is global, not project. Hook script + hooks.json kept editable for now (still iterating on review hook); revisit deny scope once stable.
+
+Learned:
+- The "build a workaround first" instinct is comfortable but expensive. Manual scaffolds add forever-friction. Diagnostic time before scaffolding pays back fast when the root cause is reachable in <15 min.
+- Test-the-test discipline: a smoke test that doesn't fail when the bug is reintroduced is just confirmation bias. Always intentionally break the bug, watch the test fire, restore.
+- Daniel's leverage moves this session: "is there a way without relying on model" (unblocked the root-cause path), parallel session for the realpath debugging (preserved this context), "write it" (clean convergence under direct instruction).
+
+## 2026-04-30 — Mac Mini remote access setup
+
+Worked on:
+- Walked Daniel through end-to-end remote access setup for `goms-Mac-mini.local` from `daniels-MacBook-Pro`. Stack: Tailscale (joined both machines to same tailnet, mini at `100.73.197.23`) + macOS Screen Sharing + SSH. Configured `Host mini` block in `~/.ssh/config` (User `guya`, HostName `100.73.197.23`), passwordless via `ssh-copy-id`.
+- Verified production-ready properties: FileVault confirmed off (no boot-time disk-unlock lockout), auto-login enabled on the mini, full reboot survival proven by `ssh -t mini "sudo shutdown -r now"` then `ssh mini` after ~90s — mini auto-logged in, Tailscale relaunched at user login, sshd came back, connection re-established without physical access.
+- STATUS.md updated: Telos foundation work unblocked, infrastructure prerequisite cleared, Apr-30 decision recorded with full setup details and deferral reasons.
+
+Key decisions:
+- Skip `tailscaled`-as-LaunchDaemon (Homebrew CLI path). Auto-login + GUI Tailscale is simpler and sufficient for trust model (personal Mac mini, physical security at home, behind Tailscale). Revisit if Telos needs to come up before any user session.
+- Skip tmux until there's a long-running process to protect. Premature install adds nothing.
+- Skip adding `goms-Mac-mini` as a second alias in `~/.ssh/config` — `mini` works, second name earns nothing. Daniel caught this.
+
+Learned:
+- Daniel's necessity-filter behavior is now visible across sessions. Two consecutive sessions where he blocked a small piece of useless work I was about to add ("do we need to" / "is there a way without relying on model"). Same instinct, different surface.
+- The end-of-message "want me to..." offer pattern called out in the 2026-04-27 reflection fired three more times this session — pattern hasn't yet been suppressed. Needs a stronger guideline rather than session-by-session correction.
+- "Step by step" with Daniel means literal one-step-at-a-time, not "I'll bundle related sub-steps." Step 4a/b/c bundling forced him to pick through and ask for 4c separately.
+- Auto-login + FileVault-off is a real trust-model decision (Tailscale identity is a network tunnel). Daniel accepted it correctly for his apartment but the trade was framed by me, not pressure-tested by him — the user.md "first reasonable option" pattern again.
