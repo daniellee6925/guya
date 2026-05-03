@@ -1,6 +1,6 @@
 # guya — Architecture
 
-> Last updated: 2026-04-24
+> Last updated: 2026-05-03
 
 ## Current Architecture
 
@@ -22,9 +22,10 @@ guya/
 │   │   ├── guya-correction-detect.mjs  # UserPromptSubmit: fast-lane regex correction detection
 │   │   ├── guya-intent-detect.mjs      # UserPromptSubmit: detect user intent signals
 │   │   ├── guya-pre-bash-dispatch.mjs  # PreToolUse(Bash): single dispatcher → review + push subprocesses (defeats 2.1.101+ matcher dedup)
-│   │   ├── guya-pre-commit-review.mjs  # Invoked by dispatcher (Bash) and directly (Skill): enforce review gate before commit
-│   │   ├── guya-pre-push-check.mjs     # Invoked by dispatcher: block push if quality checks fail
+│   │   ├── guya-pre-commit-review.mjs  # Invoked by dispatcher (Bash) and directly (Skill); PreToolUse:Skill path now auto-records evidence (appendStep) after isMain realpathSync fix
+│   │   ├── guya-pre-push-check.mjs     # Invoked by dispatcher: block push if quality checks fail; also runs hooks-smoke as the `guya-hook-smoke` gate when the test file exists
 │   │   ├── guya-post-commit-scribe.mjs # Invoked from git post-commit hook (NOT Claude Code hook)
+│   │   ├── __tests__/hooks-smoke.test.mjs  # Spawns every registered hook through the symlinked plugin path with a benign payload; asserts non-empty stdout (catches silent-no-op regressions)
 │   │   ├── hook-utils.mjs              # Shared utilities (isGitCommit, resolveProjectRoot)
 │   │   └── constantia-sync.mjs         # Shared Constantia integration (path resolution, task reading, log writing)
 │   ├── tools/                # MCP server (guya-tools)
@@ -206,6 +207,12 @@ The assembled block is injected as a system-reminder; Guya does not need to manu
 
 The dispatcher pattern was introduced 2026-04-24 specifically because the gate was silently bypassed for 16 days under Claude Code's 2.1.101+ matcher-dedup regression — same failure mode as ADR-011 (auto-fire silently breaks): rely on hook execution, verify hook execution.
 
+**Auto-evidence recording (working as of 2026-04-27, ADR-013):** When `/guya-review` or `/guya-deep-review` is invoked via `PreToolUse:Skill`, `guya-pre-commit-review.mjs` calls `appendStep()` to write a row into `review-evidence.jsonl` automatically — no manual Step 0 in the SKILL.md required. This had been silently no-op'ing since the symlinked plugin install became the dispatch path, because every hook gated `main()` with `fileURLToPath(import.meta.url) === process.argv[1]` and Node 24 resolves the LHS to the realpath while the RHS keeps the symlink path. Five hook scripts were patched to wrap both sides in `realpathSync()`: `guya-pre-commit-review`, `guya-correction-detect`, `guya-post-commit-scribe`, `guya-session-start`, `guya-session-end`.
+
+### Hook Smoke Test (defense against silent-no-op class)
+
+`guya-plugin/hooks/__tests__/hooks-smoke.test.mjs` walks every entry in `hooks.json`, spawns the script through the **symlinked** plugin install path with a benign payload, and asserts non-empty stdout. Empty stdout is the universal signature of the silent-no-op failure mode (hook registered, hook dispatched, `main()` never reached). It is wired into `guya-pre-push-check.mjs` as a gate named `guya-hook-smoke`, which runs only when the test file exists (skipped cleanly in repos that don't ship it). Verified by reverting `realpathSync` to the broken `===` comparison in one hook — smoke fails with the bug name in the assertion message; restoring the fix turns it green. This is a structural defense against the class of regression captured in ADR-011/012/013, not a fix for any single instance.
+
 ### MCP Server (guya-tools)
 
 The MCP server runs as a stdio process (registered in Claude Code's MCP config). It exposes 14 tools across four groups: memory, introspection, evolution, and identity. Tool groups are loaded conditionally so the server starts even if a group file is missing.
@@ -236,6 +243,24 @@ Currently, global strategic guidelines accumulate at `~/.claude/guya/guidelines/
 ### Convergence Tracking (Daniel-specific, ADR-008)
 
 The soul spec includes convergence tracking (detecting when Daniel is scattered vs. focused). This is referenced in identity files but not yet implemented as a measurable signal in the evolution pipeline.
+
+### Telos Runtime — Cross-Repo Architecture
+
+Telos (the mentor agent in the three-identity architecture, ADR-009) has its runtime in a separate git repo: a fork of nanoclaw at `daniellee6925/nanoclaw`, checked out locally at `~/Desktop/telos`. Telos's design docs (vision, core-beliefs, goal) live in this guya repo at `telos context/` so the design rationale is colocated with Guya's. The split is deliberate:
+
+- **Runtime → fork** (`~/Desktop/telos`): the harness — channels, containers, scheduling, credential vault, skill system — is forked from nanoclaw and modified directly. The mentor core — tick reasoning loop, profile, evidence grading, critic coordination, three-ring routing — is hand-rolled inside the fork. (Telos core-beliefs §5: "Fork the harness, hand-roll the mentor core.")
+- **Design docs → guya repo** (`telos context/`): vision, beliefs, goal — the rationale that drives what gets built in the runtime.
+- **Soul straddles both:** `soul.md` lives with the runtime (so the agent loads it directly into its system prompt) but its design rationale lives in `telos context/vision.md` §7.
+
+**Telos identity layer shipped (2026-05-03, fork commit `03604e6`):** `~/Desktop/telos/groups/telos/soul.md` and `~/Desktop/telos/groups/telos/CLAUDE.local.md` are committed and version-controlled. Nanoclaw's default `.gitignore` treats `groups/<name>/` as per-installation local state; Telos overrides this with `!groups/telos/soul.md` and `!groups/telos/CLAUDE.local.md` so the two source-of-truth files travel with the fork. Other files in the directory (`container.json`, `.claude-fragments/`, the regenerated `CLAUDE.md`) remain ignored. `CLAUDE.local.md` references `soul.md` and carries the bilingual language rule (Korean preferred where it carries weight, English where it's clearer).
+
+**Remaining Telos foundation work (in Target, not yet shipped):**
+- Operating rules in `CLAUDE.local.md` beyond the language rule (tick discipline, evidence grounding, critic coordination protocols)
+- Constantia clone on the Mac Mini where Telos will run
+- `container.json` with the Constantia mount so the Telos container can read evidence and write profile/grades
+- First Telos ability — read tasks from `tasks/MANIFEST.md` and assign new ones (Constantia write ownership: Telos writes, Guya proposes)
+- Scheduled tick (the actual reasoning loop firing on cron)
+- Discord ping output channel (the mentor surface where 두식 actually speaks to Daniel)
 
 ---
 
@@ -273,3 +298,7 @@ The soul spec includes convergence tracking (detecting when Daniel is scattered 
 | 2026-04-23 | Growth-tracker stays with Guya; guya-evolve reads Telos profile as additional input | Different purposes (session-level vs longitudinal); one reads the other, no sync needed |
 | 2026-04-23 | Log filename: YYYY-MM-DD-{author}-{project}-{session_id}.md with pre-commit enforcement | Prevents cross-repo overwrites; each session gets its own file |
 | 2026-04-24 | Single PreToolUse:Bash dispatcher (`guya-pre-bash-dispatch.mjs`) fans out to pre-commit-review + pre-push-check (ADR-012) | Claude Code 2.1.101+ semantically dedups matcher entries; multiple hooks per matcher silently collapse. Same failure mode as ADR-011 — silent rot of trusted enforcement |
+| 2026-04-27 | `realpathSync` isMain guard in 5 hook scripts + symlink-path smoke test wired into pre-push-check as `guya-hook-smoke` (ADR-013) | Third silent-rot regression of trusted enforcement (after ADR-011 auto-fire and ADR-012 matcher dedup). `import.meta.url === argv[1]` quietly failed under the symlinked plugin install path, so `main()` never ran on `PreToolUse:Skill` and review evidence never recorded. Patching the guard fixes the instance; the smoke test (asserts non-empty stdout for every registered hook spawned through the symlinked path) is the defense layer for the class |
+| 2026-05-03 | Belief #5 rewritten: fork the harness, hand-roll the mentor core (replaces "reference, don't fork") | Hand-rolling the harness was duplicative work that didn't teach Pillar 2; nanoclaw already solves containers/channels/scheduling. Hand-rolling the mentor core (tick loop, profile, critic, three-ring routing) is where taste develops. Sharp fork/scratch line determines structure of all future Telos code |
+| 2026-05-03 | Vision §7 rewritten: three voices → unified 두사부일체 character with three facets (스승/아버지/보스) | One character, two cultural frames (두식/Telos). Mother→father swap is deliberate; warmth dimension replaced by "loyalty as investment" framing. All three facets always operative; default register 보스 |
+| 2026-05-03 | Telos identity layer shipped — soul.md + CLAUDE.local.md committed to nanoclaw fork at groups/telos/, version-controlled via gitignore override | Identity is the spine the rest of Telos hangs off of; needed before tick loop, critic, or profile work. Gitignore override (`!groups/telos/soul.md`, `!groups/telos/CLAUDE.local.md`) keeps the two source-of-truth files versioned while leaving per-installation state (container.json, .claude-fragments, regenerated CLAUDE.md) local. Fork commit `03604e6` |
