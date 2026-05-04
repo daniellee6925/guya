@@ -1,6 +1,6 @@
 # guya — Architecture
 
-> Last updated: 2026-05-03
+> Last updated: 2026-05-04
 
 ## Current Architecture
 
@@ -221,13 +221,108 @@ The MCP server runs as a stdio process (registered in Claude Code's MCP config).
 
 The `guya-setup` skill installs the git post-commit hook into any repo's `.git/hooks/post-commit`. The installed hook: checks that `.guya/` exists in the repo root (guard against non-guya repos), resolves the versioned plugin cache path dynamically, and invokes the scribe with a synthetic payload. This makes the post-commit scribe portable to any guya-enabled project without requiring the full guya source tree.
 
+### Telos Runtime — Cross-Repo Architecture
+
+Telos (the mentor agent in the three-identity architecture, ADR-009) is no longer just identity files — as of 2026-05-04 it is a running, autonomous agent with hands. It has its runtime in a separate git repo (a fork of nanoclaw at `daniellee6925/nanoclaw`, checked out locally at `~/Desktop/telos` and on the Mac Mini at `/Users/guya/telos`), writes into a third repo (`daniellee6925/constantia`), and gets woken twice daily by a scheduled tick.
+
+**Cross-repo map.**
+
+| Repo | Path on local | Path on mini | What lives there |
+|------|---------------|--------------|------------------|
+| guya | `~/Desktop/guya` | — | Design docs (`telos context/vision.md`, `core-beliefs.md`, `goal.md`, `STATUS.md`); operations runbook |
+| nanoclaw fork | `~/Desktop/telos` | `/Users/guya/telos` | Runtime harness + Telos identity (`groups/telos/soul.md`, `CLAUDE.local.md`) + MCP tools (`groups/telos/tools/mcp-server.ts`) + tick prompt (`groups/telos/tick-prompt.md`) |
+| constantia | `~/Desktop/constantia` | `/Users/guya/constantia` (mounted into container at `/workspace/extra/constantia`) | Runtime data: `tasks/`, `log/`, eventually `evidence/` and `profile/`; `goals/pillars.md` |
+
+The split honors core-beliefs §5 ("fork the harness, hand-roll the mentor core"): the harness — channels, containers, scheduling, credential vault, skill system — comes from nanoclaw and is modified directly. The mentor core — soul, operating contract, tick reasoning loop, MCP tools — is hand-rolled inside `groups/telos/`. Soul straddles both: it lives with the runtime (so the agent loads it directly into its system prompt) but its design rationale lives in `telos context/vision.md` §7.
+
+**Identity layer (shipped 2026-05-03, fork commits `03604e6`, `ae13524`).** `groups/telos/soul.md` (long-form identity) and `groups/telos/CLAUDE.local.md` (binding operating contract — voice register, behavioral bans, first-contact protocol, language rule, pushback calibration, asymmetric-knowledge handling, calibration samples, Constantia-awareness section) are committed and version-controlled via `.gitignore` overrides on the fork. `container/agent-runner/src/destinations.ts` `buildSystemPromptAddendum()` reads `/workspace/agent/CLAUDE.local.md` at every spawn and injects it as the system-prompt identity block (replacing the auto-generated "Your name is **Telos**"). Empty file preserves auto block — non-breaking for other groups.
+
+**MCP server — `telos-constantia` (shipped 2026-05-04, fork commit `a0c7909`).** Hand-rolled stdio JSON-RPC at `groups/telos/tools/mcp-server.ts` (~500 LOC, no `@modelcontextprotocol/sdk` dep — keeps surface area visible, avoids npm install at container spawn). Wired in `container.json` `mcpServers.telos-constantia`. Three tools:
+
+| Tool | Purpose | Constantia file |
+|------|---------|-----------------|
+| `assign_task` | Create new task with structured frontmatter (id, status=assigned, pillar 1/2/3, assigned_by, purpose ≥10 chars, acceptance ≥10 chars, grade=null) + Context body | `tasks/TASK-NNN.md` (auto-incremented) |
+| `grade_task` | Update existing task to terminal state — `outcome=graded` requires `grade` (A/B/C) + `grade_evidence` ≥10 chars; `outcome=rejected` requires `rejection_reason` ≥10 chars. Frontmatter only, body preserved. | `tasks/TASK-NNN.md` |
+| `do_nothing` | Append timestamped no-op section to today's tick log with `reason` (≥20 chars) and optional `next_check`. Default tick decision — action without reason is noise. | `log/YYYY-MM-DD-telos-tick.md` (created if missing) |
+
+Each tool follows the same pipeline:
+
+```
+validate args
+        │
+        ▼
+write atomically: fs.writeFile(`${path}.tmp.${pid}`) → fs.rename(tmpPath, path)
+        │ (POSIX-atomic rename — process kill mid-write leaves either old file
+        │  intact OR new file complete, never half-written)
+        │
+        ▼
+git add -A → git commit -m "<conventional message>" → git rev-parse HEAD
+        │
+        ▼
+git push origin main
+        │
+        ├─ success → return {sha, pushed: true}
+        └─ failure → return {sha, pushed: false, pushError}  (NEVER throws)
+```
+
+Push failures don't fail the tool because file write + local commit is durable state; Telos surfaces `pushed: false` in its Discord report and the operator (or a future tick) recovers manually. Hard-failing on transient network errors would lose the in-character report and force Telos to redo work it already did. Handlers serialized via a promise chain (`tail = tail.then(() => handle(req))`) so concurrent stdin reads can't race on shared state (next-NNN computation, tick-log append, git config setup).
+
+Git auth uses an ed25519 deploy key at `~/.config/nanoclaw/constantia-deploy-key` on the mini, public half attached to `daniellee6925/constantia` GitHub Deploy Keys with write access. Bind-mounted as a single file at `/workspace/extra/ssh-key/constantia-deploy-key` (sidesteps the mount-allowlist `.ssh` directory block). `GIT_SSH_COMMAND` in `container.json` `mcpServers.telos-constantia.env` references it with `StrictHostKeyChecking=no UserKnownHostsFile=/dev/null`. Narrow blast radius — a compromised container can write only to constantia.
+
+**Scheduled tick (shipped 2026-05-04).** Telos is autonomous. The reasoning loop fires twice daily without anyone pinging it.
+
+```
+nanoclaw inbound.db `messages_in`
+  id:          task-1777913406295-908sio
+  recurrence:  0 9,21 * * *   (9am + 9pm PT)
+  first fire:  2026-05-04 21:00 PT
+  prompt:      "Read /workspace/agent/tick-prompt.md and execute it as a tick."
+        │
+        ▼ on fire
+        │
+nanoclaw delivers prompt to Telos's Discord session path (same wake mechanism as a DM)
+        │
+        ▼
+Telos reads `groups/telos/tick-prompt.md` and runs the protocol:
+        │
+        ├─ 1. Ground   → read pillars.md, tasks/MANIFEST.md, log/ (3 most recent), profile/
+        ├─ 2. Decide   → exactly one of {assign_task, grade_task, do_nothing}; default do_nothing
+        ├─ 3. Act      → call MCP tool; receive {sha, pushed}
+        └─ 4. Report   → 1-2 sentence Discord message; mention pushed:false if it occurred
+```
+
+The schedule was registered by Telos itself calling nanoclaw's existing `schedule_task` MCP tool. Persisted in `inbound.db` `messages_in`, survives container kills and daemon restarts. Manually invoking a tick mid-day = DM Telos with the tick-prompt content directly, or trigger `schedule_task` for a one-shot run. Full Operations Runbook (edit → kill container → clear continuation cycle, MCP server hot-reload, per-agent image rebuild conditions, deploy-key setup) lives in `telos context/STATUS.md` §A–§I.
+
+**Container prerequisites baked into base Dockerfile (fork commit `de945fd`).** Two additions required for `git push` from inside the container, both idempotency-guarded:
+1. `openssh-client` in the apt list — `node:22-slim` ships without it, so `GIT_SSH_COMMAND` had nothing to invoke (failed with `ssh: not found`).
+2. Synthetic `agent:x:501:20::/tmp:/bin/bash` `/etc/passwd` entry, guarded by `getent passwd 501 || ...` — the container runs as host uid 501 on macOS, which has no passwd entry by default, so ssh's `getpwuid(501)` returned null and ssh refused (`No user exists for uid 501`).
+
+Both additions are in the base image as of `de945fd`; fresh installs of this fork won't need a per-agent rebuild for them. The currently-running per-agent image on the mini (`nanoclaw-agent-v2-53edea47:ag-1777143186174-ykqd40`, referenced in `container.json` `imageTag`) was built manually before the bake-in landed and carries the same modifications.
+
+**Constantia data flow (Telos's writes).**
+
+```
+Telos tick fires
+    │
+    ├─► assign_task  ──► tasks/TASK-NNN.md            (status: assigned)
+    ├─► grade_task   ──► tasks/TASK-NNN.md            (status: graded|rejected)
+    └─► do_nothing   ──► log/YYYY-MM-DD-telos-tick.md (append no-op section)
+                            │
+                            ▼ (each tool, same path)
+                    git add -A → commit → push to daniellee6925/constantia
+                            │
+                            ▼
+                    Guya reads on next session-start
+                    (tasks/MANIFEST.md → priority-0 context; profile/ via /guya-evolve)
+```
+
 ---
 
 ## Target Architecture
 
 ### Daemon (v2 — deferred)
 
-ADR-004 deferred a background daemon to v2. The current hook-native architecture has no persistent process between sessions. A future daemon would enable:
+ADR-004 deferred a background daemon to v2. The current hook-native architecture has no persistent process between sessions for Guya itself (Telos is now a separate persistent process via nanoclaw on the mini, but that's the mentor surface — it doesn't fill the executor-side daemon role). A future Guya-side daemon would enable:
 - Proactive reminders and scheduled tasks without requiring a Claude Code session
 - Richer cross-session state accumulation
 - Real-time convergence tracking without session-end triggering
@@ -244,23 +339,33 @@ Currently, global strategic guidelines accumulate at `~/.claude/guya/guidelines/
 
 The soul spec includes convergence tracking (detecting when Daniel is scattered vs. focused). This is referenced in identity files but not yet implemented as a measurable signal in the evolution pipeline.
 
-### Telos Runtime — Cross-Repo Architecture
+### Telos — `write_evidence` MCP Tool
 
-Telos (the mentor agent in the three-identity architecture, ADR-009) has its runtime in a separate git repo: a fork of nanoclaw at `daniellee6925/nanoclaw`, checked out locally at `~/Desktop/telos`. Telos's design docs (vision, core-beliefs, goal) live in this guya repo at `telos context/` so the design rationale is colocated with Guya's. The split is deliberate:
+The next deferred surface area on `telos-constantia`. ~80 LOC, mirrors `assign_task` shape: validate → atomic write → commit → push. Creates `evidence/EVD-NNN.md` with frontmatter (`id`, `category`, `source`, `confidence`, `observation`, `assessment`). Tick prompt extends to include "consider whether anything you've read warrants an evidence entry"; grounding step adds a `profile/` read. Gated on first observing tick judgment quality — more surface area should follow trust in the current surface, not precede it.
 
-- **Runtime → fork** (`~/Desktop/telos`): the harness — channels, containers, scheduling, credential vault, skill system — is forked from nanoclaw and modified directly. The mentor core — tick reasoning loop, profile, evidence grading, critic coordination, three-ring routing — is hand-rolled inside the fork. (Telos core-beliefs §5: "Fork the harness, hand-roll the mentor core.")
-- **Design docs → guya repo** (`telos context/`): vision, beliefs, goal — the rationale that drives what gets built in the runtime.
-- **Soul straddles both:** `soul.md` lives with the runtime (so the agent loads it directly into its system prompt) but its design rationale lives in `telos context/vision.md` §7.
+### Telos — Profile Maintenance
 
-**Telos identity layer shipped (2026-05-03, fork commit `03604e6`):** `~/Desktop/telos/groups/telos/soul.md` and `~/Desktop/telos/groups/telos/CLAUDE.local.md` are committed and version-controlled. Nanoclaw's default `.gitignore` treats `groups/<name>/` as per-installation local state; Telos overrides this with `!groups/telos/soul.md` and `!groups/telos/CLAUDE.local.md` so the two source-of-truth files travel with the fork. Other files in the directory (`container.json`, `.claude-fragments/`, the regenerated `CLAUDE.md`) remain ignored. `CLAUDE.local.md` references `soul.md` and carries the bilingual language rule (Korean preferred where it carries weight, English where it's clearer).
+After `write_evidence` lands. Telos appends evidence-pointed claims to `profile/strengths.md`, `profile/weaknesses.md`, `profile/trajectory.md`, etc. Each claim cites the EVD-NNN that grounds it (no orphan assertions). Open question: dedicated `update_profile` MCP tool versus direct `Read`+`Edit` on the mounted files. Direct edit is simpler but loses the validate→atomic-write→commit pipeline; a tool inherits it for free.
 
-**Remaining Telos foundation work (in Target, not yet shipped):**
-- Operating rules in `CLAUDE.local.md` beyond the language rule (tick discipline, evidence grounding, critic coordination protocols)
-- Constantia clone on the Mac Mini where Telos will run
-- `container.json` with the Constantia mount so the Telos container can read evidence and write profile/grades
-- First Telos ability — read tasks from `tasks/MANIFEST.md` and assign new ones (Constantia write ownership: Telos writes, Guya proposes)
-- Scheduled tick (the actual reasoning loop firing on cron)
-- Discord ping output channel (the mentor surface where 두식 actually speaks to Daniel)
+### Telos — Pattern Detection Layer
+
+A separate process (not the tick) that watches the log/evidence stream, applies the active-threshold (3-in-2-weeks) and absence-threshold (2 consecutive weeks of an expected recurring behavior failing to occur) rules, and produces a `patterns-active.md` file Telos's tick reads during grounding. Decouples slow pattern recognition from per-tick reasoning. Discussed in the asymmetric-knowledge architecture conversation.
+
+### Telos — Critic Sub-Agent (vision §M3, Belief #1)
+
+Required for core-ring decisions (vision §5 three-ring friction model — core/adjacent/outer). Critic challenges proposed task assignments and grading judgments before they ship. Architecture pattern from Belief #1: independent reasoner reading the same grounding context, returning veto + reason rather than rewriting the action. Comes after the basic tick + evidence loop is observed reliable.
+
+### Telos — Director Role with Multi-Hypothesis Paths (vision §M4, Belief #6)
+
+Director proposes multiple hypothesis paths for a pillar gap rather than a single task. Tick selects across paths instead of acting on the first viable assignment. Far out — depends on profile, pattern detection, and critic all being live so the director has signal to weigh paths against.
+
+### Telos — Three-Ring Friction Model (vision §5)
+
+Adjacent + outer ring routing on top of the core-ring tick. Core ring is the current tick (assign/grade/do_nothing on Daniel's pillars). Adjacent ring is work that touches a pillar but isn't the central path. Outer ring is mentor-of-mentor reflection (Telos critiquing its own profile updates). Comes after core-ring reliability is established.
+
+### Telos — Long-Horizon Observability / Mentor-Health Report (vision §M5)
+
+Drift detection on Telos's own behavior — is the tick defaulting to `do_nothing` because state is healthy or because grounding is failing? Are assignments distributing across pillars or biasing toward one? Mentor-health report is a periodic (weekly?) synthesis Daniel reads to verify Telos hasn't quietly degraded. Same meta-pattern as the guya hook smoke test (ADR-013) — silent rot of trusted enforcement is the failure mode to defend against.
 
 ---
 
@@ -302,3 +407,8 @@ Telos (the mentor agent in the three-identity architecture, ADR-009) has its run
 | 2026-05-03 | Belief #5 rewritten: fork the harness, hand-roll the mentor core (replaces "reference, don't fork") | Hand-rolling the harness was duplicative work that didn't teach Pillar 2; nanoclaw already solves containers/channels/scheduling. Hand-rolling the mentor core (tick loop, profile, critic, three-ring routing) is where taste develops. Sharp fork/scratch line determines structure of all future Telos code |
 | 2026-05-03 | Vision §7 rewritten: three voices → unified 두사부일체 character with three facets (스승/아버지/보스) | One character, two cultural frames (두식/Telos). Mother→father swap is deliberate; warmth dimension replaced by "loyalty as investment" framing. All three facets always operative; default register 보스 |
 | 2026-05-03 | Telos identity layer shipped — soul.md + CLAUDE.local.md committed to nanoclaw fork at groups/telos/, version-controlled via gitignore override | Identity is the spine the rest of Telos hangs off of; needed before tick loop, critic, or profile work. Gitignore override (`!groups/telos/soul.md`, `!groups/telos/CLAUDE.local.md`) keeps the two source-of-truth files versioned while leaving per-installation state (container.json, .claude-fragments, regenerated CLAUDE.md) local. Fork commit `03604e6` |
+| 2026-05-03 | Telos identity injected via nanoclaw system-prompt addendum (ADR-014) | Project-memory loading was treated as background context; helper-bot defaults were winning attention. Patched `container/agent-runner/src/destinations.ts` `buildSystemPromptAddendum()` to read `/workspace/agent/CLAUDE.local.md` and use it as the identity block (replacing auto "Your name is X"). Empty file preserves auto block — non-breaking. Validated by 2026-05-03 14:52 PT smoke-test (5/5 prompts in-character). Fork commit `ae13524` |
+| 2026-05-04 | Telos mentor MCP server shipped: 3-tool hand-rolled stdio JSON-RPC server | Telos can now write into Constantia (assign_task / grade_task / do_nothing) and push via deploy key. Hand-rolled (no `@modelcontextprotocol/sdk` dep) keeps surface area visible and avoids npm install at spawn. Each tool: validate → atomic write (tmp + rename) → git add → commit → push. Push failures don't fail the tool. Lives in nanoclaw fork at `groups/telos/tools/mcp-server.ts` (~500 LOC). Fork commit `a0c7909` |
+| 2026-05-04 | Telos autonomous via scheduled tick using nanoclaw's `schedule_task` primitive | Twice daily (cron `0 9,21 * * *`, first fire 2026-05-04 21:00 PT). Tick prompt at `groups/telos/tick-prompt.md` walks Telos through ground → decide → act → report protocol. Fires the prompt as a regular message into the same Discord session path. Persists in `inbound.db` across restarts. Telos is now a mentor that runs without being pinged |
+| 2026-05-04 | Constantia deploy-key strategy: ed25519, single-purpose, single-file mount | `~/.config/nanoclaw/constantia-deploy-key` on mini, public half attached to `daniellee6925/constantia` GitHub Deploy Keys with write access. Bind-mounted as a single file (sidesteps mount-allowlist's `.ssh` directory block) at `/workspace/extra/ssh-key/`. `GIT_SSH_COMMAND` in container.json `mcpServers.env` references it with `StrictHostKeyChecking=no UserKnownHostsFile=/dev/null`. Narrow blast radius — compromised container can write only to constantia |
+| 2026-05-04 | openssh-client + uid-501 passwd entry baked into base nanoclaw Dockerfile | Two prerequisites for `git push` from inside the container, discovered during smoke-test arc: (1) base `node:22-slim` lacks ssh client (so GIT_SSH_COMMAND has nothing to invoke); (2) container runs as host uid 501 with no `/etc/passwd` entry (so `getpwuid(501)` returns null and ssh refuses). Both now in fork commit `de945fd`, idempotency-guarded (`getent passwd 501 || ...`). Fresh installs of this fork won't need the per-agent rebuild we did manually on mini |

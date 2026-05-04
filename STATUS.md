@@ -1,15 +1,15 @@
 # guya — Status
 
-> Last updated: 2026-05-03
+> Last updated: 2026-05-04 (AM)
 
 ## Current Focus
-**Telos is online and partially loaded.** Identity layer (soul.md + CLAUDE.local.md) committed to nanoclaw fork (`03604e6`). Mini's Docker Desktop now configured to start at login → nanoclaw recovers automatically after reboots. First Discord smoke-test confirmed Telos is connected (username `Telos`, Gateway READY) and knows its name + address conventions, but the *character* is not yet expressed — first responses leaned on default helpful-assistant patterns ("도와드릴까요" / "What can I do for you?") and defaulted to Korean even on English input. Identity without operating rules ≈ Generic Claude that knows its name, exactly as predicted.
+**Telos is autonomous.** Mentor MCP server (`groups/telos/tools/mcp-server.ts`, ~500 LOC, hand-rolled JSON-RPC) ships three tools — `assign_task`, `grade_task`, `do_nothing` — each writing a structured Constantia file, committing, and pushing via deploy key. Tick scheduled twice daily (9am + 9pm PT) via nanoclaw's `schedule_task` primitive. Smoke-tested end-to-end across four iterations 2026-05-04 (uncovered + fixed: missing `openssh-client` in container, `packages.apt` doesn't take effect on its own, no `/etc/passwd` entry for uid 501). All prerequisites now baked into base Dockerfile (fork commit `de945fd`).
 
-**Telos-scoped status now lives at `telos context/STATUS.md`.** This file (guya STATUS.md) tracks the guya plugin and meta-project; Telos's runtime, identity, and implementation state get their own status doc alongside `vision.md`, `core-beliefs.md`, and `goal.md`. `telos context/` is now committed to the guya repo — design artifacts belong in version control.
-
-Next blocker for Telos: write operating rules into CLAUDE.local.md (voice register specifics, banned patterns including no-greetings/no-offers-of-help, language rule reinforcement, first-contact behavior, pushback calibration, asymmetric-knowledge handling). The behavioral layer is what overrides the RLHF default — soul alone can't.
+**Watch tonight's 9pm PT tick.** It's the first observation of mentor judgment quality — separate from the plumbing verification we just passed. If Telos messages unprompted with a sensible report, the loop is closed. If the report shows weak judgment (vague task, fabricated pattern, reflexive `do_nothing`), tighten `groups/telos/tick-prompt.md`. Full Telos state in `telos context/STATUS.md`.
 
 ## Recent Changes
+- [2026-05-04] `5a4b6d4` — docs(telos): document MCP server smoke-test arc and tick scheduling
+- [2026-05-03] `7349a4f` — docs(telos): verify mini push access to constantia repo
 - [2026-05-03] `c7e8f59` — docs(constantia): commit Constantia design docs to guya repo
 - [2026-05-03] `7dfc03d` — chore(scribe): catch up auto-bookkeeping after multi-commit Telos session
 - [2026-05-03] `ba2f01b` — docs(reflections): commit two manual reflections from prior sessions
@@ -21,19 +21,22 @@ Next blocker for Telos: write operating rules into CLAUDE.local.md (voice regist
 - [2026-05-03] `1c6e351` — chore(telos): commit telos context/ and add Telos-scoped STATUS
 - [2026-05-03] `f382b47` — chore(scribe): record Telos identity-layer session in STATUS + ARCHITECTURE
 - [2026-05-01] `538f8db` — docs(mini): mac mini remote access reference + status update
-- [2026-04-27] `83d786a` — test(hooks): pre-push smoke test catches silent-no-op hook regressions
-- [2026-04-27] `856acf6` — fix(hooks): isMain guard fails under symlinked plugin install
-- [2026-04-27] `eab540d` — docs(review): warn that Step 0 must run after staging, not before
-- [2026-04-27] `7edc030` — feat(review): skill-driven evidence recording via Step 0 in review SKILL.md
 
 **Cross-repo (nanoclaw fork `daniellee6925/nanoclaw`):**
+- [2026-05-04] `de945fd` — feat(container): bake openssh-client + uid-501 passwd entry into base image
+- [2026-05-04] `a0c7909` — feat(telos): mentor MCP server (assign_task / grade_task / do_nothing) + tick prompt
+- [2026-05-03] `0a63654` — docs(telos): add Constantia-awareness section to operating contract
+- [2026-05-03] `ae13524` — feat(telos): inject CLAUDE.local.md via addendum + rewrite operating contract
+- [2026-05-03] `5958205` — feat(telos): operating rules — voice, bans, pushback, first-contact, language
 - [2026-05-03] `03604e6` — feat(telos): version-controlled soul.md and identity reference
-- [2026-04-25] `80c8a78` — feat(channels): wire Discord adapter into Telos install (pushed today)
+
+**Cross-repo (constantia `daniellee6925/constantia`):**
+- [2026-05-04] (Telos's own writes) — `dc675ce`, `09289a3`, `56d9fef`, `a49a29a` (no-op tick logs across smoke-test attempts) + TASK-009 from Stage 2
+- [2026-05-03] `8800673` — docs: add design docs and fix dangling @-refs in CLAUDE.md
 
 ## In Progress
-- [ ] **Telos operating rules in CLAUDE.local.md** (see `telos context/STATUS.md` for full Telos-scoped state) — first smoke test (2026-05-03) confirmed character doesn't load without behavioral rules. Voice register, behavioral bans, pushback calibration, asymmetric-knowledge handling, first-contact behavior, language-rule reinforcement.
-- [ ] **Decide whether `constantia context/` gets committed to guya repo.** Currently untracked (`??` in git status). `telos context/` was committed today; same argument likely applies to `constantia context/` but defer until Constantia design is consolidated.
-- [ ] Verify Constantia integration end-to-end across projects (session-start task injection, reflect log write from sdf-dev, append logic on re-reflect)
+- [ ] **Watch tonight's 9pm PT tick.** First observation of mentor judgment. If sensible report → loop closed, move to `write_evidence`. If weak judgment → tighten `groups/telos/tick-prompt.md`.
+- [ ] **`write_evidence` MCP tool.** Next deferred frontier per `telos context/STATUS.md`. ~80 LOC mirroring `assign_task` shape. Wait until tick judgment is observed before adding more surface area.
 - [ ] Comprehensive logging system for guya plugin hooks — original ask from 2026-04-08 late night, never scoped, still outstanding. **Partially addressed 2026-04-27** — smoke test catches one specific failure mode (silent no-op via main() never running), but doesn't cover broader observability (hook execution traces, payload audit trail, classifier costs). Full logging still outstanding.
 - [ ] Claude code guide — living doc, update as new patterns discovered
 - [ ] Phase 5 cleanup — 5 items tagged `[LOW — Phase 5 cleanup]` in TODO below
@@ -57,6 +60,10 @@ Next blocker for Telos: write operating rules into CLAUDE.local.md (voice regist
 - [ ] Growth tracker milestone #5: review code Guya writes — pick one function per session
 
 ## Decisions & Notes
+- [2026-05-04] **Telos has hands.** Mentor MCP server shipped (`groups/telos/tools/mcp-server.ts` in nanoclaw fork, commit `a0c7909`). Three tools: `assign_task` creates `tasks/TASK-NNN.md` with structured frontmatter, `grade_task` updates to terminal state with grade or rejection reason, `do_nothing` logs an explicit no-op with reason to today's `log/YYYY-MM-DD-telos-tick.md`. Each tool: validate → write atomically (tmp + rename) → git add → git commit → git push. Push failures don't fail the tool; tool returns `pushed: false` with error and operator/Telos can recover later. Hand-rolled stdio JSON-RPC (no `@modelcontextprotocol/sdk` dep) — 480 LOC, no npm install at spawn. Full architecture in `telos context/STATUS.md` Decisions.
+- [2026-05-04] **Telos is autonomous via scheduled tick.** Self-scheduled via nanoclaw's `schedule_task` MCP tool (id `task-1777913406295-908sio`, recurrence `0 9,21 * * *`, first fire `2026-05-04T21:00 PT`). On each fire Telos receives "Read /workspace/agent/tick-prompt.md and execute it as a tick." and runs the protocol in `groups/telos/tick-prompt.md` — ground in pillars/manifest/log/profile, decide one action, take it, push, report on Discord. Persisted in `inbound.db` `messages_in`, survives restarts.
+- [2026-05-04] **`openssh-client` + uid-501 passwd entry baked into base Dockerfile.** Discovered during smoke-test arc: `node:22-slim` lacks `openssh-client` (so `git push` via SSH fails with "ssh: not found"); container runs as host uid (501 on macOS) which has no `/etc/passwd` entry (so ssh fails with "No user exists for uid 501"); `packages.apt` only takes effect via per-agent image build, not on every spawn. Fork commit `de945fd` adds both to the base image (passwd append guarded by `getent passwd 501` for idempotency). Fresh installs of this fork won't need a per-agent rebuild.
+- [2026-05-04] **Constantia deploy key strategy: ed25519, single-purpose, single-file mount.** Generated `~/.config/nanoclaw/constantia-deploy-key` on mini, public half attached to `daniellee6925/constantia` GitHub repo with write access. Bind-mounted as a SINGLE FILE at `/workspace/extra/ssh-key/constantia-deploy-key` (sidesteps mount-allowlist's `.ssh` directory block). `GIT_SSH_COMMAND` in container.json `mcpServers.env` references it with `StrictHostKeyChecking=no UserKnownHostsFile=/dev/null`. Narrow blast radius — compromised container can write only to constantia.
 - [2026-05-03] **Telos status tracked separately at `telos context/STATUS.md`.** Telos is its own subsystem — runtime state (Docker, nanoclaw, Discord), identity state, implementation progress, behavioral observations — distinct from the guya plugin's state. Mixing them in one file would conflate two different concerns. Separate STATUS file lives alongside Telos's other design artifacts (vision, core-beliefs, goal). Pattern: `telos context/STATUS.md` for Telos-scoped state; this file for guya-plugin-scoped state.
 - [2026-05-03] **`telos context/` committed to guya repo.** Was previously untracked. Resolution of in-progress decision: design artifacts belong in version control (history, cross-machine sync, audit trail). Same argument that justified version-controlling soul.md in the nanoclaw fork. `constantia context/` still untracked — separate decision.
 - [2026-05-03] **Telos online via Discord; Docker Desktop set to start-at-login on mini.** Identity ships, infra recovers. After mini reboot, the chain is: auto-login → Tailscale reconnects → Docker Desktop starts → launchd's `com.nanoclaw-v2-53edea47` picks up Docker → nanoclaw spawns → Telos joins Discord. No manual intervention needed. Full launchd-daemon path (Docker as system daemon, no user-session dependency) deferred until Telos has a reason to come up before login.
