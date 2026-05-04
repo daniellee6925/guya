@@ -35,7 +35,6 @@ guya/
 │   │   ├── evolution-tools.js      # evolve_consolidate, evolve_status, evolve_force_synthesize
 │   │   └── identity-tools.js       # identity_propose_change, identity_read
 │   ├── skills/               # One directory per skill (SKILL.md inside each)
-│   │   ├── guya-bootstrap    # First-run interview
 │   │   ├── guya-setup        # Install git hooks into any repo
 │   │   ├── guya-scribe       # Update STATUS.md / ARCHITECTURE.md / CLAUDE.md
 │   │   ├── guya-reflect      # Manual reflection cycle + Constantia log write
@@ -44,10 +43,8 @@ guya/
 │   │   ├── guya-review       # Code review (Karpathy principles)
 │   │   ├── guya-deep-review  # Second-pass review after fixes
 │   │   ├── guya-optimize     # Simplification and performance analysis
-│   │   ├── guya-pr           # Pre-PR diff review + Codex pass
+│   │   ├── guya-issue        # Capture a mid-work bug into a GitHub issue, return to task
 │   │   ├── guya-status       # Show current Guya state
-│   │   ├── guya-forget       # Remove a guideline or memory entry
-│   │   ├── guya-obsidian-sync # Sync knowledge to Obsidian
 │   │   ├── guya-skill-creator # Create/improve skills
 │   │   ├── guya-decision-bugfix / feature / refactor  # Decision harnesses
 │   │   ├── guya-decision-kickoff  # Kickoff harness: 12-question alignment → Project Setup scaffold → lod-planner delegation

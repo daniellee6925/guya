@@ -37,15 +37,7 @@ It's built on one idea: **the bottleneck in AI coding isn't the model, it's the 
 /plugin install guya
 ```
 
-**Step 2: First-run interview**
-
-```bash
-/guya-bootstrap
-```
-
-Guya asks who you are, how you like to work, what you're trying to get better at. Takes about 5 minutes. This builds your identity file.
-
-**Step 3: Start using it**
+**Step 2: Start using it**
 
 ```bash
 # Kicking off a new project? Force real decisions up front.
@@ -93,7 +85,7 @@ Force real thinking before implementation. Claude is the advisor, you are the de
 | `/guya-review` | Focused review applying Karpathy principles — complexity, silent errors, scalability, races. |
 | `/guya-deep-review` | Deep second-pass review after `/guya-review` findings are fixed. |
 | `/guya-optimize` | Analyze code for simplification, performance, and efficiency opportunities. |
-| `/guya-pr` | Pre-PR prep — Codex fresh-eyes pass, scope/breaking-change checks, summary generation. |
+| `/guya-issue` | Capture a bug or follow-up surfaced mid-work into a GitHub issue, then return to the original task. |
 
 ### Memory & evolution
 
@@ -101,7 +93,6 @@ Force real thinking before implementation. Claude is the advisor, you are the de
 | --- | --- |
 | `/guya-reflect` | End-of-session reflection. Surfaces what went well, what didn't, what to change. |
 | `/guya-evolve` | Synthesize recent reflections into self-edit proposals. Review, approve, apply. |
-| `/guya-forget` | Remove a specific guideline or memory. |
 | `/guya-scribe` | Update STATUS / ARCHITECTURE / CLAUDE.md files with current project state. |
 
 ### Learning & exploration
@@ -115,10 +106,8 @@ Force real thinking before implementation. Claude is the advisor, you are the de
 
 | Command | Use when |
 | --- | --- |
-| `/guya-bootstrap` | First-run interview. Builds your user profile. |
 | `/guya-setup` | Install Guya's git hooks into the current repo (pre-commit review, post-commit scribe). |
 | `/guya-status` | Show Guya's current state — what it knows, recent activity. |
-| `/guya-obsidian-sync` | Sync Guya's knowledge into your Obsidian vault. |
 | `/guya-skill-creator` | Create / improve / eval custom skills. |
 
 ---

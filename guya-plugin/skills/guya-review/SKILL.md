@@ -1,6 +1,6 @@
 ---
 name: guya-review
-description: Focused code review applying Karpathy principles and targeted risk categories — complexity, silent errors, scalability, security, and race conditions. Use when asked to "review", "karpathy review", or "check this code". Trigger proactively on new or significantly changed code — don't wait to be asked. Use guya-pr instead for the full pre-PR preparation pass.
+description: Focused code review applying Karpathy principles and targeted risk categories — complexity, silent errors, scalability, security, and race conditions. Use when asked to "review", "karpathy review", or "check this code". Trigger proactively on new or significantly changed code — don't wait to be asked. Run `/guya-deep-review` after fixes for the second pass.
 argument-hint: "<file-path or directory>"
 ---
 

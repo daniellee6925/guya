@@ -20,7 +20,7 @@ Spawnable via the `Agent` tool with `subagent_type="guya:agent-name"`:
 
 ### Workflow Agents
 - `guya:guya-tester` (sonnet) — Generate tests and regression coverage. Wired to: `guya-decision-feature`, `guya-decision-bugfix`
-- `guya:guya-document` (haiku) — Generate documentation from code without touching source logic. Wired to: `guya-pr`, `guya-review`
+- `guya:guya-document` (haiku) — Generate documentation from code without touching source logic. Wired to: `guya-review`
 - `guya:guya-debugger` (sonnet) — Root-cause analysis with competing hypotheses and evidence. Wired to: `guya-decision-bugfix`
 - `guya:guya-refactor` (sonnet) — Safe scoped refactors with behavior preservation and change log. Wired to: `guya-decision-refactor`
 

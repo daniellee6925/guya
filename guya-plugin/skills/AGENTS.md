@@ -3,7 +3,7 @@
 
 # skills
 
-15 skills for personal evolution, memory management, decision-making harnesses, and code quality.
+Skills for personal evolution, memory management, decision-making harnesses, code quality, and workflow.
 
 ## Purpose
 
@@ -16,13 +16,16 @@ Skills are reusable workflow templates that can be invoked via `/guya-skill-name
 
 | File | Skill | Purpose |
 |-----------|-------|---------|
-| `guya-bootstrap/SKILL.md` | guya-bootstrap | First-run interview that builds Daniel's profile |
 | `guya-status/SKILL.md` | guya-status | Show Guya's current state and guideline inventory |
 | `guya-evolve/SKILL.md` | guya-evolve | Trigger manual guideline consolidation |
 | `guya-reflect/SKILL.md` | guya-reflect | Trigger a manual reflection cycle |
-| `guya-forget/SKILL.md` | guya-forget | Remove a specific guideline or memory |
 | `guya-scribe/SKILL.md` | guya-scribe | Update or create STATUS.md with current project state |
-| `guya-obsidian-sync/SKILL.md` | guya-obsidian-sync | Sync Guya's knowledge to Obsidian vault |
+
+## Workflow Skills
+
+| File | Skill | Purpose |
+|-----------|-------|---------|
+| `guya-issue/SKILL.md` | guya-issue | Capture a bug or follow-up surfaced mid-work into a GitHub issue via `gh`, returning to the original task |
 
 ## Decision Harness Skills
 
@@ -42,6 +45,5 @@ Staff-engineer-level decision harnesses for major decisions:
 |-----------|-------|---------|
 | `guya-review/SKILL.md` | guya-review | Review code using Karpathy guidelines + silent errors, scalability, security, race conditions |
 | `guya-deep-review/SKILL.md` | guya-deep-review | Deep second-pass review: logic correctness, state management, data integrity, performance, observability |
-| `guya-pr/SKILL.md` | guya-pr | Pre-PR preparation: Codex fresh-eyes pass, readiness checklist, cross-diff consistency, PR summary |
 | `guya-optimize/SKILL.md` | guya-optimize | Find simplification and optimization opportunities — report only, no fixes |
 | `guya-learn/SKILL.md` | guya-learn | Interactive learning session from first principles with active recall and progress tracking |

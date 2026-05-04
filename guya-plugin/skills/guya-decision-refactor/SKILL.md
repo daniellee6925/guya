@@ -96,7 +96,6 @@ Surface any conflicts in the alignment confirmation: "Here's where this plan bum
 After implementation is complete:
 1. **Commit** — pre-commit hook runs `guya-review` automatically. Fix any issues it surfaces, then re-commit.
 2. **Complex changes** — run `/guya:guya-deep-review` manually before committing to get ahead of issues rather than reacting to them.
-3. **Before PR** — run `/guya:guya-pr` to get a Codex fresh-eyes pass and a clean PR description.
 
 ## Marker Management (MANDATORY — before Q1)
 

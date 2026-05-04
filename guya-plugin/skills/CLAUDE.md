@@ -16,14 +16,17 @@ Skills are invoked via `/guya-skill-name` or by matching trigger phrases listed 
 
 | Directory | Skill | Purpose |
 |-----------|-------|---------|
-| `guya-bootstrap/` | guya-bootstrap | First-run interview that builds Daniel's profile. Triggers automatically when `~/.claude/guya/` is missing. |
 | `guya-status/` | guya-status | Show Guya's current state: guideline inventory, trace counts, evolution status. |
 | `guya-evolve/` | guya-evolve | Trigger manual guideline consolidation — merge duplicates, promote validated tactics, prune stale ones. |
 | `guya-reflect/` | guya-reflect | Manual reflection cycle — surfaces what Daniel should take away and what Guya should learn from a session. |
-| `guya-forget/` | guya-forget | Remove a specific guideline or memory by name or description. |
 | `guya-scribe/` | guya-scribe | Update `STATUS.md`, `ARCHITECTURE.md`, and relevant `CLAUDE.md` files with current project state. |
-| `guya-obsidian-sync/` | guya-obsidian-sync | Sync Guya's knowledge to Daniel's Obsidian vault. |
 | `guya-skill-creator/` | guya-skill-creator | Create new skills, improve existing skills, and measure skill performance. |
+
+### Workflow
+
+| Directory | Skill | Purpose |
+|-----------|-------|---------|
+| `guya-issue/` | guya-issue | Capture a bug or follow-up surfaced mid-work into a GitHub issue. Drafts title/body from conversation context, confirms with Daniel, files via `gh`, returns control to the original task. |
 
 ### Decision Harnesses
 
@@ -43,7 +46,6 @@ Staff-engineer-level decision harnesses. Each forces structured thinking before 
 |-----------|-------|---------|
 | `guya-review/` | guya-review | Focused code review: Karpathy principles, silent errors, scalability, security, race conditions. |
 | `guya-deep-review/` | guya-deep-review | Deep second-pass review after `guya-review` findings are fixed. Catches logic bugs, state management issues, data integrity gaps, and observability holes. |
-| `guya-pr/` | guya-pr | Pre-PR preparation. Runs a Codex fresh-eyes pass on the full diff, checks PR readiness, surfaces cross-diff inconsistencies, and drafts the PR summary. |
 | `guya-optimize/` | guya-optimize | Analyze code for simplification, performance, and resource efficiency opportunities. Report only — no fixes applied. |
 
 ### Learning
