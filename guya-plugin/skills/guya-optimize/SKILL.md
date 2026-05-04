@@ -68,7 +68,7 @@ Better: [What it should do instead and why]
 No issues found. (if clean)
 ```
 
-End with a **Priority Summary** — top 5 findings ranked by impact, with estimated effort:
+End with a **Priority Summary** — all findings ranked by impact (highest first), with estimated effort. Do not truncate the list:
 
 ```
 1. [file:line] — [Title] | Impact: High | Effort: Trivial

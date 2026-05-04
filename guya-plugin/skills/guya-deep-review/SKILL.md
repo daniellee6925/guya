@@ -129,3 +129,14 @@ End with:
 ## Step 5 — Follow-Up
 
 If undocumented public APIs or exports were found during review, offer to spawn `guya:guya-document` to generate the missing documentation.
+
+## Step 6 — Continue or Yield
+
+This skill is often invoked mid-flow (between tasks in a multi-task phase, as the second pass of the pre-commit gate, inside a larger plan). After printing **Fixes Applied**, do NOT stop the turn by default — return control to the calling flow and proceed with the next task (e.g. the commit, the next task in the phase).
+
+Yield to Daniel only if one of these is true:
+- An `Action needed` item is unresolved and the next step genuinely requires his decision
+- Fixes changed behavior in a way that invalidates the rest of the plan
+- A prior turn explicitly told you to stop after review
+
+Otherwise, treat the review as a checkpoint, not a terminus, and keep going.
