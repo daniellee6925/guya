@@ -1,6 +1,6 @@
 # guya — Architecture
 
-> Last updated: 2026-05-04
+> Last updated: 2026-05-04 (PM)
 
 ## Current Architecture
 
@@ -169,7 +169,7 @@ Legacy trace-driven pipeline (guya-observer → guya-synthesizer in session-end)
 Guya (executor)                    Telos (mentor)
    │                                  │
    ├── session-start reads ◄──────── tasks/MANIFEST.md
-   ├── /guya-reflect writes ──────► log/YYYY-MM-DD-guya-{project}-{session}.md
+   ├── /guya-reflect writes ──────► log/guya/YYYY-MM-DD-{project}-{session}.md
    ├── /guya-evolve reads ◄──────── profile/ (strengths, weaknesses, trajectory)
    │                                  │
    └────────── Constantia ────────────┘
@@ -179,12 +179,19 @@ Guya (executor)                    Telos (mentor)
 **Constantia** (`~/Desktop/constantia`) is the shared memory repo between Guya and Telos. Path resolved via `~/.claude/guya/constantia.json`. The `constantia-sync.mjs` module provides shared utilities for path resolution, task manifest reading, and log writing.
 
 **Write ownership (no shared-write files):**
-- Guya: `log/` (via /guya-reflect), task status updates
-- Telos: `evidence/`, `profile/`, `goals/`, task assignments + grades
+- Guya: `log/guya/` (via /guya-reflect), task status updates
+- Telos: `log/telos/`, `evidence/`, `profile/`, `goals/`, task assignments + grades
+
+**Log layout (reorganized 2026-05-04 PM).** `log/` was previously flat with `YYYY-MM-DD-{author}-{project}-{session}.md` files; it is now split by author:
+- `log/guya/YYYY-MM-DD-{project}-{session}.md` — one file per Guya session
+- `log/telos/YYYY-MM-DD-tick.md` — one file per day, all action+no-op tick sections appended in order
+- `log/telos/YYYY-MM-DD-reflection.md` — nightly synthesized reflection (one per day)
+
+23 existing logs were migrated. The Constantia pre-commit hook validates per-author filename regex and rejects any new file at `log/` root. The post-commit manifest hook walks subdirectories via `find` and includes a Path column in `log/MANIFEST.md`. Hooks are now installed as symlinks on both laptop and mini — the mini was the silent-validation gap that allowed `tick.md` filenames to commit despite not matching the old flat regex (the hook simply wasn't running there).
 
 **Session-start:** reads `tasks/MANIFEST.md`, injects active tasks at priority 0 (same as soul/user). Alerts if Constantia unavailable — never silently degrades.
 
-**Reflect:** writes structured log entries with YAML frontmatter + full body (session metadata, reflection content, growth observations, open threads). Filename includes project + session ID to prevent cross-repo collisions. Append logic for same-session re-reflects.
+**Reflect:** writes structured log entries with YAML frontmatter + full body (session metadata, reflection content, growth observations, open threads) into `log/guya/`. Filename includes project + session ID to prevent cross-repo collisions. Append logic for same-session re-reflects.
 
 **Evolve:** `readConstantiaProfile()` reads Telos's non-stub profile assessments as additional synthesis input, so Guya can calibrate proposals against Telos's longitudinal view.
 
@@ -223,7 +230,9 @@ The `guya-setup` skill installs the git post-commit hook into any repo's `.git/h
 
 ### Telos Runtime — Cross-Repo Architecture
 
-Telos (the mentor agent in the three-identity architecture, ADR-009) is no longer just identity files — as of 2026-05-04 it is a running, autonomous agent with hands. It has its runtime in a separate git repo (a fork of nanoclaw at `daniellee6925/nanoclaw`, checked out locally at `~/Desktop/telos` and on the Mac Mini at `/Users/guya/telos`), writes into a third repo (`daniellee6925/constantia`), and gets woken twice daily by a scheduled tick.
+Telos (the mentor agent in the three-identity architecture, ADR-009) is no longer just identity files — as of 2026-05-04 it is a running, autonomous agent with hands. It has its runtime in a separate git repo (a fork of nanoclaw at `daniellee6925/nanoclaw`, checked out locally at `~/Desktop/telos` and on the Mac Mini at `/Users/guya/telos`), writes into a third repo (`daniellee6925/constantia`), and gets woken on a schedule (twice-daily ticks + nightly reflection).
+
+The runtime now spans three layers — **action**, **memory**, **reflection** — built incrementally and all live as of 2026-05-04 PM.
 
 **Cross-repo map.**
 
@@ -231,21 +240,28 @@ Telos (the mentor agent in the three-identity architecture, ADR-009) is no longe
 |------|---------------|--------------|------------------|
 | guya | `~/Desktop/guya` | — | Design docs (`telos context/vision.md`, `core-beliefs.md`, `goal.md`, `STATUS.md`); operations runbook |
 | nanoclaw fork | `~/Desktop/telos` | `/Users/guya/telos` | Runtime harness + Telos identity (`groups/telos/soul.md`, `CLAUDE.local.md`) + MCP tools (`groups/telos/tools/mcp-server.ts`) + tick prompt (`groups/telos/tick-prompt.md`) |
-| constantia | `~/Desktop/constantia` | `/Users/guya/constantia` (mounted into container at `/workspace/extra/constantia`) | Runtime data: `tasks/`, `log/`, eventually `evidence/` and `profile/`; `goals/pillars.md` |
+| constantia | `~/Desktop/constantia` | `/Users/guya/constantia` (mounted into container at `/workspace/extra/constantia`) | Runtime data: `tasks/`, `log/guya/`, `log/telos/` (tick + reflection), eventually `evidence/` and `profile/`; `goals/pillars.md` |
 
 The split honors core-beliefs §5 ("fork the harness, hand-roll the mentor core"): the harness — channels, containers, scheduling, credential vault, skill system — comes from nanoclaw and is modified directly. The mentor core — soul, operating contract, tick reasoning loop, MCP tools — is hand-rolled inside `groups/telos/`. Soul straddles both: it lives with the runtime (so the agent loads it directly into its system prompt) but its design rationale lives in `telos context/vision.md` §7.
 
 **Identity layer (shipped 2026-05-03, fork commits `03604e6`, `ae13524`).** `groups/telos/soul.md` (long-form identity) and `groups/telos/CLAUDE.local.md` (binding operating contract — voice register, behavioral bans, first-contact protocol, language rule, pushback calibration, asymmetric-knowledge handling, calibration samples, Constantia-awareness section) are committed and version-controlled via `.gitignore` overrides on the fork. `container/agent-runner/src/destinations.ts` `buildSystemPromptAddendum()` reads `/workspace/agent/CLAUDE.local.md` at every spawn and injects it as the system-prompt identity block (replacing the auto-generated "Your name is **Telos**"). Empty file preserves auto block — non-breaking for other groups.
 
-**MCP server — `telos-constantia` (shipped 2026-05-04, fork commit `a0c7909`).** Hand-rolled stdio JSON-RPC at `groups/telos/tools/mcp-server.ts` (~500 LOC, no `@modelcontextprotocol/sdk` dep — keeps surface area visible, avoids npm install at container spawn). Wired in `container.json` `mcpServers.telos-constantia`. Three tools:
+**Layer 1 — Action layer. MCP server `telos-constantia` (shipped 2026-05-04, fork commit `a0c7909`; expanded same day).** Hand-rolled stdio JSON-RPC at `groups/telos/tools/mcp-server.ts` (873 LOC — over the 800 LOC limit by 73; helpers extract cleanly into a separate file as a follow-up). No `@modelcontextprotocol/sdk` dep — keeps surface area visible, avoids npm install at container spawn. Wired in `container.json` `mcpServers.telos-constantia`. Six tools:
 
-| Tool | Purpose | Constantia file |
-|------|---------|-----------------|
-| `assign_task` | Create new task with structured frontmatter (id, status=assigned, pillar 1/2/3, assigned_by, purpose ≥10 chars, acceptance ≥10 chars, grade=null) + Context body | `tasks/TASK-NNN.md` (auto-incremented) |
-| `grade_task` | Update existing task to terminal state — `outcome=graded` requires `grade` (A/B/C) + `grade_evidence` ≥10 chars; `outcome=rejected` requires `rejection_reason` ≥10 chars. Frontmatter only, body preserved. | `tasks/TASK-NNN.md` |
-| `do_nothing` | Append timestamped no-op section to today's tick log with `reason` (≥20 chars) and optional `next_check`. Default tick decision — action without reason is noise. | `log/YYYY-MM-DD-telos-tick.md` (created if missing) |
+| Tool | Layer | Purpose | Constantia file |
+|------|-------|---------|-----------------|
+| `assign_task` | action | Create new task with structured frontmatter (id, status=assigned, pillar 1/2/3, assigned_by, purpose ≥10 chars, acceptance ≥10 chars, grade=null) + Context body | `tasks/TASK-NNN.md` (auto-incremented) |
+| `accept_proposal` | action | Accept a Guya-proposed task (status: proposed → assigned). Closes the proposed → assigned → graded/rejected lifecycle | `tasks/TASK-NNN.md` |
+| `grade_task` | action | Update existing task to terminal state — `outcome=graded` requires `grade` (A/B/C) + `grade_evidence` ≥10 chars; `outcome=rejected` requires `rejection_reason` ≥10 chars. Frontmatter only, body preserved. | `tasks/TASK-NNN.md` |
+| `do_nothing` | action | Append timestamped no-op section to today's tick log with `reason` (≥20 chars) and optional `next_check`. Default tick decision — action without reason is noise. | `log/telos/YYYY-MM-DD-tick.md` |
+| `write_reflection` | reflection | Write nightly synthesized reflection with 8 sections: `what_happened`, `key_decisions`, `patterns_observed`, `what_daniel_should_take_away`, `what_telos_should_change`, `evidence_candidates`, `open_threads`, `next_priorities`. Refuses to overwrite an existing same-day reflection | `log/telos/YYYY-MM-DD-reflection.md` |
+| `read_today_transcript` | reflection (read-only) | Open nanoclaw's `inbound.db` + `outbound.db` read-only via `bun:sqlite`, return Daniel↔Telos messages merged by timestamp for a given PT day. Mounted at `/workspace/extra/telos-session` (read-only, `additionalMounts` entry in `groups/telos/container.json`, allowlist updated) | none (read-only) |
 
-Each tool follows the same pipeline:
+The full task lifecycle (proposed → assigned → graded/rejected) closed end-to-end on real artifacts on 2026-05-04: TASK-001 graded B, TASK-003 rejected, TASK-009 closed.
+
+**Layer 2 — Memory layer (symmetric tick logging, NEW 2026-05-04 PM).** Every action tool now calls `appendTickLogSection` to write a section to `log/telos/YYYY-MM-DD-tick.md` BEFORE its commit, so action ticks leave the same trail no-ops do. Previously only `do_nothing` wrote to the tick log, leaving action ticks invisible in the daily record.
+
+Each action/no-op tool follows the same pipeline:
 
 ```
 validate args
@@ -254,6 +270,11 @@ validate args
 write atomically: fs.writeFile(`${path}.tmp.${pid}`) → fs.rename(tmpPath, path)
         │ (POSIX-atomic rename — process kill mid-write leaves either old file
         │  intact OR new file complete, never half-written)
+        │
+        ▼
+appendTickLogSection → log/telos/YYYY-MM-DD-tick.md
+        │ (every action tool writes a section before committing — symmetric
+        │  with do_nothing; action ticks no longer invisible in the daily log)
         │
         ▼
 git add -A → git commit -m "<conventional message>" → git rev-parse HEAD
@@ -266,6 +287,10 @@ git push origin main
 ```
 
 Push failures don't fail the tool because file write + local commit is durable state; Telos surfaces `pushed: false` in its Discord report and the operator (or a future tick) recovers manually. Hard-failing on transient network errors would lose the in-character report and force Telos to redo work it already did. Handlers serialized via a promise chain (`tail = tail.then(() => handle(req))`) so concurrent stdin reads can't race on shared state (next-NNN computation, tick-log append, git config setup).
+
+**Layer 3 — Reflection layer (NEW 2026-05-04 PM).** Nightly synthesized memory. The reflection cron fires at 23:00 PT, Telos reads the day's transcript + tick log + Guya logs + profile, synthesizes the 8 sections defined by `write_reflection`, calls the tool to persist `log/telos/YYYY-MM-DD-reflection.md`, then DMs a 2-3 sentence highlight to Daniel. The protocol lives in `groups/telos/reflect-prompt.md`. Distinct from the tick prompt — different grounding inputs, different output shape, different output file.
+
+The reflection schedule was seeded by direct sqlite INSERT into nanoclaw's `inbound.db` `messages_in` (id `task-17779308213N-rfltky`, recurrence `0 23 * * *`, body = `Read /workspace/agent/reflect-prompt.md and execute it as today's reflection.`). First fire 2026-05-04 23:00 PT.
 
 Git auth uses an ed25519 deploy key at `~/.config/nanoclaw/constantia-deploy-key` on the mini, public half attached to `daniellee6925/constantia` GitHub Deploy Keys with write access. Bind-mounted as a single file at `/workspace/extra/ssh-key/constantia-deploy-key` (sidesteps the mount-allowlist `.ssh` directory block). `GIT_SSH_COMMAND` in `container.json` `mcpServers.telos-constantia.env` references it with `StrictHostKeyChecking=no UserKnownHostsFile=/dev/null`. Narrow blast radius — a compromised container can write only to constantia.
 
@@ -286,7 +311,7 @@ nanoclaw delivers prompt to Telos's Discord session path (same wake mechanism as
 Telos reads `groups/telos/tick-prompt.md` and runs the protocol:
         │
         ├─ 1. Ground   → read pillars.md, tasks/MANIFEST.md, log/ (3 most recent), profile/
-        ├─ 2. Decide   → exactly one of {assign_task, grade_task, do_nothing}; default do_nothing
+        ├─ 2. Decide   → exactly one of {assign_task, accept_proposal, grade_task, do_nothing}; default do_nothing
         ├─ 3. Act      → call MCP tool; receive {sha, pushed}
         └─ 4. Report   → 1-2 sentence Discord message; mention pushed:false if it occurred
 ```
@@ -302,19 +327,40 @@ Both additions are in the base image as of `de945fd`; fresh installs of this for
 **Constantia data flow (Telos's writes).**
 
 ```
-Telos tick fires
+Telos tick fires (cron: 0 9,21 * * *)
     │
-    ├─► assign_task  ──► tasks/TASK-NNN.md            (status: assigned)
-    ├─► grade_task   ──► tasks/TASK-NNN.md            (status: graded|rejected)
-    └─► do_nothing   ──► log/YYYY-MM-DD-telos-tick.md (append no-op section)
+    ├─► assign_task      ──► tasks/TASK-NNN.md           (status: assigned)
+    │                        + log/telos/YYYY-MM-DD-tick.md (action section)
+    ├─► accept_proposal  ──► tasks/TASK-NNN.md           (proposed → assigned)
+    │                        + log/telos/YYYY-MM-DD-tick.md (action section)
+    ├─► grade_task       ──► tasks/TASK-NNN.md           (status: graded|rejected)
+    │                        + log/telos/YYYY-MM-DD-tick.md (action section)
+    └─► do_nothing       ──► log/telos/YYYY-MM-DD-tick.md (no-op section)
+
+Telos reflection fires (cron: 0 23 * * *)
+    │
+    └─► write_reflection ──► log/telos/YYYY-MM-DD-reflection.md
+                            (8 sections; refuses overwrite for same day)
                             │
-                            ▼ (each tool, same path)
+                            ▼ (every tool, same path)
                     git add -A → commit → push to daniellee6925/constantia
                             │
                             ▼
                     Guya reads on next session-start
                     (tasks/MANIFEST.md → priority-0 context; profile/ via /guya-evolve)
 ```
+
+**Cross-repo HEAD snapshot (2026-05-04 PM).** Mini synced to all three.
+
+| Repo | HEAD |
+|------|------|
+| `daniellee6925/guya` | `03b297f` |
+| `daniellee6925/nanoclaw` | `87d2c4a` (6-tool MCP server + reflect-prompt.md + .gitignore unignore for reflect-prompt + tightened tick-prompt) |
+| `daniellee6925/constantia` | `7dfc6cb` (task working tree cleanup) |
+
+**Known carry-forwards.**
+- `mcp-server.ts` is 873 LOC — over the 800 LOC limit by 73; helpers extract cleanly into a separate file as a follow-up.
+- Post-commit manifest hook globs working-tree files including untracked, which caused the TASK-007 phantom-in-manifest issue earlier on 2026-05-04. Filter to tracked files in the next pass.
 
 ---
 
@@ -341,7 +387,7 @@ The soul spec includes convergence tracking (detecting when Daniel is scattered 
 
 ### Telos — `write_evidence` MCP Tool
 
-The next deferred surface area on `telos-constantia`. ~80 LOC, mirrors `assign_task` shape: validate → atomic write → commit → push. Creates `evidence/EVD-NNN.md` with frontmatter (`id`, `category`, `source`, `confidence`, `observation`, `assessment`). Tick prompt extends to include "consider whether anything you've read warrants an evidence entry"; grounding step adds a `profile/` read. Gated on first observing tick judgment quality — more surface area should follow trust in the current surface, not precede it.
+The next deferred surface area on `telos-constantia` — Cut B continues. Mirrors `assign_task` shape: validate → atomic write → commit → push. Creates `evidence/EVD-NNN.md` with frontmatter (`id`, `category`, `source`, `confidence`, `observation`, `assessment`). The reflection layer already flags evidence candidates each night via the `evidence_candidates` section of `write_reflection` — `write_evidence` is what asserts those candidates as formal claims with confidence + source. Gated on first observing reflection judgment quality across a few nights — more surface area should follow trust in the current surface, not precede it.
 
 ### Telos — Profile Maintenance
 
@@ -412,3 +458,10 @@ Drift detection on Telos's own behavior — is the tick defaulting to `do_nothin
 | 2026-05-04 | Telos autonomous via scheduled tick using nanoclaw's `schedule_task` primitive | Twice daily (cron `0 9,21 * * *`, first fire 2026-05-04 21:00 PT). Tick prompt at `groups/telos/tick-prompt.md` walks Telos through ground → decide → act → report protocol. Fires the prompt as a regular message into the same Discord session path. Persists in `inbound.db` across restarts. Telos is now a mentor that runs without being pinged |
 | 2026-05-04 | Constantia deploy-key strategy: ed25519, single-purpose, single-file mount | `~/.config/nanoclaw/constantia-deploy-key` on mini, public half attached to `daniellee6925/constantia` GitHub Deploy Keys with write access. Bind-mounted as a single file (sidesteps mount-allowlist's `.ssh` directory block) at `/workspace/extra/ssh-key/`. `GIT_SSH_COMMAND` in container.json `mcpServers.env` references it with `StrictHostKeyChecking=no UserKnownHostsFile=/dev/null`. Narrow blast radius — compromised container can write only to constantia |
 | 2026-05-04 | openssh-client + uid-501 passwd entry baked into base nanoclaw Dockerfile | Two prerequisites for `git push` from inside the container, discovered during smoke-test arc: (1) base `node:22-slim` lacks ssh client (so GIT_SSH_COMMAND has nothing to invoke); (2) container runs as host uid 501 with no `/etc/passwd` entry (so `getpwuid(501)` returns null and ssh refuses). Both now in fork commit `de945fd`, idempotency-guarded (`getent passwd 501 || ...`). Fresh installs of this fork won't need the per-agent rebuild we did manually on mini |
+| 2026-05-04 PM | Tick prompt rewritten with priority-ordered decision tree | `grade > triage proposed > kill stale > fill gap > do_nothing`. Forced rubric reads before any pillar-N grade or assign. `assign_task` hardened against synthetic pillar-slot-filling — pillars are lenses Telos grades through, not work-sources. Triage cap at 3 proposals queued. Validated same day on real artifacts: TASK-003 rejected (expired Slice 5 milestone, no rubric anchor), TASK-001 graded B (competent constantia-hooks implementation). Fork commit `87d2c4a` |
+| 2026-05-04 PM | `accept_proposal` MCP tool — closes proposed→assigned transition | Previously Telos could create new tasks (`assign_task`) or reject any non-terminal task (`grade_task` rejected), but had no path for accepting a Guya-proposed task. New tool flips status to `assigned`, sets `assigned_by: telos`, optionally rewrites pillar/purpose/acceptance for rubric anchoring, optionally appends a context-addition note. ~60 LOC mirroring `assign_task` shape. Fork commit `87d2c4a` |
+| 2026-05-04 PM | Symmetric tick logging via shared `appendTickLogSection` helper | Refactored `do_nothing`'s log-write into a helper called by every action tool (`assign_task`, `accept_proposal`, `grade_task`). Single commit per tool now writes both the task file (or no-op marker) AND the tick log entry. Fixes the inversion where action ticks left LESS trail than no-ops. Daily record in `log/telos/YYYY-MM-DD-tick.md` is now complete. Fork commit `87d2c4a` |
+| 2026-05-04 PM | Nightly reflection layer: `write_reflection` + `read_today_transcript` (ADR-015) | Reflection-as-architecture: every night at 23:00 PT, Telos reads the day's actual conversational record (not just breadcrumbs he remembered to log), synthesizes 8 sections, writes structured reflection to Constantia, DMs Daniel a 2-3 sentence highlight. `read_today_transcript` opens nanoclaw's `inbound.db` + `outbound.db` read-only via `bun:sqlite` (mounted at `/workspace/extra/telos-session` per new `additionalMounts` entry + `mount-allowlist.json` update + daemon kickstart). 8 sections borrowed from `/guya-reflect`'s shape and extended with Telos-specific *evidence_candidates* + *next-tick priorities*. Includes self-accountability section (`what_telos_should_change`) — reflection is two-sided, not sycophancy with structure. Refuses to overwrite same-day reflection (cron double-fire safety). Schedule seeded directly via sqlite INSERT into `messages_in` (id `task-17779308213N-rfltky`, recurrence `0 23 * * *`) — automatic from day 0, no Telos self-scheduling step. Fork commit `87d2c4a` |
+| 2026-05-04 PM | Constantia log layout: `log/guya/` + `log/telos/` subdirs (ADR-016) | 26+ flat files in `log/` were unscannable. Split by author (mirrors the architecture's ownership boundary). Filenames drop redundant `-{author}-` segment — author is now the directory. Telos uses single-trailing-segment names: `YYYY-MM-DD-tick.md` (combined daily action+no-op log) and `YYYY-MM-DD-reflection.md` (nightly synthesized memory). Pre-commit hook validates per-author regex and rejects log/ root with explicit error. Post-commit hook walks subdirs via `find` and adds Path column to log manifest. 23 existing logs migrated in single commit (`d33aa4e`). Hooks installed as symlinks in `.git/hooks/` on both laptop AND mini — closed the silent rot where mini's hook was missing entirely (only `pre-commit.sample` existed), letting `tick.md` filenames commit despite not matching the regex. Daniel's call (author-based) over my type-based proposal (`sessions/` + `reflections/`) — author-split mirrors ownership boundary cleanly |
+| 2026-05-04 PM | DM-only routing locked at three layers | Earlier today Telos's first scheduled tick sent the substantive report to a Discord guild channel and a brief ack to the DM — inverted from intended. Three-layer fix: (a) tick-prompt step 4 explicit "DM only, do not broadcast"; (b) reflect-prompt step 4 same; (c) deleted server channel binding from `agent_destinations` + `messaging_group_agents` rows in `v2.db` so Telos can no longer route there even if the prompt drifts. Belt + suspenders against the next prompt-rewrite cycle |
+| 2026-05-04 PM | Constantia hooks installed as symlinks (data-tier silent-rot fix; ADR-013 family) | Mini's `.git/hooks/` had only `pre-commit.sample` — Telos's commits had been bypassing all schema validation since Constantia's setup. Same meta-pattern as ADR-011/012/013 (silent rot of trusted enforcement living in a "this can't fail" guard), but at the data-validation tier instead of the harness tier. Both clones now symlink `.git/hooks/{pre,post}-commit` to `hooks/` source files; future hook edits auto-apply, no copy drift. The next fresh clone of constantia onto a new machine will need the symlink installed (consider a setup script if a third clone ever happens) |

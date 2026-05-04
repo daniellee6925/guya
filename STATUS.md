@@ -15,11 +15,9 @@
 Full Telos state in `telos context/STATUS.md`.
 
 ## Recent Changes
+- [2026-05-04] `03b297f` — fix(reflect): write logs into Constantia log/guya/ subdir
+- [2026-05-04] `7554fc8` — chore(scribe): record Cut A + Cut B Lite ship + first real grade cycle
 - [2026-05-04 PM] `8535153` — chore(scribe): record Cut A + Cut B Lite ship + first real grade cycle
-- [2026-05-04 PM] `7dfc6cb` (constantia) — clean up dirty working tree, schema-compliant task frontmatter (TASK-004/-005/-006/-007)
-- [2026-05-04 PM] `afd515c` (constantia) — remove test-run reflection so 23:00 cron fires fresh
-- [2026-05-04 PM] `d33aa4e` (constantia) — restructure log/ by author + add tick/reflection conventions; install hooks as symlinks
-- [2026-05-04 PM] (nanoclaw fork — scp'd to mini, NOT yet committed) — added `accept_proposal`, `write_reflection`, `read_today_transcript` tools; refactored action tools through shared `appendTickLogSection` helper; added `groups/telos/reflect-prompt.md`; tightened `groups/telos/tick-prompt.md` for priority-ordered triage + DM-only routing
 - [2026-05-04] `0d0f6bd` — chore(scribe): refresh STATUS + ARCHITECTURE after Telos autonomy ship
 - [2026-05-04] `5a4b6d4` — docs(telos): document MCP server smoke-test arc and tick scheduling
 - [2026-05-03] `7349a4f` — docs(telos): verify mini push access to constantia repo
@@ -36,6 +34,7 @@ Full Telos state in `telos context/STATUS.md`.
 - [2026-05-01] `538f8db` — docs(mini): mac mini remote access reference + status update
 
 **Cross-repo (nanoclaw fork `daniellee6925/nanoclaw`):**
+- [2026-05-04 PM] `87d2c4a` — feat(telos): nightly reflection layer + accept_proposal + symmetric tick logging
 - [2026-05-04] `de945fd` — feat(container): bake openssh-client + uid-501 passwd entry into base image
 - [2026-05-04] `a0c7909` — feat(telos): mentor MCP server (assign_task / grade_task / do_nothing) + tick prompt
 - [2026-05-03] `0a63654` — docs(telos): add Constantia-awareness section to operating contract
@@ -44,14 +43,18 @@ Full Telos state in `telos context/STATUS.md`.
 - [2026-05-03] `03604e6` — feat(telos): version-controlled soul.md and identity reference
 
 **Cross-repo (constantia `daniellee6925/constantia`):**
+- [2026-05-04 PM] `7dfc6cb` — clean up dirty working tree, schema-compliant task frontmatter (TASK-004/-005/-006/-007)
+- [2026-05-04 PM] `afd515c` — remove test-run reflection so 23:00 cron fires fresh
+- [2026-05-04 PM] `d33aa4e` — restructure log/ by author + add tick/reflection conventions; install hooks as symlinks
+- [2026-05-04] `90f6030` — task(rejected): TASK-003 — Telos rejected proposal, expired Slice-5 milestone
 - [2026-05-04] (Telos's own writes) — `dc675ce`, `09289a3`, `56d9fef`, `a49a29a` (no-op tick logs across smoke-test attempts) + TASK-009 from Stage 2
 - [2026-05-03] `8800673` — docs: add design docs and fix dangling @-refs in CLAUDE.md
 
 ## In Progress
 - [ ] **Watch tonight's 23:00 PT reflection.** First observation of synthesized daily memory. Verify: DM lands with 2-3 sentence highlight, `log/telos/2026-05-04-reflection.md` lands in Constantia, no server-channel echo, content is interpretive (not transcript dump). If quality is weak, tighten `reflect-prompt.md` sections.
-- [ ] **Commit nanoclaw fork changes.** Today's mcp-server.ts + reflect-prompt.md + tick-prompt.md changes are scp'd to mini and live in working trees on both laptop + mini, but NOT committed. Belief #5 says harness lives in fork. Commit + push to `daniellee6925/nanoclaw` to close the divergence.
+- [x] **Commit nanoclaw fork changes.** Done 2026-05-04 PM (`87d2c4a`). Laptop, mini, origin all in sync.
 - [ ] **mcp-server.ts at 873 LOC, over 800 limit.** Helpers extract cleanly into a separate `helpers.ts`. Mechanical refactor, ~30 min. Do before next feature lands on this file.
-- [ ] **Update Guya's `/guya-reflect` skill to write into `log/guya/` (new subdir).** Currently writes to `log/` root. Next /guya-reflect run will fail pre-commit hook (rejects log/ root). Small SKILL.md edit.
+- [x] **Update Guya's `/guya-reflect` skill to write into `log/guya/` (new subdir).** Done 2026-05-04 PM (`03b297f`). SKILL.md path updated, examples rewritten, mkdir step added.
 - [ ] **Post-commit manifest hook bug** — globs working-tree files including untracked. Surfaced as TASK-007 phantom-in-manifest issue earlier today (now resolved by committing TASK-007). Ideally manifest should walk only tracked files. Low priority.
 - [ ] **`write_evidence` MCP tool.** Cut B continues. Now that the reflection layer flags evidence candidates, the next frontier is asserting them as formal claims (with confidence + source). ~80 LOC mirroring `assign_task` shape.
 - [ ] Comprehensive logging system for guya plugin hooks — original ask from 2026-04-08 late night, never scoped, still outstanding. **Partially addressed 2026-04-27** — smoke test catches one specific failure mode (silent no-op via main() never running), but doesn't cover broader observability (hook execution traces, payload audit trail, classifier costs). Full logging still outstanding.
