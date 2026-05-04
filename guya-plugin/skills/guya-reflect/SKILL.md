@@ -56,7 +56,9 @@ Read `~/.claude/guya/constantia.json` to get the Constantia repo path. If the co
 
 ### Filename Convention
 
-`{constantia}/log/YYYY-MM-DD-guya-{project}-{session_id_first_8}.md`
+`{constantia}/log/guya/YYYY-MM-DD-{project}-{session_id_first_8}.md`
+
+The author segment ("guya") moved from the filename into the directory (`log/guya/`) as of 2026-05-04. Constantia's pre-commit hook rejects files at `log/` root — they MUST live in `log/guya/` (for Guya) or `log/telos/` (for Telos).
 
 - `{project}` = the project directory name (e.g., `guya`, `sdf-dev`, `bosonai`)
 - `{session_id_first_8}` = first 8 characters of the Claude Code session ID.
@@ -67,7 +69,9 @@ ls -t ~/.claude/projects/-Users-daniel-Desktop-{project}/*.jsonl | head -1 | xar
 ```
 Replace `{project}` with the project directory path (dashes for slashes, e.g., `-Users-daniel-Desktop-guya`). If this fails or returns empty, use `"manual"` as fallback — but always try to get the real ID first.
 
-Examples: `2026-04-22-guya-guya-fc1bb84c.md`, `2026-04-22-guya-sdf-dev-a1b2c3d4.md`
+Examples: `log/guya/2026-04-22-guya-fc1bb84c.md`, `log/guya/2026-04-22-sdf-dev-a1b2c3d4.md`
+
+Create the `log/guya/` directory if it does not exist (`mkdir -p {constantia}/log/guya/` before writing).
 
 ### Write Logic
 
