@@ -10,6 +10,8 @@
 Next blocker for Telos: write operating rules into CLAUDE.local.md (voice register specifics, banned patterns including no-greetings/no-offers-of-help, language rule reinforcement, first-contact behavior, pushback calibration, asymmetric-knowledge handling). The behavioral layer is what overrides the RLHF default — soul alone can't.
 
 ## Recent Changes
+- [2026-05-03] `c7e8f59` — docs(constantia): commit Constantia design docs to guya repo
+- [2026-05-03] `7dfc03d` — chore(scribe): catch up auto-bookkeeping after multi-commit Telos session
 - [2026-05-03] `ba2f01b` — docs(reflections): commit two manual reflections from prior sessions
 - [2026-05-03] `344a126` — docs(skills): keep review and optimize skills from stalling the loop
 - [2026-05-03] `46d1efd` — docs(vision): rewrite Belief #5 + §7 around Telos identity architecture
