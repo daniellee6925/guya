@@ -15,6 +15,10 @@
 Full Telos state in `telos context/STATUS.md`.
 
 ## Recent Changes
+- [2026-05-04] `626808e` — feat(skills): add guya-issue, clean catalog refs to deleted skills
+- [2026-05-04] `b1da043` — chore(skills): remove 4 unused skills, log replacement plan
+- [2026-05-04] `194f5e3` — chore(scribe): full doc refresh after Cut A + Cut B Lite ship
+- [2026-05-04] `ecb5084` — chore(scribe): full doc refresh after Cut A + Cut B Lite ship
 - [2026-05-04] `03b297f` — fix(reflect): write logs into Constantia log/guya/ subdir
 - [2026-05-04] `7554fc8` — chore(scribe): record Cut A + Cut B Lite ship + first real grade cycle
 - [2026-05-04 PM] `8535153` — chore(scribe): record Cut A + Cut B Lite ship + first real grade cycle
