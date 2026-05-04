@@ -32,21 +32,7 @@
 
 ---
 
-### S3. `second-opinion` skill — replaces deleted `guya-pr`
-
-**What:** Skill `second-opinion` that just shells out to Codex (`codex` CLI) and asks for its opinion on the current diff / file / question. No PR-readiness checks, no summary generation, no orchestration — just "ask the other model what it thinks."
-
-**Why:** The killed `guya-pr` skill (0 invocations) tried to do too much — Codex pass + readiness checks + summary. The only piece of that with real value is the independent fresh-eyes review. Strip it down to that one thing. Different name signals it's general-purpose, not PR-only.
-
-**Effort:** ~30min. Single SKILL.md that calls `codex` via Bash with the current file or diff piped in. Argument-hint accepts a path or defaults to staged diff.
-
-**Done when:** `/second-opinion` returns Codex's read on whatever's in scope, no other ceremony.
-
-**Open question:** Should it also accept a free-form question ("second-opinion: is this race condition real?"), or strictly file/diff-scoped? Lean toward both — it's the same Codex call, just different input framing.
-
----
-
-### S4. Task priority field (was #5)
+### S3. Task priority field (was #5)
 
 **What:** Add `priority: P0|P1|P2` to Constantia task frontmatter. Tick protocol (mem 4110) already has priority-based decision logic but tasks themselves don't carry an explicit priority — Telos infers from text. Make it explicit.
 
@@ -153,8 +139,24 @@
 
 ---
 
+## Tier C — Backburner / low priority
+
+### C1. `second-opinion` skill — Codex-only, replaces deleted `guya-pr`
+
+**What:** Skill `second-opinion` that shells out to Codex (`codex` CLI) and asks for its read on the current diff / file / question. No PR-readiness checks, no summary, no orchestration — just "ask the other model what it thinks."
+
+**Why:** The killed `guya-pr` skill (0 invocations) tried to do too much. Only the independent fresh-eyes pass had real value. Different name signals general-purpose, not PR-only.
+
+**Why low priority:** Codex is one shell call away today — Daniel can invoke it directly when he wants a second opinion. The skill is convenience, not capability. Defer until friction with the manual flow is real.
+
+**Effort:** ~30min when picked up. Single SKILL.md that pipes diff/file to `codex` and returns the response. Argument-hint accepts a path or defaults to staged diff. Should also take a free-form question.
+
+**Done when:** `/second-opinion` returns Codex's read on whatever's in scope, no other ceremony.
+
+---
+
 ## My recommendation
 
-Close the three carry-forwards first (1-2h total). Then S1 (kill unused skills) — it's pure cleanup and shrinks every future session. Then S2 (issue creator) since it solves a daily friction point. S3 (second-opinion) is a 30min replacement for the deleted `guya-pr`. S4 (task priority) only after verifying it isn't already implicit in tick-prompt.
+S1 and S2 shipped (commits `b1da043`, `626808e`). Close the three carry-forwards next (1-2h total — nanoclaw fork commit, mcp-server.ts split <800 LOC, /guya-reflect log path). Then S3 (task priority) only after verifying it isn't already implicit in tick-prompt.
 
-Save tier B until the system has fewer loose ends. Especially B3 — a UI before the underlying data model is settled is a maintenance trap.
+Save tier B until the system has fewer loose ends. Especially B3 — a UI before the underlying data model is settled is a maintenance trap. Tier C is by-definition opportunistic — only pull when blocked on bigger items.
