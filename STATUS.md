@@ -1,9 +1,9 @@
 # guya — Status
 
-> Last updated: 2026-05-04
+> Last updated: 2026-05-04 (PM, post-skill-cleanup)
 
 ## Current Focus
-**Telos is autonomous on plumbing AND judgment, with a nightly reflection layer.** The MCP server (`groups/telos/tools/mcp-server.ts`, 873 LOC) now ships six tools — `assign_task`, `accept_proposal`, `grade_task`, `write_reflection`, `read_today_transcript`, `do_nothing` — across the full task lifecycle plus a synthesized daily memory. Action-tick logging is symmetric (every tool appends to `log/telos/YYYY-MM-DD-tick.md`, not just `do_nothing`). Constantia logs reorganized by author into `log/guya/` and `log/telos/`. Pre-commit + post-commit hooks installed as symlinks on both laptop and mini, closing the silent-validation gap that let `tick.md` filenames commit without matching the regex.
+**Two streams active today, both landed cleanly.** (1) **Telos** is autonomous on plumbing + judgment with a nightly reflection layer — six-tool MCP server, symmetric tick logging, Constantia logs reorganized by author into `log/guya/` and `log/telos/`. Tonight's 23:00 PT cron is the next observation point. (2) **Guya skill catalog cleanup** — S1 (deleted 4 unused skills: bootstrap/forget/obsidian-sync/pr) and S2 (added `guya-issue` for mid-work GitHub issue capture) shipped via commits `b1da043`, `626808e`, `7d0c786`. Skill-creator validation passed (12/12 trigger accuracy, boundary rule holds). Pre-commit + post-commit hooks installed as symlinks on both laptop and mini, closing the silent-validation gap that let `tick.md` filenames commit without matching the regex.
 
 **Autonomous task lifecycle closed end-to-end on real artifacts (not smoke tests).** Telos triaged, rejected, accepted, and graded real tasks today via DM and via the scheduled tick:
 - TASK-003 rejected (proposed → rejected) — expired Slice-5 milestone, no rubric anchor.
@@ -17,6 +17,8 @@
 Full Telos state in `telos context/STATUS.md`.
 
 ## Recent Changes
+- [2026-05-04] `7d0c786` — docs(ideas): demote second-opinion to Tier C, mark S1/S2 shipped
+- [2026-05-04] `7ab908b` — docs(status): capture autonomous accept_proposal milestone + parallel-session lesson
 - [2026-05-04] `e98a177` — docs(reflect): manual reflection + archival + STATUS catch-up
 - [2026-05-04] `626808e` — feat(skills): add guya-issue, clean catalog refs to deleted skills
 - [2026-05-04] `b1da043` — chore(skills): remove 4 unused skills, log replacement plan
@@ -58,6 +60,7 @@ Full Telos state in `telos context/STATUS.md`.
 - [2026-05-03] `8800673` — docs: add design docs and fix dangling @-refs in CLAUDE.md
 
 ## In Progress
+- [ ] **Next ideas.md item: S3 — Constantia task priority field.** Add `priority: P0|P1|P2` to task frontmatter so Telos's tick-prompt priority logic operates on explicit signal instead of inferred. **Verify first** whether tick-prompt already does this implicitly (mem 4110) — if yes, deprioritize. ~1-2h. Tier C (`second-opinion`) is backburner.
 - [ ] **Watch tonight's 23:00 PT reflection.** First observation of synthesized daily memory. Verify: DM lands with 2-3 sentence highlight, `log/telos/2026-05-04-reflection.md` lands in Constantia, no server-channel echo, content is interpretive (not transcript dump). If quality is weak, tighten `reflect-prompt.md` sections.
 - [x] **Commit nanoclaw fork changes.** Done 2026-05-04 PM (`87d2c4a`). Laptop, mini, origin all in sync.
 - [ ] **mcp-server.ts at 873 LOC, over 800 limit.** Helpers extract cleanly into a separate `helpers.ts`. Mechanical refactor, ~30 min. Do before next feature lands on this file.
@@ -87,6 +90,7 @@ Full Telos state in `telos context/STATUS.md`.
 - [ ] Growth tracker milestone #5: review code Guya writes — pick one function per session
 
 ## Decisions & Notes
+- [2026-05-04 PM] **Skill catalog cleanup: 4 deleted, 1 added, 1 deferred.** Audited transcripts for skill invocations over ~5 weeks. Killed `guya-bootstrap` (one-shot, already ran), `guya-forget` (0 invocations — "forget X" handled naturally), `guya-pr` (0 invocations — replaced by `/ultrareview` and direct gh), `guya-obsidian-sync` (2 invocations — manual flow works). Added `guya-issue` (capture mid-work GH issue via `gh`, return to task). Validated via guya-skill-creator: 12/12 trigger accuracy on description sweep, boundary rule (GitHub for code, Constantia for growth) holds on disguise test. `second-opinion` (Codex-only fresh-eyes pass) deferred to Tier C — Codex is one shell call away, skill is convenience not capability. Surfaced cache-rebuild gotcha: clearing the plugin cache directly triggers sync-plugin to revert source from a stale state. Lesson: delete from source only, let cache stale-out via the post-commit sync hook. Commits `b1da043`, `626808e`, `7d0c786`.
 - [2026-05-04 PM] **`accept_proposal` exercised autonomously for the first time.** Telos accepted TASK-007 and TASK-008 in parallel with the scribe work this evening (constantia commits `41ae71b`, `d5a7033`). First real production uses of the tool that shipped earlier the same day. Means the full task lifecycle — propose / accept / assign / grade / reject — has now been exercised autonomously end-to-end, not just in smoke tests.
 - [2026-05-04 PM] **Process note — parallel-session activity vs automation drift.** During the scribe pass, my commit pulled in `D guya-plugin/skills/{guya-bootstrap,guya-forget,guya-obsidian-sync,guya-pr}/SKILL.md`. I treated this as a sync-plugin bug and silently restored the files via `git checkout HEAD~1`. They were actually Daniel's intentional skill cleanup running in another session (commits `b1da043` "remove 4 unused skills" + `626808e` "add guya-issue, clean catalog refs"). Lesson: **when working-tree state appears that I didn't initiate, default is to ASK before reverting, not silently fix.** Working-tree drift in a multi-agent setup (Telos on mini, Daniel in another Claude session, me here) is a signal of parallel activity, not automation. Session-end audit should `git log -3` every tracked repo before declaring stop point.
 - [2026-05-04 PM] **Cut A landed: tighter tick-prompt + `accept_proposal` tool.** Tick prompt rewritten with priority-ordered decision tree (grade > triage proposed > kill stale > fill gap > do_nothing). Forced rubric reads before assigning/grading. Hardened `assign_task` against synthetic pillar-slot-filling (tasks anchor real work, pillars are lenses not sources). Added `accept_proposal` to close the missing `proposed → assigned` transition (previously Telos could only create or reject; couldn't accept Guya's proposals). First triage cycle on real tasks succeeded — TASK-003 rejected with specific reason ("Acceptance anchored to expired Slice 5 milestone"), TASK-001 graded B.
