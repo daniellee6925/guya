@@ -1,6 +1,6 @@
 # Guya — Core Beliefs
 
-> Last updated: 2026-04-12
+> Last updated: 2026-04-23
 >
 > The architectural invariants. If any of these changed, Guya would no longer be Guya — it would be a different program. Use these as the first filter on every decision: *does this violate a belief?* If yes, stop.
 
@@ -8,9 +8,9 @@
 
 ## What This Program Is
 
-**Guya is a self-evolving personal agent that knows Daniel across sessions, gets better without being told to, and tells him the truth even when it's uncomfortable.**
+**Guya is the executor in a three-identity system — Guya (builds), Telos (mentors), Constantia (remembers) — that knows Daniel across sessions, agents, and projects, gets better without being told to, and tells him the truth even when it's uncomfortable.**
 
-It is not a coding assistant with memory bolted on. It is not a generic productivity tool. It is a relationship — one that accumulates identity, adapts to Daniel's patterns, and challenges him to grow.
+It is not a coding assistant with memory bolted on. It is not a standalone agent. It is one part of a system designed so that Daniel's growth, decisions, and patterns are never lost — even when switching between agents, projects, or machines. Guya executes. Telos evaluates. Constantia holds the truth both read and write.
 
 The name matters: Guya is Daniel's teddy bear of 20 years. Unconditional support + genuine intelligence. That's the identity.
 
@@ -18,11 +18,11 @@ The name matters: Guya is Daniel's teddy bear of 20 years. Unconditional support
 
 ## The Differentiator
 
-Most AI assistants start fresh every session. They're stateless tools — powerful, but impersonal. You re-explain context, re-establish tone, re-state preferences. Every session is the first session.
+Most AI assistants start fresh every session. They're stateless tools — powerful, but impersonal. Even assistants with memory are solo actors — one agent, one perspective, one set of observations.
 
-Guya accumulates. It knows what Daniel is working on, how he thinks, where he gets stuck, what he's trying to become. The session-start hook assembles that context before the first word is typed. The evolution pipeline makes it more accurate over time.
+Guya is part of a system. It accumulates session-level observations. Telos synthesizes longitudinal patterns. Constantia holds the shared truth both agents read. The session-start hook assembles identity, project context, and active tasks from Constantia before the first word is typed. The evolution pipeline calibrates against Telos's assessments over time.
 
-The difference isn't features — it's continuity. Guya is the first AI that actually knows Daniel, not just his last message.
+The difference isn't just continuity — it's multi-perspective continuity. Daniel's growth is observed by the agent that builds with him (Guya) and assessed by the agent that mentors him (Telos), with neither depending on the other's memory staying accurate.
 
 ---
 
@@ -32,11 +32,15 @@ The difference isn't features — it's continuity. Guya is the first AI that act
 
 Guya's value over a plain Claude session is exactly proportional to the quality of its accumulated memory. Identity files, strategic guidelines, user profile, growth tracker — these are not nice-to-haves, they are the product.
 
-**Why:** A Guya session that loads no context is indistinguishable from a fresh Claude session. The entire point of the system is continuity. Every architectural decision should optimize for memory quality and retrieval accuracy.
+Memory now spans three layers: `~/.claude/guya/` (Guya's identity), `.guya/` (project-local context), and Constantia (cross-agent shared truth). Constantia is where Guya's session observations become durable — Telos reads them, writes evidence-grounded assessments, and Guya reads those assessments back during evolution. Without Constantia, the two agents would diverge.
 
-**Violation looks like:** Skipping context injection to save tokens. Letting identity files go stale because updating them is friction. Building features that don't feed back into memory. A session that ends without any trace of what happened.
+Clear ownership prevents memory corruption: no file in Constantia is written by both agents. Guya writes logs and task status. Telos writes evidence, profile, goals, and grades. If a file needs both perspectives, it gets two files — not shared writes.
 
-**Decision filter:** Does this decision reduce the fidelity or coverage of what Guya knows about Daniel going into the next session?
+**Why:** A Guya session that loads no context is indistinguishable from a fresh Claude session. A Guya session that loads stale or conflicting context is worse than no context — it acts on wrong beliefs. The three-layer architecture with clear ownership ensures memory is both comprehensive and consistent.
+
+**Violation looks like:** Skipping context injection to save tokens. Letting identity files go stale because updating them is friction. Building features that don't feed back into memory. A session that ends without any trace of what happened. Two agents writing to the same file. Auto-generated noise in Constantia logs (only meaningful content via /guya-reflect).
+
+**Decision filter:** Does this decision reduce the fidelity or coverage of what Guya knows about Daniel going into the next session? Does it blur ownership of a shared memory file?
 
 ---
 
@@ -64,15 +68,15 @@ All runtime behavior is driven by Claude Code lifecycle hooks, git hooks, and th
 
 ---
 
-### 4. Global identity + project-local memory — one Guya across all projects
+### 4. Three memory layers — identity, project, shared truth
 
-`~/.claude/guya/` holds the identity that travels with Daniel everywhere — soul, user profile, strategic guidelines. `.guya/` holds project-specific context. Every project gets Guya; no project owns Guya.
+`~/.claude/guya/` holds Guya's identity (soul, user profile, strategic guidelines). `.guya/` holds project-specific context. Constantia holds the cross-agent shared truth (logs, tasks, evidence, profile, goals). Each layer has a clear purpose and owner.
 
-**Why:** Daniel works across SDF, Guya, BosonAI, and future projects. If identity were project-local, starting a new project would mean starting a new relationship. The split exists so Guya is always Daniel's agent first, and this project's agent second.
+**Why:** Daniel works across SDF, Guya, BosonAI, and future projects with two agents (Guya and Telos). Identity must travel everywhere. Project context must stay local. Cross-agent assessments must be visible to both. If all three lived in one place, ownership would blur and memory would corrupt.
 
-**Violation looks like:** Writing identity-level data (who Daniel is, what he values, how he thinks) into a project-local `.guya/` file. Building a feature that works in one repo but not others. Hardcoding project paths into identity files.
+**Violation looks like:** Writing identity-level data (who Daniel is, what he values) into `.guya/` or Constantia. Writing project-specific context into `~/.claude/guya/`. Guya writing to Constantia files that Telos owns (evidence, profile, goals). Telos writing to Guya's identity files. Hardcoding project paths into identity or shared files.
 
-**Decision filter:** Is this information about Daniel (→ `~/.claude/guya/`) or about this specific project (→ `.guya/`)?
+**Decision filter:** Is this about Guya's identity (→ `~/.claude/guya/`), this specific project (→ `.guya/`), or cross-agent shared truth (→ Constantia)?
 
 ---
 
@@ -91,8 +95,9 @@ Guya is named after a teddy bear. That means unconditional care — but it does 
 ## What Guya Is Not
 
 - **Not a generic coding assistant.** Claude handles that. Guya is the layer that knows Daniel — his patterns, goals, growth areas, and history. Features that duplicate what plain Claude does well are waste.
-- **Not a project management tool.** Guya tracks Daniel's growth and project state as context for better assistance. It is not a task manager, sprint planner, or ticketing system.
-- **Not always-on (yet).** Guya exists in a Claude Code session. Proactive reminders, scheduled nudges, and background learning are v2 daemon features — explicitly deferred. Don't build toward them in v1.
+- **Not the mentor.** Telos is the mentor. Guya executes, observes, and writes session logs. Guya does not assign tasks, grade performance, or write evidence assessments — those are Telos's responsibilities. Guya challenges Daniel in-session (that's the soul); Telos assesses Daniel across sessions (that's longitudinal growth tracking).
+- **Not a project management tool.** Constantia holds tasks, but Guya is not a task manager. Guya reads active tasks for context and proposes new ones. Telos assigns and grades. The system tracks Daniel's growth, not sprints.
+- **Not always-on.** Guya exists in a Claude Code session. Telos will run as a standalone agent on a Mac Mini with its own tick cycle. They share memory via Constantia but operate independently.
 - **Not a generic agent framework.** Guya is Daniel-specific. It has Daniel's name, Daniel's teddy bear, Daniel's growth areas. It is not designed to be installed by anyone else or configured for a different user.
 
 ---
