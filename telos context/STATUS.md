@@ -1,20 +1,43 @@
 # Telos — Status
 
-> Last updated: 2026-05-04 (AM)
+> Last updated: 2026-05-04 (PM — major update after Cut A + Cut B Lite)
 >
 > Telos-scoped status: runtime, identity, implementation state, and behavioral observations. Lives alongside `vision.md`, `core-beliefs.md`, and `goal.md` in this directory. The guya plugin's STATUS.md tracks the meta-project; this file tracks the agent itself.
 
 ## Next session — start here
 
-1. **Telos is now autonomous.** A scheduled tick (`task-1777913406295-908sio`) fires at 2026-05-04 21:00 PT and twice daily after that (cron `0 9,21 * * *`). On each fire, Telos reads `tick-prompt.md` → grounds in pillars + manifest + log + profile → decides one action (`assign_task` / `grade_task` / `do_nothing`) → commits + pushes to Constantia → reports on Discord. The first real tick is the first observation of mentor judgment quality (separate concern from plumbing, which is verified).
-2. **Watch the first 9pm tick tonight.** If Telos messages unprompted with a sensible report (most likely a `do_nothing` with a substantive reason), the loop is closed. If the report shows weak judgment (assigning vague tasks, surfacing patterns from no evidence, missing TASK-001 staleness, defaulting to silence with a non-reason), tighten `groups/telos/tick-prompt.md`.
-3. **Read the Operations Runbook below.** Three-step cycle (edit → kill container → clear continuation) is required for every CLAUDE.local.md, soul.md, container.json, destinations.ts, or `groups/telos/tools/*` change to reach the model. Now also: §G covers MCP server changes and per-agent image rebuilds.
-4. **`telos context/STATUS.md` (this file) has uncommitted edits in the guya repo working tree.** Bundle a focused commit when ready. Nanoclaw fork is at HEAD `de945fd` on local + mini + origin (Dockerfile with openssh-client + uid-501 passwd entry, MCP server, tick prompt, all addendum/identity work).
-5. **Evidence/profile work is the next deferred frontier.** Tick can `do_nothing`, `assign_task`, `grade_task`. To start building Daniel's evidence-backed model (strengths, weaknesses, growth, decisions), add `write_evidence` to the MCP server (~80 LOC, mirrors `assign_task` shape), update tick prompt to include "consider whether anything you've read warrants an evidence entry," extend grounding to read `profile/`. Only attempt after tick judgment is observed and trustworthy.
+1. **Autonomous task lifecycle is closed end-to-end on real artifacts.** Today (2026-05-04 PM): Telos triaged TASK-003 (rejected — expired Slice 5 milestone), graded TASK-001 B (competent implementation of constantia hooks-validation), closed TASK-009 (smoke-test stub). All via `accept_proposal` / `grade_task` calls. Voice register held, DM-only routing held, asymmetric knowledge applied (caught TASK-007 phantom-in-manifest data integrity gap proactively).
+2. **Tonight's 23:00 PT reflection is the next observation point.** Seeded `task-17779308213N-rfltky` in `inbound.db`. First fire 06:00 UTC = 23:00 PT today. The reflect-prompt requires Telos to call `read_today_transcript` first — actual conversational record, not just breadcrumbs Telos remembered to log. Then synthesize 8 sections (`what_happened`, `key_decisions`, `patterns_observed`, `what_daniel_should_take_away`, `what_telos_should_change`, `evidence_candidates`, `open_threads`, `next_priorities`), call `write_reflection`, DM the 2-3 sentence highlight. Watch for: DM lands, file at `log/telos/2026-05-04-reflection.md`, no server-channel echo, content is interpretive (not transcript dump).
+3. **Read the updated Operations Runbook below.** §H (new): editing reflect-prompt.md follows §A. §G (revised): mcp-server.ts is bind-mounted, no rebuild. §J (new): the session-db mount allowlist path requires daemon kickstart on update.
+4. **Nanoclaw fork has uncommitted changes.** mcp-server.ts (873 LOC, 6 tools), reflect-prompt.md (new), tick-prompt.md (priority-ordered triage rewrite). All scp'd to mini and live in working trees on both laptop + mini, but NOT yet committed to `daniellee6925/nanoclaw`. Belief #5 says harness lives in fork — commit + push to close the divergence. Also: mcp-server.ts 73 LOC over the 800 limit; helpers extract cleanly into `helpers.ts` (mechanical, ~30 min).
+5. **`write_evidence` is the next Cut B frontier.** Reflection now flags evidence candidates each night. Next layer is asserting them as formal claims with confidence + source pointer. ~80 LOC mirroring `assign_task`. Profile maintenance comes after.
 
 ## Current State
 
-**Autonomous.** Telos is running on the mini (`goms-Mac-mini.local`), connected to Discord as `Telos` (id `1497670832023928922`). Constantia is mounted at `/workspace/extra/constantia` (read-write). The mentor MCP server (`telos-constantia`) is wired with three tools (`assign_task`, `grade_task`, `do_nothing`) — Telos can write structured task files and tick logs into Constantia and push them to GitHub. Scheduled tick fires twice daily (9am + 9pm PT) via nanoclaw's `schedule_task` primitive. Smoke-tested end-to-end 2026-05-04: all three tools work, push succeeds via deploy key, schedule persists in `messages_in`. Identity layer (CLAUDE.local.md injected via addendum) holds across all tested prompts. **What's NOT built:** `write_evidence` (deferred), profile/strengths analysis (deferred), pattern-detection layer (deferred), critic sub-agent (vision §M3, deferred), director role (vision §M4, deferred).
+**Autonomous on plumbing AND judgment, with a nightly reflection layer.** Telos is running on the mini (`goms-Mac-mini.local`), connected to Discord as `Telos` (id `1497670832023928922`). Constantia is mounted at `/workspace/extra/constantia` (read-write). The session DBs (`inbound.db` + `outbound.db`) are mounted read-only at `/workspace/extra/telos-session` for transcript reading.
+
+**MCP server (`telos-constantia`, 873 LOC) ships six tools:**
+- `assign_task` — create new tasks/TASK-NNN.md
+- `accept_proposal` — flip status `proposed → assigned` (optionally rewriting purpose/acceptance for rubric anchoring)
+- `grade_task` — terminal evaluation (graded A/B/C with evidence, or rejected with reason)
+- `write_reflection` — nightly synthesized reflection (8 sections, refuses overwrite)
+- `read_today_transcript` — read today's DM transcript from session DBs (read-only sqlite)
+- `do_nothing` — explicit no-op decision
+
+All four action tools (assign / accept / grade / do_nothing) write a section to today's `log/telos/YYYY-MM-DD-tick.md` via the shared `appendTickLogSection` helper — action-ticks leave the same trail no-ops do, so the daily record is symmetric.
+
+**Two scheduled tasks active:**
+- `task-1777913406295-908sio` — 9am + 9pm PT tick (cron `0 9,21 * * *`), prompt = `Read /workspace/agent/tick-prompt.md and execute it as a tick.`
+- `task-17779308213N-rfltky` — 23:00 PT nightly reflection (cron `0 23 * * *`), prompt = `Read /workspace/agent/reflect-prompt.md and execute it as your nightly reflection.`
+
+**Constantia state:**
+- Logs reorganized into `log/guya/` and `log/telos/` (commit `d33aa4e`).
+- Pre-commit + post-commit hooks installed as symlinks on both laptop AND mini (closed the silent-validation gap that let `tick.md` filenames commit without matching the regex).
+- Working tree clean for the first time in 7 days (commit `7dfc6cb` — TASK-004/-005/-006/-007 frontmatter normalized).
+
+**Identity layer** (CLAUDE.local.md injected via addendum) holds across all tested prompts. Voice register, DM-only routing, asymmetric knowledge all observed in real interactions today.
+
+**What's NOT built:** `write_evidence` (next Cut B frontier — reflection flags evidence candidates but doesn't assert them yet), profile/strengths formal claim machinery (deferred), pattern-detection layer (deferred), critic sub-agent (vision §M3, deferred), director role (vision §M4, deferred).
 
 ## Runtime
 
@@ -223,6 +246,24 @@ ssh mini "cat ~/.config/nanoclaw/constantia-deploy-key.pub"
 
 ## Tests & Observations
 
+### 2026-05-04 PM — Cut A + Cut B Lite ship; autonomous lifecycle closes end-to-end
+
+**Telos's first scheduled-tick judgment (~13:38 PT):** Daniel sent `Read /workspace/agent/tick-prompt.md and execute it as a tick.` (the same prompt the cron fires). Telos executed the new priority-ordered tick: read MANIFEST → triaged proposed queue → picked TASK-003 (P1, "Surface Daniel's UI expectations") → checked artifact reference ("before Slice 5") → confirmed Slice 11 has shipped (6 slices expired) → called `grade_task(TASK-003, outcome=rejected, rejection_reason="Acceptance artifact anchored to expired Slice 5 milestone; no rubric anchor on the P1 tag")`. Commit `90f6030` pushed to constantia. DM landed with substantive 3-sentence report; brief ack went to a registered server channel (since-removed).
+
+Behavioral observations from this run:
+- Priority order held: triage proposed > assign new (no synthetic Pillar-1 task created despite Pillar 1 being "silent")
+- Asymmetric knowledge: noted "UI preference deferral is a pattern worth tracking in evidence" — surfaced the right destination (evidence/) without trying to write evidence yet (tool not built)
+- Stale-task awareness: flagged TASK-001's 14-day staleness for next tick
+- Voice slip: minor — said "P1 tag had no rubric anchor" when the precise statement is "the *acceptance criterion* didn't map to a rubric line." Not a bug, calibration drift to watch.
+
+**DM/server routing fix (~14:30 PT):** First tick's report split between DM (brief ack) and server channel (full report) — inverted from intended. Fix was twofold: tightened tick-prompt step 4 to specify "DM only, do not broadcast", AND deleted the server channel binding from `agent_destinations` + `messaging_group_agents` in `v2.db`. Belt + suspenders.
+
+**Cut B Lite ships (~14:35–14:40 PT):** Added `write_reflection` + `read_today_transcript` tools; refactored action tools through shared `appendTickLogSection` helper; created `reflect-prompt.md`; mounted session DBs read-only into container at `/workspace/extra/telos-session` (mount-allowlist + container.json updated; daemon kickstarted). Test 1 (probe DM `what's on my plate?`): container spawned, MCP server loaded with 6 tools, DM-only routing held. Test 2 (`Read /workspace/agent/reflect-prompt.md and execute it as your nightly reflection.`): full reflection pipeline ran end-to-end — read transcript via tool, synthesized 8 sections, called `write_reflection`, committed `log/telos/2026-05-04-reflection.md`, DM'd 2-3 sentence highlight to Daniel. Test reflection deleted (commit `afd515c`) so tonight's 23:00 cron fires fresh on full day's data.
+
+**TASK-001 graded (~15:00 PT):** Daniel asked Telos to grade TASK-001. Telos read the task, the pillar-2 rubric, the artifacts (commit `d33aa4e` showing pre-commit + post-commit hooks installed as symlinks, manifest auto-rebuilt to include all 9 tasks, validation regex updated for new layout). Graded **B** (competent implementation, not mastery — reasonable for "we wired it correctly" vs "we deeply understand why"). Same loop on TASK-009 (smoke-test stub closed).
+
+This is the first time the autonomous task lifecycle closed on real artifacts (not smoke tests). Two graded transitions in one session.
+
 ### 2026-05-04 — MCP server smoke-test arc (PASS after four attempts)
 
 Three-stage smoke-test of the new mentor MCP server (`assign_task`, `grade_task`, `do_nothing`) and tick scheduling. Failure-then-fix loop revealed two prerequisites that weren't obvious from spec — both now baked into the base Dockerfile (commit `de945fd`).
@@ -280,6 +321,15 @@ Telos: `I'm Telos. What can I do for you?`
 
 ## In Progress
 
+- [x] **Cut A — tighter tick-prompt + `accept_proposal` tool.** Done 2026-05-04 PM. Priority-ordered decision tree, rubric-grounded reasoning, `proposed → assigned` transition closed.
+- [x] **Cut B Lite — nightly reflection layer.** Done 2026-05-04 PM. `write_reflection` + `read_today_transcript` tools, `reflect-prompt.md`, action-tick logging via shared helper, session-DB mount + allowlist + daemon kickstart, 23:00 cron seeded directly via sqlite.
+- [x] **Constantia log restructure.** Done 2026-05-04 PM (commit `d33aa4e`). `log/guya/` + `log/telos/` subdirs, hooks installed as symlinks on both clones.
+- [ ] **Watch tonight's 23:00 PT reflection.** First autonomous reflection. Verify DM lands, file lands, no server-channel echo, content is interpretive.
+- [ ] **Commit nanoclaw fork changes.** mcp-server.ts (873 LOC) + reflect-prompt.md + tick-prompt.md changes scp'd to mini, NOT yet committed to fork. Belief #5 says harness lives in fork.
+- [ ] **Split mcp-server.ts.** 873 LOC, over the 800 limit. Helpers extract cleanly into `helpers.ts`. Mechanical refactor.
+- [ ] **Update Guya's `/guya-reflect` skill** to write to `log/guya/` (new subdir), not `log/` root. Pre-commit hook now rejects log/ root.
+- [ ] **`write_evidence` tool.** Next Cut B frontier. Reflection flags evidence candidates each night; this asserts them as formal claims with confidence + source. ~80 LOC mirroring `assign_task`.
+- [ ] **Profile maintenance.** After `write_evidence` lands. Telos appends evidence-pointed claims to `profile/strengths.md`, `profile/weaknesses.md`, etc.
 - [x] **Operating rules in `CLAUDE.local.md`.** Done — all bans, voice register, language rule, first-contact protocol, pushback calibration, asymmetric-knowledge handling, calibration samples ported and validated by 14:52 smoke-test. File is the binding identity contract injected via the system-prompt addendum.
 - [x] **Constantia clone on mini.** Done — cloned at `/Users/guya/constantia` (NOT `~/Desktop/constantia` due to macOS TCC; see Runbook §F). guyacode account on mini has clone access. Push access still unverified — see Next Session item 4.
 - [x] **Mount Constantia into Telos container.** Done — `container.json` has `additionalMounts: [{hostPath: "/Users/guya/constantia", containerPath: "constantia", readonly: false}]`; mount allowlist permits `~/constantia` rw. Validated 17:26 PT — Telos read `tasks/MANIFEST.md` and listed 7 open tasks. Container path resolves to `/workspace/extra/constantia`.
