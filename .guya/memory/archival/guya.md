@@ -291,3 +291,29 @@ Learned:
 - The end-of-message "want me to..." offer pattern called out in the 2026-04-27 reflection fired three more times this session — pattern hasn't yet been suppressed. Needs a stronger guideline rather than session-by-session correction.
 - "Step by step" with Daniel means literal one-step-at-a-time, not "I'll bundle related sub-steps." Step 4a/b/c bundling forced him to pick through and ask for 4c separately.
 - Auto-login + FileVault-off is a real trust-model decision (Tailscale identity is a network tunnel). Daniel accepted it correctly for his apartment but the trade was framed by me, not pressure-tested by him — the user.md "first reasonable option" pattern again.
+
+### 2026-05-03 (Telos identity session)
+
+- Long session locking Telos's identity layer end-to-end. Belief #5 in `telos context/core-beliefs.md` rewritten ("Build for depth; reference, don't fork" → "Fork the harness, hand-roll the mentor core"). Vision §7 in `telos context/vision.md` rewritten ("Three-Voice Character" with mother/Socrates/Karpathy → "Unified Character — 두사부일체" with three facets 스승/아버지/보스, default register 보스).
+- Drafted full `soul.md` across seven dimensions (origin and self-conception, loyalty model, stance on emotional state, stance on own mistakes, time horizon, refusals, editability). Cohesion sweep applied six fixes. Committed to nanoclaw fork at `groups/telos/soul.md` (commit `03604e6`). `CLAUDE.local.md` references soul.md and carries the bilingual language rule. `.gitignore` modified to track identity files (override of nanoclaw's per-installation default).
+- Mini's Docker Desktop set to start-at-login → reboot recovery is self-healing. Telos came online via Discord (username `Telos`, Gateway READY). First smoke-test (11:43 PT): identity loads partially (knows name, address conventions, Korean awareness) but character does NOT (Korean response on English input, "도와드릴까요" / "What can I do for you?", greeting energy with exclamation). Confirms design hypothesis: soul gives identity facts, behavioral rules give character.
+- Created `telos context/STATUS.md` as Telos-scoped status doc; committed entire `telos context/` directory (vision, core-beliefs, goal, STATUS) to guya repo. Operating-rules draft committed to `telos context/operating-rules-draft.md` for next-session handoff (voice register, behavioral bans, pushback calibration, asymmetric-knowledge handling, first-contact behavior, language-rule reinforcement, sample exchanges, smoke-test protocol).
+- Three commits in guya repo: `f382b47` (scribe), `1c6e351` (telos context/), `61ce473` (operating-rules draft). Two commits in nanoclaw fork: `03604e6` (soul.md), `80c8a78` (Discord adapter, pushed today).
+
+Key decisions:
+- Continue on the nanoclaw fork; do NOT clone-and-create-new-repo. Belief #5 mandate: fork-the-harness, hand-roll-the-mentor-core. Trigger to reconsider: nanoclaw *core* modifications become unmergeable.
+- Soul.md gets version control via gitignore override. nanoclaw's design treats `groups/*` as per-installation; soul.md and CLAUDE.local.md are agent identity, not transient runtime state. Other files in the directory remain ignored.
+- Mentor-only scope for now; utility tasks (email review, doc reading, request refinement) deferred. If added later, must be in mentor voice with mentor's posture, not a "utility mode" switch.
+- Cross-language naming: each language uses the name natural to it. English Telos / Daniel; Korean 두식 / 형님 with 존댓말. Same character, different cultural costume. No transliteration ("Dooshik" / "Hyungnim") in either direction.
+- 어머니 → 아버지 swap deliberate; warmth-with-knife dimension replaced by "loyalty as investment" framing in soul (care expressed through structure, not affect).
+- Pattern thresholds: active 3-in-2-weeks; absence 2 consecutive weeks of expected recurring behavior failing to occur. Refusals include "you do not decide for him" (custodian, not author).
+
+Learned:
+- Identity without operating rules ≈ Generic Claude that knows its name. The behavioral layer is what overrides RLHF helpful-assistant defaults. Soul alone can't.
+- Daniel's scope discipline louder than usual today — twice interrupted my move to implementation when discussion was the right mode. The "for X, we should discuss before we implement" call is a senior pattern.
+- xhigh-effort review request was the move-of-the-day pattern: invite rigor at the moment of feeling done. Caught real issues (mother-warmth lost in swap, Telos vs Guya scope blur, missing "go easy" rule).
+- 두사부일체 reference was structural, not decorative. Cultural specificity made the design tighter — three-voice concept gained a unifying name and a clean three-facet mapping.
+- I made up a wrong movie reference (내부자들 instead of 두사부일체). Don't insert false specificity for color when uncertain — hedge or ask.
+- I jumped to implementation when "focus on" should have been read as discussion-mode default. Pattern: "let's focus on X" needs explicit "implement" authorization before action.
+- Trailing-offer pattern (called out 2026-04-30) tightened but not eliminated. ~3 instances today vs ~3-4 last session. Halfway fixed.
+- Smoke-test reaction "seems to be wired in" missed obvious rule violations Daniel had just locked. The editorial mode wasn't on at the moment it should have been most active.
