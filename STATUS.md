@@ -19,7 +19,7 @@
 Full Telos state in `telos context/STATUS.md`.
 
 ## Recent Changes
-- [2026-05-04 PM] (this commit) — feat(constantia): task priority field (T/P split) + ideas.md migration + ADR 017
+- [2026-05-04] `9b08d96` — feat(constantia): task priority field (T/P split) + ideas.md migration + ADR 017
 - [2026-05-04] `3213f21` — chore(scribe): record skill cleanup ship + next-session handoff
 - [2026-05-04] `7d0c786` — docs(ideas): demote second-opinion to Tier C, mark S1/S2 shipped
 - [2026-05-04] `7ab908b` — docs(status): capture autonomous accept_proposal milestone + parallel-session lesson
