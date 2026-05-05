@@ -1,25 +1,27 @@
 # guya — Status
 
-> Last updated: 2026-05-04
+> Last updated: 2026-05-05
 
 ## Current Focus
-**S3 shipped: Constantia task priority field + ideas.md migration.** Three atomic commits across three repos: Constantia `bd0359e`+`5f8a261` (validator + post-commit + 9 retrofills + 7 new tasks from ideas.md migration), Telos `ca38dac` (`assign_task`/`accept_proposal` priority arg + tick-prompt action-priority rule + non-pillar accept criterion), Guya (this commit, ADR 017 + ideas.md deletion). Schema split: T1/T2/T3 on proposals (Guya's hint), P1/P2/P3 on committed work (Telos's stamp), `pillar: none` for cross-cutting work. T → P unbound at acceptance (Telos picks fresh). ideas.md deleted — Constantia is now single source of truth for backlog. Anti-rot watch: 2-week spot check that Telos's accepts vary `priority`; if all default to P2 the field is decoration.
 
-**Earlier today.** (1) **Telos** is autonomous on plumbing + judgment with a nightly reflection layer — six-tool MCP server, symmetric tick logging, Constantia logs reorganized by author into `log/guya/` and `log/telos/`. Tonight's 23:00 PT cron is the next observation point. (2) **Guya skill catalog cleanup** — S1 (deleted 4 unused skills: bootstrap/forget/obsidian-sync/pr) and S2 (added `guya-issue` for mid-work GitHub issue capture) shipped via commits `b1da043`, `626808e`, `7d0c786`. Skill-creator validation passed (12/12 trigger accuracy, boundary rule holds). Pre-commit + post-commit hooks installed as symlinks on both laptop and mini, closing the silent-validation gap that let `tick.md` filenames commit without matching the regex.
+**S3 shipped + reflection-bug fix shipped.** Two arcs in this session, both closed.
 
-**Autonomous task lifecycle closed end-to-end on real artifacts (not smoke tests).** Telos triaged, rejected, accepted, and graded real tasks today via DM and via the scheduled tick:
-- TASK-003 rejected (proposed → rejected) — expired Slice-5 milestone, no rubric anchor.
-- TASK-001 graded B (assigned → graded) — competent implementation of the constantia hooks-validation work.
-- TASK-009 closed (smoke-test stub).
-- TASK-007 accepted (proposed → assigned) — first autonomous use of `accept_proposal` (constantia commit `41ae71b`).
-- TASK-008 accepted (proposed → assigned) — second autonomous `accept_proposal` use (constantia commit `d5a7033`).
+**Arc 1: S3 — Constantia task priority field + ideas.md migration.** Three atomic commits across three repos. Constantia (`bd0359e`+`5f8a261`): validator gains `priority` (status-conditional enum: `T1/T2/T3` on proposals, `P1/P2/P3` on assigned+, preserved on rejected), pillar enum extended to admit `none`, post-commit manifest sorts status → priority within status → ID. Telos fork (`ca38dac`): `assign_task` and `accept_proposal` gain required `priority` arg; tick-prompt enforces action priority (grade > accept > kill-stale > assign > nothing) with task priority as the secondary tiebreaker; pillar work wins over `pillar: none` at equal priority; non-pillar accept criterion drops the rubric requirement. Guya (`9b08d96`): ADR 017 + ideas.md deletion (Constantia is now single source of truth for backlog) + plan archived to `.guya/plans/2026-05-04-task-priority.md`. Validator smoke-tested with 6 synthetic cases; 9 existing tasks retrofilled; 7 new tasks (TASK-010..016) imported from ideas.md. T → P conversion at acceptance is **unbound** — Telos picks P fresh based on current portfolio.
 
-**Tonight's 23:00 PT cron is the next observation point.** Seeded `task-17779308213N-rfltky` in `inbound.db`. First fire at 06:00 UTC = 23:00 PT today. Telos will read the day's DMs (`read_today_transcript` mounts `inbound.db` + `outbound.db` read-only), today's tick log, today's Guya logs, and synthesize an 8-section reflection. DMs the highlight; full reflection lives in `log/telos/YYYY-MM-DD-reflection.md`. Watch for: DM lands, file lands in Constantia, no broadcast to server channels, content is interpretive (not a transcript dump).
+**Arc 2: Reflection-bug fix.** The 23:00 PT cron on 2026-05-04 fired into an intentionally-cleared slot (a manual test reflection at `807fb0b` had been deleted via `afd515c` so the cron could fire fresh). Telos read its own earlier DMs in `read_today_transcript` output, reasoned "this is a duplicate cron fire," and wrote 8 sections of "Duplicate check" placeholder content. The `write_reflection` overwrite guard correctly didn't fire (file didn't exist). Two reasoning bugs in `reflect-prompt.md`: (A) Telos inferred duplicate-fire from the transcript instead of trusting the tool's file-existence guard; (B) the resulting bug-report DM replaced the synthesis DM (Daniel got "the overwrite protection isn't working" instead of the day's synthesis). Fixes shipped in Telos fork `44a54fe`: §1 explicit "truth source is the file, not the transcript"; §4 reframed as "synthesis DM is the daily contract, anomalies go in a SEPARATE second DM after." Lost content restored from `807fb0b` to Constantia `80dad30`. Patched prompt scp'd to mini.
+
+**Verification gate is tonight's (May 5) 23:00 PT cron.** First run with the patched prompt. Watch for: DM lands as a real synthesis (not "committed" or a bug report), file at `log/telos/2026-05-05-reflection.md` is interpretive (not a transcript dump), no broadcast to server channels. If the DM is just "committed" or just a bug report, the patch didn't take and we re-investigate.
+
+**Anti-rot watch (2-week reminder):** spot-check that Telos's `accept_proposal` calls actually vary `priority` across tasks. If everything defaults to P2, the priority field is decoration — same failure mode as ADR-011/012/013/016.
+
+**Earlier this week.** Telos autonomous on plumbing + judgment with nightly reflection layer (six-tool MCP server, symmetric tick logging, Constantia logs split by author into `log/guya/` + `log/telos/`). Skill catalog cleanup shipped: 4 deleted (`bootstrap`/`forget`/`obsidian-sync`/`pr`), `guya-issue` added (mid-work GH issue capture). Autonomous task lifecycle closed end-to-end on real artifacts: TASK-003 rejected, TASK-001 graded B, TASK-007/008 accepted (first autonomous uses of `accept_proposal`).
 
 Full Telos state in `telos context/STATUS.md`.
 
 ## Recent Changes
-- [2026-05-04] `9b08d96` — feat(constantia): task priority field (T/P split) + ideas.md migration + ADR 017
+- [2026-05-04 PM] `7c3d438` — chore(gitignore): exclude /data/ — personal learning notes
+- [2026-05-04 PM] `492d906` — chore(catch-up): scribe pointer + archival append + S1/S2 reflection + STATUS dedupe
+- [2026-05-04 PM] `9b08d96` — feat(constantia): task priority field (T/P split) + ideas.md migration + ADR 017
 - [2026-05-04] `3213f21` — chore(scribe): record skill cleanup ship + next-session handoff
 - [2026-05-04] `7d0c786` — docs(ideas): demote second-opinion to Tier C, mark S1/S2 shipped
 - [2026-05-04] `7ab908b` — docs(status): capture autonomous accept_proposal milestone + parallel-session lesson
@@ -27,52 +29,32 @@ Full Telos state in `telos context/STATUS.md`.
 - [2026-05-04] `626808e` — feat(skills): add guya-issue, clean catalog refs to deleted skills
 - [2026-05-04] `b1da043` — chore(skills): remove 4 unused skills, log replacement plan
 - [2026-05-04] `194f5e3` — chore(scribe): full doc refresh after Cut A + Cut B Lite ship
-- [2026-05-04] `ecb5084` — chore(scribe): full doc refresh after Cut A + Cut B Lite ship
-- [2026-05-04] `03b297f` — fix(reflect): write logs into Constantia log/guya/ subdir
-- [2026-05-04] `7554fc8` — chore(scribe): record Cut A + Cut B Lite ship + first real grade cycle
-- [2026-05-04 PM] `8535153` — chore(scribe): record Cut A + Cut B Lite ship + first real grade cycle
-- [2026-05-04] `0d0f6bd` — chore(scribe): refresh STATUS + ARCHITECTURE after Telos autonomy ship
-- [2026-05-04] `5a4b6d4` — docs(telos): document MCP server smoke-test arc and tick scheduling
-- [2026-05-03] `7349a4f` — docs(telos): verify mini push access to constantia repo
-- [2026-05-03] `c7e8f59` — docs(constantia): commit Constantia design docs to guya repo
-- [2026-05-03] `7dfc03d` — chore(scribe): catch up auto-bookkeeping after multi-commit Telos session
-- [2026-05-03] `ba2f01b` — docs(reflections): commit two manual reflections from prior sessions
-- [2026-05-03] `344a126` — docs(skills): keep review and optimize skills from stalling the loop
-- [2026-05-03] `46d1efd` — docs(vision): rewrite Belief #5 + §7 around Telos identity architecture
-- [2026-05-03] `85bf8bd` — docs(adr): catch up table with already-shipped decisions 009-013
-- [2026-05-03] `e409654` — docs(telos): document identity-injection architecture and ops runbook
-- [2026-05-03] `61ce473` — docs(telos): capture operating-rules draft from identity session
-- [2026-05-03] `1c6e351` — chore(telos): commit telos context/ and add Telos-scoped STATUS
-- [2026-05-03] `f382b47` — chore(scribe): record Telos identity-layer session in STATUS + ARCHITECTURE
-- [2026-05-01] `538f8db` — docs(mini): mac mini remote access reference + status update
 
-**Cross-repo (nanoclaw fork `daniellee6925/nanoclaw`):**
+**Cross-repo (nanoclaw fork `daniellee6925/nanoclaw` — Telos):**
+- [2026-05-05 AM] `44a54fe` — fix(reflect-prompt): two reasoning bugs that broke 5/4's cron synthesis (truth-is-file + synthesis-DM-always)
+- [2026-05-04 PM] `ca38dac` — telos: priority-aware task tools + non-pillar accept criterion (S3 Telos half)
 - [2026-05-04 PM] `87d2c4a` — feat(telos): nightly reflection layer + accept_proposal + symmetric tick logging
 - [2026-05-04] `de945fd` — feat(container): bake openssh-client + uid-501 passwd entry into base image
 - [2026-05-04] `a0c7909` — feat(telos): mentor MCP server (assign_task / grade_task / do_nothing) + tick prompt
 - [2026-05-03] `0a63654` — docs(telos): add Constantia-awareness section to operating contract
-- [2026-05-03] `ae13524` — feat(telos): inject CLAUDE.local.md via addendum + rewrite operating contract
-- [2026-05-03] `5958205` — feat(telos): operating rules — voice, bans, pushback, first-contact, language
-- [2026-05-03] `03604e6` — feat(telos): version-controlled soul.md and identity reference
-
-**Cross-repo (nanoclaw fork — Telos):**
-- [2026-05-04 PM] `ca38dac` — telos: priority-aware task tools + non-pillar accept criterion (S3 Telos half)
 
 **Cross-repo (constantia `daniellee6925/constantia`):**
-- [2026-05-04 PM] `5f8a261` — fix(post-commit): add missing leading pipe to task manifest rows
-- [2026-05-04 PM] `bd0359e` — schema: add task priority field (T1-T3 proposals, P1-P3 committed) + pillar 'none' (S3 Constantia half)
+- [2026-05-05 AM] `80dad30` — restore real reflection content from 807fb0b (overwrote-by-placeholder fix)
+- [2026-05-04 PM] `4672964` — fix(post-commit): add missing leading pipe to task manifest rows
+- [2026-05-04 PM] `0a22974` — schema: add task priority field (T1-T3 proposals, P1-P3 committed) + pillar 'none' (S3 Constantia half)
+- [2026-05-04 PM] `b88f128` — reflection: 2026-05-04 (placeholder, overwritten by 80dad30)
+- [2026-05-04] `8ca02e1` — tick(no-op): 9pm tick, queue clean
 - [2026-05-04 PM] `7dfc6cb` — clean up dirty working tree, schema-compliant task frontmatter (TASK-004/-005/-006/-007)
-- [2026-05-04 PM] `afd515c` — remove test-run reflection so 23:00 cron fires fresh
+- [2026-05-04 PM] `afd515c` — remove test-run reflection so 23:00 cron fires fresh (intentional clear)
 - [2026-05-04 PM] `d33aa4e` — restructure log/ by author + add tick/reflection conventions; install hooks as symlinks
 - [2026-05-04] `90f6030` — task(rejected): TASK-003 — Telos rejected proposal, expired Slice-5 milestone
-- [2026-05-04] (Telos's own writes) — `dc675ce`, `09289a3`, `56d9fef`, `a49a29a` (no-op tick logs across smoke-test attempts) + TASK-009 from Stage 2
-- [2026-05-03] `8800673` — docs: add design docs and fix dangling @-refs in CLAUDE.md
 
 ## In Progress
-- [x] **S3 — Constantia task priority field — SHIPPED.** Schema (T1-T3 / P1-P3) split namespaces force re-grade at accept; `pillar: none` admits cross-cutting work; ideas.md migrated to 7 proposed Constantia tasks (TASK-010..016) and deleted. Telos must restart its MCP server container to pick up the new tool signatures.
-- [ ] **Restart Telos MCP container.** Required after `ca38dac` so `assign_task`/`accept_proposal` accept the new `priority` arg. Until restart, autonomous tick-cycle will fail any accept attempt.
-- [ ] **Watch tonight's 23:00 PT reflection.** First observation of synthesized daily memory. Verify: DM lands with 2-3 sentence highlight, `log/telos/2026-05-04-reflection.md` lands in Constantia, no server-channel echo, content is interpretive (not transcript dump). If quality is weak, tighten `reflect-prompt.md` sections.
-- [x] **Commit nanoclaw fork changes.** Done 2026-05-04 PM (`87d2c4a`). Laptop, mini, origin all in sync.
+- [x] **S3 — Constantia task priority field — SHIPPED 2026-05-04.** Schema (T1-T3 / P1-P3) split namespaces force re-grade at accept; `pillar: none` admits cross-cutting work; ideas.md migrated to 7 proposed Constantia tasks (TASK-010..016) and deleted. Constantia + Telos fork pushed; mini synced.
+- [x] **Reflect-prompt reasoning-bug fix — SHIPPED 2026-05-05 AM.** Telos fork `44a54fe` patches two bugs: (A) Telos pre-judging duplicate-fire from its own DMs in transcript instead of trusting the file-existence guard; (B) bug-report DM replacing synthesis DM. Constantia `80dad30` restores the lost 5/4 reflection content. Mini has the patched prompt via scp.
+- [ ] **VERIFICATION — Watch May 5 23:00 PT reflection cron.** First fire with the patched prompt. Watch for: synthesis DM lands (not just "committed" or a bug report), `log/telos/2026-05-05-reflection.md` is interpretive (not transcript dump), no server-channel echo. If broken, re-investigate the prompt fix.
+- [ ] **VERIFICATION — Watch May 5 9 AM PT tick.** First tick with the new MCP signatures (priority arg required) and patched tick-prompt. If `accept_proposal` is exercised, watch that priority is varied across tasks (anti-rot signal — see Anti-rot watch in Current Focus).
+- [x] **Commit nanoclaw fork changes — Telos.** Done 2026-05-05 AM (`44a54fe` pushed to `daniellee6925/nanoclaw`). Laptop + fork origin in sync; mini has files via scp.
 - [ ] **mcp-server.ts at 873 LOC, over 800 limit.** Helpers extract cleanly into a separate `helpers.ts`. Mechanical refactor, ~30 min. Do before next feature lands on this file.
 - [x] **Update Guya's `/guya-reflect` skill to write into `log/guya/` (new subdir).** Done 2026-05-04 PM (`03b297f`). SKILL.md path updated, examples rewritten, mkdir step added.
 - [ ] **Post-commit manifest hook bug** — globs working-tree files including untracked. Surfaced as TASK-007 phantom-in-manifest issue earlier today (now resolved by committing TASK-007). Ideally manifest should walk only tracked files. Low priority.
@@ -100,6 +82,7 @@ Full Telos state in `telos context/STATUS.md`.
 - [ ] Growth tracker milestone #5: review code Guya writes — pick one function per session
 
 ## Decisions & Notes
+- [2026-05-05 AM] **Reflect-prompt reasoning-bug fix: truth-is-file + synthesis-DM-always.** Bug surfaced when 23:00 PT cron on 2026-05-04 wrote 8 sections of "Duplicate check — reflection already written at 21:49 PT" placeholder into a slot that had been intentionally cleared (manual test reflection at `807fb0b` was deleted via `afd515c` so the cron could fire fresh). Telos read its own earlier DMs in `read_today_transcript` output, reasoned "duplicate cron fire," and wrote the placeholder. The `write_reflection` overwrite guard in `mcp-server.ts:482` worked correctly — file didn't exist, fs.access threw ENOENT, tool wrote. Telos's diagnosis ("the overwrite protection isn't working") was wrong; the bug was in `reflect-prompt.md`'s reasoning rules, not the tool. Two fixes in Telos `44a54fe`: (A) §1 explicit instruction — "the truth source is the file, not the transcript. Trust the tool guard. Don't write placeholder content describing a perceived duplicate; that destroys real synthesis if the slot was just cleared." (B) §4 reframed — "synthesis DM is the daily contract. Always send it. If you also detect a system anomaly, send it as a SEPARATE second DM after the synthesis. Never replace synthesis with a bug report." Restored content via `git checkout 807fb0b -- log/telos/2026-05-04-reflection.md` → constantia `80dad30`. Patched prompt scp'd to mini at 23:53 PT. Verification gate: tonight's (May 5) 23:00 PT cron — first run with patched prompt.
 - [2026-05-04 PM] **S3: Task priority field + ideas.md migration shipped.** Three atomic commits (Constantia `bd0359e`+`5f8a261`, Telos `ca38dac`, Guya this commit). Schema split: `T1/T2/T3` on proposals (Guya's hint), `P1/P2/P3` on committed work (Telos's stamp), pillar enum gains `none` for cross-cutting work. T → P unbound at acceptance (Telos picks fresh; the proposal's T value is informational, not contractual). Pillar-work-wins-at-equal-priority is the tiebreaker preventing `pillar: none` from becoming a junk drawer. Validator enforces status-conditional priority enum; pre-commit smoke-tested with 6 synthetic cases. Migration: 9 existing tasks retrofilled; 7 new tasks (TASK-010..016) imported from `ideas.md` (now deleted — Constantia is single source of truth for backlog). Anti-rot watch: 2-week spot check that Telos's accepts vary `priority` across tasks. Required follow-up: restart MCP container to load new tool signatures. Recorded as ADR-017.
 - [2026-05-04 PM] **Skill catalog cleanup: 4 deleted, 1 added, 1 deferred.** Audited transcripts for skill invocations over ~5 weeks. Killed `guya-bootstrap` (one-shot, already ran), `guya-forget` (0 invocations — "forget X" handled naturally), `guya-pr` (0 invocations — replaced by `/ultrareview` and direct gh), `guya-obsidian-sync` (2 invocations — manual flow works). Added `guya-issue` (capture mid-work GH issue via `gh`, return to task). Validated via guya-skill-creator: 12/12 trigger accuracy on description sweep, boundary rule (GitHub for code, Constantia for growth) holds on disguise test. `second-opinion` (Codex-only fresh-eyes pass) deferred to Tier C — Codex is one shell call away, skill is convenience not capability. Surfaced cache-rebuild gotcha: clearing the plugin cache directly triggers sync-plugin to revert source from a stale state. Lesson: delete from source only, let cache stale-out via the post-commit sync hook. Commits `b1da043`, `626808e`, `7d0c786`.
 - [2026-05-04 PM] **`accept_proposal` exercised autonomously for the first time.** Telos accepted TASK-007 and TASK-008 in parallel with the scribe work this evening (constantia commits `41ae71b`, `d5a7033`). First real production uses of the tool that shipped earlier the same day. Means the full task lifecycle — propose / accept / assign / grade / reject — has now been exercised autonomously end-to-end, not just in smoke tests.

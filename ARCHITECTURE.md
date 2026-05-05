@@ -1,6 +1,6 @@
 # guya — Architecture
 
-> Last updated: 2026-05-04 (PM)
+> Last updated: 2026-05-05
 
 ## Current Architecture
 
@@ -192,6 +192,22 @@ Guya (executor)                    Telos (mentor)
 
 **Evolve:** `readConstantiaProfile()` reads Telos's non-stub profile assessments as additional synthesis input, so Guya can calibrate proposals against Telos's longitudinal view.
 
+**Task schema (extended 2026-05-04 PM, ADR-017).** Every task in `tasks/` has a required `priority` field with a status-conditional enum, validated by Constantia's pre-commit hook:
+
+| Status | `priority` enum | Set by |
+|--------|-----------------|--------|
+| `proposed` | `T1` \| `T2` \| `T3` | Guya (or Telos when self-proposing) — a hint |
+| `assigned` / `in-progress` / `complete` / `graded` | `P1` \| `P2` \| `P3` | Telos — stamped on accept, mutable on grade |
+| `rejected` | preserved as-was | n/a (never re-validated) |
+
+Semantics: T1/P1 = next thing, displaces standing work. T2/P2 = real work, no urgency floor. T3/P3 = backburner. No T0/P0 emergency tier (YAGNI). The T → P conversion at acceptance is **unbound** — Telos picks P fresh against current portfolio, not bound to the proposal's T value. T is a hint, not a contract.
+
+The `pillar` field enum was extended from `1 | 2 | 3` to `1 | 2 | 3 | none`. `pillar: none` admits cross-cutting infra / process / non-growth work that still has to ship. At equal priority, pillar work wins over `pillar: none` (tick-prompt rule, mitigates junk-drawer drift).
+
+The post-commit manifest builder adds a `Priority` column and sorts rows: status priority (assigned > in-progress > complete > proposed > graded > rejected) → priority within status → ID.
+
+**Backlog ownership (changed 2026-05-04 PM).** Constantia is now the single source of truth for backlog. The previous `ideas.md` at the Guya repo root has been deleted; its 7 entries were migrated to Constantia tasks `TASK-010..016` as `status: proposed` with appropriate T-priorities. Surfaced ideas now flow `/guya` thinking → propose task in Constantia (`status: proposed, priority: T*`) → Telos triages via `accept_proposal` → assigned/rejected. There is no parallel ideas list.
+
 ### Context Assembly (session-start)
 
 At every SessionStart, `guya-session-start.mjs` reads and assembles into a `<guya-context>` system-reminder block (3000 token budget / ~12000 chars):
@@ -247,11 +263,11 @@ The split honors core-beliefs §5 ("fork the harness, hand-roll the mentor core"
 
 | Tool | Layer | Purpose | Constantia file |
 |------|-------|---------|-----------------|
-| `assign_task` | action | Create new task with structured frontmatter (id, status=assigned, pillar 1/2/3, assigned_by, purpose ≥10 chars, acceptance ≥10 chars, grade=null) + Context body | `tasks/TASK-NNN.md` (auto-incremented) |
-| `accept_proposal` | action | Accept a Guya-proposed task (status: proposed → assigned). Closes the proposed → assigned → graded/rejected lifecycle | `tasks/TASK-NNN.md` |
+| `assign_task` | action | Create new task with structured frontmatter (id, status=assigned, **priority P1\|P2\|P3 — required**, pillar 1\|2\|3\|none, assigned_by, purpose ≥10 chars, acceptance ≥10 chars, grade=null) + Context body | `tasks/TASK-NNN.md` (auto-incremented) |
+| `accept_proposal` | action | Accept a Guya-proposed task (status: proposed → assigned). Requires **priority P1\|P2\|P3** (T → P conversion is unbound — picked fresh by Telos, not bound to the proposal's T value). Pillar may be rewritten to `1\|2\|3\|none` for rubric anchoring. Closes the proposed → assigned → graded/rejected lifecycle | `tasks/TASK-NNN.md` |
 | `grade_task` | action | Update existing task to terminal state — `outcome=graded` requires `grade` (A/B/C) + `grade_evidence` ≥10 chars; `outcome=rejected` requires `rejection_reason` ≥10 chars. Frontmatter only, body preserved. | `tasks/TASK-NNN.md` |
 | `do_nothing` | action | Append timestamped no-op section to today's tick log with `reason` (≥20 chars) and optional `next_check`. Default tick decision — action without reason is noise. | `log/telos/YYYY-MM-DD-tick.md` |
-| `write_reflection` | reflection | Write nightly synthesized reflection with 8 sections: `what_happened`, `key_decisions`, `patterns_observed`, `what_daniel_should_take_away`, `what_telos_should_change`, `evidence_candidates`, `open_threads`, `next_priorities`. Refuses to overwrite an existing same-day reflection | `log/telos/YYYY-MM-DD-reflection.md` |
+| `write_reflection` | reflection | Write nightly synthesized reflection with 8 sections: `what_happened`, `key_decisions`, `patterns_observed`, `what_daniel_should_take_away`, `what_telos_should_change`, `evidence_candidates`, `open_threads`, `next_priorities`. Refuses to overwrite an existing same-day reflection (file-existence guard is the truth source — not the conversation transcript) | `log/telos/YYYY-MM-DD-reflection.md` |
 | `read_today_transcript` | reflection (read-only) | Open nanoclaw's `inbound.db` + `outbound.db` read-only via `bun:sqlite`, return Daniel↔Telos messages merged by timestamp for a given PT day. Mounted at `/workspace/extra/telos-session` (read-only, `additionalMounts` entry in `groups/telos/container.json`, allowlist updated) | none (read-only) |
 
 The full task lifecycle (proposed → assigned → graded/rejected) closed end-to-end on real artifacts on 2026-05-04: TASK-001 graded B, TASK-003 rejected, TASK-009 closed.
@@ -285,9 +301,13 @@ git push origin main
 
 Push failures don't fail the tool because file write + local commit is durable state; Telos surfaces `pushed: false` in its Discord report and the operator (or a future tick) recovers manually. Hard-failing on transient network errors would lose the in-character report and force Telos to redo work it already did. Handlers serialized via a promise chain (`tail = tail.then(() => handle(req))`) so concurrent stdin reads can't race on shared state (next-NNN computation, tick-log append, git config setup).
 
-**Layer 3 — Reflection layer (NEW 2026-05-04 PM).** Nightly synthesized memory. The reflection cron fires at 23:00 PT, Telos reads the day's transcript + tick log + Guya logs + profile, synthesizes the 8 sections defined by `write_reflection`, calls the tool to persist `log/telos/YYYY-MM-DD-reflection.md`, then DMs a 2-3 sentence highlight to Daniel. The protocol lives in `groups/telos/reflect-prompt.md`. Distinct from the tick prompt — different grounding inputs, different output shape, different output file.
+**Layer 3 — Reflection layer (NEW 2026-05-04 PM; reasoning-bug patched 2026-05-05).** Nightly synthesized memory. The reflection cron fires at 23:00 PT, Telos reads the day's transcript + tick log + Guya logs + profile, synthesizes the 8 sections defined by `write_reflection`, calls the tool to persist `log/telos/YYYY-MM-DD-reflection.md`, then DMs a synthesis highlight to Daniel. The protocol lives in `groups/telos/reflect-prompt.md`. Distinct from the tick prompt — different grounding inputs, different output shape, different output file.
 
 The reflection schedule was seeded by direct sqlite INSERT into nanoclaw's `inbound.db` `messages_in` (id `task-17779308213N-rfltky`, recurrence `0 23 * * *`, body = `Read /workspace/agent/reflect-prompt.md and execute it as today's reflection.`). First fire 2026-05-04 23:00 PT.
+
+**Reflect-prompt reasoning-bug fix (2026-05-05, fork commit `44a54fe`).** Two bugs surfaced when the 23:00 PT cron fired against an intentionally-cleared reflection slot:
+- **(A) Truth source confusion.** Telos saw "duplicate cron fire" chatter in its own DM transcript and pre-judged the reflection already-written without checking the file. It then wrote placeholder content over the cleared slot. Fix: §1 explicit instruction "the truth source is the file, not the transcript" — `write_reflection`'s file-existence guard is the only authoritative duplicate check.
+- **(B) DM contract violation.** The bug-report DM ("overwrite protection isn't working") replaced the synthesis DM, so Daniel got a debug message instead of the day's synthesis. Fix: §4 reframed — the synthesis DM is the daily contract that always sends; anomalies go in a SEPARATE second DM. Restored the 2026-05-04 reflection content from constantia commit `807fb0b` after the placeholder overwrite (constantia commit `80dad30`).
 
 Git auth uses an ed25519 deploy key at `~/.config/nanoclaw/constantia-deploy-key` on the mini, public half attached to `daniellee6925/constantia` GitHub Deploy Keys with write access. Bind-mounted as a single file at `/workspace/extra/ssh-key/constantia-deploy-key` (sidesteps the mount-allowlist `.ssh` directory block). `GIT_SSH_COMMAND` in `container.json` `mcpServers.telos-constantia.env` references it with `StrictHostKeyChecking=no UserKnownHostsFile=/dev/null`. Narrow blast radius — a compromised container can write only to constantia.
 
@@ -307,10 +327,12 @@ nanoclaw delivers prompt to Telos's Discord session path (same wake mechanism as
         ▼
 Telos reads `groups/telos/tick-prompt.md` and runs the protocol:
         │
-        ├─ 1. Ground   → read pillars.md, tasks/MANIFEST.md, log/ (3 most recent), profile/
+        ├─ 1. Ground   → read pillars.md, tasks/MANIFEST.md (incl. priority column), log/ (3 most recent), profile/
         ├─ 2. Decide   → exactly one of {assign_task, accept_proposal, grade_task, do_nothing}; default do_nothing
-        ├─ 3. Act      → call MCP tool; receive {sha, pushed}
-        └─ 4. Report   → 1-2 sentence Discord message; mention pushed:false if it occurred
+        │                action priority: grade > accept > kill-stale > assign > nothing
+        │                within a category: pick highest task priority (P/T); pillar work wins over `pillar: none` at equal priority
+        ├─ 3. Act      → call MCP tool (priority arg required for assign/accept); receive {sha, pushed}
+        └─ 4. Report   → DM-only synthesis; mention pushed:false if it occurred
 ```
 
 The schedule was registered by Telos itself calling nanoclaw's existing `schedule_task` MCP tool. Persisted in `inbound.db` `messages_in`, survives container kills and daemon restarts. Manually invoking a tick mid-day = DM Telos with the tick-prompt content directly, or trigger `schedule_task` for a one-shot run. Full Operations Runbook (edit → kill container → clear continuation cycle, MCP server hot-reload, per-agent image rebuild conditions, deploy-key setup) lives in `telos context/STATUS.md` §A–§I.
@@ -462,3 +484,5 @@ Drift detection on Telos's own behavior — is the tick defaulting to `do_nothin
 | 2026-05-04 PM | Constantia log layout: `log/guya/` + `log/telos/` subdirs (ADR-016) | 26+ flat files in `log/` were unscannable. Split by author (mirrors the architecture's ownership boundary). Filenames drop redundant `-{author}-` segment — author is now the directory. Telos uses single-trailing-segment names: `YYYY-MM-DD-tick.md` (combined daily action+no-op log) and `YYYY-MM-DD-reflection.md` (nightly synthesized memory). Pre-commit hook validates per-author regex and rejects log/ root with explicit error. Post-commit hook walks subdirs via `find` and adds Path column to log manifest. 23 existing logs migrated in single commit (`d33aa4e`). Hooks installed as symlinks in `.git/hooks/` on both laptop AND mini — closed the silent rot where mini's hook was missing entirely (only `pre-commit.sample` existed), letting `tick.md` filenames commit despite not matching the regex. Daniel's call (author-based) over my type-based proposal (`sessions/` + `reflections/`) — author-split mirrors ownership boundary cleanly |
 | 2026-05-04 PM | DM-only routing locked at three layers | Earlier today Telos's first scheduled tick sent the substantive report to a Discord guild channel and a brief ack to the DM — inverted from intended. Three-layer fix: (a) tick-prompt step 4 explicit "DM only, do not broadcast"; (b) reflect-prompt step 4 same; (c) deleted server channel binding from `agent_destinations` + `messaging_group_agents` rows in `v2.db` so Telos can no longer route there even if the prompt drifts. Belt + suspenders against the next prompt-rewrite cycle |
 | 2026-05-04 PM | Constantia hooks installed as symlinks (data-tier silent-rot fix; ADR-013 family) | Mini's `.git/hooks/` had only `pre-commit.sample` — Telos's commits had been bypassing all schema validation since Constantia's setup. Same meta-pattern as ADR-011/012/013 (silent rot of trusted enforcement living in a "this can't fail" guard), but at the data-validation tier instead of the harness tier. Both clones now symlink `.git/hooks/{pre,post}-commit` to `hooks/` source files; future hook edits auto-apply, no copy drift. The next fresh clone of constantia onto a new machine will need the symlink installed (consider a setup script if a third clone ever happens) |
+| 2026-05-04 | ADR-017 task priority field shipped — T/P split namespaces, pillar `none` for cross-cutting work, ideas.md → Constantia migration | Required field `priority` on tasks with status-conditional enum: `proposed` → T1\|T2\|T3 (Guya's hint); `assigned`/`in-progress`/`complete`/`graded` → P1\|P2\|P3 (Telos's stamp); `rejected` preserved as-was. T → P at acceptance is unbound — Telos picks P fresh against portfolio, T is a hint not a contract. `pillar` enum extended to `1\|2\|3\|none` for cross-cutting infra/process work; pillar work wins at equal priority. `assign_task` and `accept_proposal` MCP tools now require `priority` arg. Tick-prompt rewritten: action priority dominates (grade > accept > kill-stale > assign > nothing); within a category, highest P/T wins. Constantia is now single source of truth for backlog — `ideas.md` deleted at Guya repo root; 7 entries migrated to Constantia tasks TASK-010..016 as `status: proposed`. Affected commits: guya `9b08d96` (ADR + ideas.md deletion), constantia `bd0359e` (schema), nanoclaw fork `ca38dac` (priority-aware MCP tools + tick-prompt) |
+| 2026-05-04 | reflect-prompt.md reasoning-bug fix — explicit "truth is the file, not the transcript" + synthesis-DM-always rules; restored 807fb0b reflection content lost when 23:00 PT cron wrote a "duplicate check" placeholder over an intentionally-cleared slot | Two reasoning bugs surfaced when the cron fired into a cleared slot. (A) Telos pre-judged "duplicate cron fire" from its own DM transcript instead of trusting `write_reflection`'s file-existence guard, and wrote placeholder content over the intentionally-cleared 2026-05-04 reflection. (B) The bug-report DM ("overwrite protection isn't working") replaced the synthesis DM, so Daniel got debug output instead of the daily synthesis. Fix: reflect-prompt §1 says "the truth source is the file, not the transcript"; §4 reframes the synthesis DM as the daily contract that always sends — anomalies go in a SEPARATE second DM. Reflection content restored from constantia `807fb0b` via constantia commit `80dad30`. Fork commit `44a54fe` |
