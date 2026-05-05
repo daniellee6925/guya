@@ -19,6 +19,7 @@
 Full Telos state in `telos context/STATUS.md`.
 
 ## Recent Changes
+- [2026-05-05] `bf25ec8` — chore(scribe): document S3 ship + reflect-prompt bug fix arcs (5/4-5/5 session)
 - [2026-05-04 PM] `7c3d438` — chore(gitignore): exclude /data/ — personal learning notes
 - [2026-05-04 PM] `492d906` — chore(catch-up): scribe pointer + archival append + S1/S2 reflection + STATUS dedupe
 - [2026-05-04 PM] `9b08d96` — feat(constantia): task priority field (T/P split) + ideas.md migration + ADR 017
