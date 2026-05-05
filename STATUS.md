@@ -1,9 +1,11 @@
 # guya — Status
 
-> Last updated: 2026-05-04 (PM, post-skill-cleanup)
+> Last updated: 2026-05-04
 
 ## Current Focus
-**Two streams active today, both landed cleanly.** (1) **Telos** is autonomous on plumbing + judgment with a nightly reflection layer — six-tool MCP server, symmetric tick logging, Constantia logs reorganized by author into `log/guya/` and `log/telos/`. Tonight's 23:00 PT cron is the next observation point. (2) **Guya skill catalog cleanup** — S1 (deleted 4 unused skills: bootstrap/forget/obsidian-sync/pr) and S2 (added `guya-issue` for mid-work GitHub issue capture) shipped via commits `b1da043`, `626808e`, `7d0c786`. Skill-creator validation passed (12/12 trigger accuracy, boundary rule holds). Pre-commit + post-commit hooks installed as symlinks on both laptop and mini, closing the silent-validation gap that let `tick.md` filenames commit without matching the regex.
+**S3 shipped: Constantia task priority field + ideas.md migration.** Three atomic commits across three repos: Constantia `bd0359e`+`5f8a261` (validator + post-commit + 9 retrofills + 7 new tasks from ideas.md migration), Telos `ca38dac` (`assign_task`/`accept_proposal` priority arg + tick-prompt action-priority rule + non-pillar accept criterion), Guya (this commit, ADR 017 + ideas.md deletion). Schema split: T1/T2/T3 on proposals (Guya's hint), P1/P2/P3 on committed work (Telos's stamp), `pillar: none` for cross-cutting work. T → P unbound at acceptance (Telos picks fresh). ideas.md deleted — Constantia is now single source of truth for backlog. Anti-rot watch: 2-week spot check that Telos's accepts vary `priority`; if all default to P2 the field is decoration.
+
+**Earlier today.** (1) **Telos** is autonomous on plumbing + judgment with a nightly reflection layer — six-tool MCP server, symmetric tick logging, Constantia logs reorganized by author into `log/guya/` and `log/telos/`. Tonight's 23:00 PT cron is the next observation point. (2) **Guya skill catalog cleanup** — S1 (deleted 4 unused skills: bootstrap/forget/obsidian-sync/pr) and S2 (added `guya-issue` for mid-work GitHub issue capture) shipped via commits `b1da043`, `626808e`, `7d0c786`. Skill-creator validation passed (12/12 trigger accuracy, boundary rule holds). Pre-commit + post-commit hooks installed as symlinks on both laptop and mini, closing the silent-validation gap that let `tick.md` filenames commit without matching the regex.
 
 **Autonomous task lifecycle closed end-to-end on real artifacts (not smoke tests).** Telos triaged, rejected, accepted, and graded real tasks today via DM and via the scheduled tick:
 - TASK-003 rejected (proposed → rejected) — expired Slice-5 milestone, no rubric anchor.
@@ -17,6 +19,8 @@
 Full Telos state in `telos context/STATUS.md`.
 
 ## Recent Changes
+- [2026-05-04 PM] (this commit) — feat(constantia): task priority field (T/P split) + ideas.md migration + ADR 017
+- [2026-05-04] `3213f21` — chore(scribe): record skill cleanup ship + next-session handoff
 - [2026-05-04] `7d0c786` — docs(ideas): demote second-opinion to Tier C, mark S1/S2 shipped
 - [2026-05-04] `7ab908b` — docs(status): capture autonomous accept_proposal milestone + parallel-session lesson
 - [2026-05-04] `e98a177` — docs(reflect): manual reflection + archival + STATUS catch-up
@@ -51,7 +55,12 @@ Full Telos state in `telos context/STATUS.md`.
 - [2026-05-03] `5958205` — feat(telos): operating rules — voice, bans, pushback, first-contact, language
 - [2026-05-03] `03604e6` — feat(telos): version-controlled soul.md and identity reference
 
+**Cross-repo (nanoclaw fork — Telos):**
+- [2026-05-04 PM] `ca38dac` — telos: priority-aware task tools + non-pillar accept criterion (S3 Telos half)
+
 **Cross-repo (constantia `daniellee6925/constantia`):**
+- [2026-05-04 PM] `5f8a261` — fix(post-commit): add missing leading pipe to task manifest rows
+- [2026-05-04 PM] `bd0359e` — schema: add task priority field (T1-T3 proposals, P1-P3 committed) + pillar 'none' (S3 Constantia half)
 - [2026-05-04 PM] `7dfc6cb` — clean up dirty working tree, schema-compliant task frontmatter (TASK-004/-005/-006/-007)
 - [2026-05-04 PM] `afd515c` — remove test-run reflection so 23:00 cron fires fresh
 - [2026-05-04 PM] `d33aa4e` — restructure log/ by author + add tick/reflection conventions; install hooks as symlinks
@@ -60,7 +69,8 @@ Full Telos state in `telos context/STATUS.md`.
 - [2026-05-03] `8800673` — docs: add design docs and fix dangling @-refs in CLAUDE.md
 
 ## In Progress
-- [ ] **Next ideas.md item: S3 — Constantia task priority field.** Add `priority: P0|P1|P2` to task frontmatter so Telos's tick-prompt priority logic operates on explicit signal instead of inferred. **Verify first** whether tick-prompt already does this implicitly (mem 4110) — if yes, deprioritize. ~1-2h. Tier C (`second-opinion`) is backburner.
+- [x] **S3 — Constantia task priority field — SHIPPED.** Schema (T1-T3 / P1-P3) split namespaces force re-grade at accept; `pillar: none` admits cross-cutting work; ideas.md migrated to 7 proposed Constantia tasks (TASK-010..016) and deleted. Telos must restart its MCP server container to pick up the new tool signatures.
+- [ ] **Restart Telos MCP container.** Required after `ca38dac` so `assign_task`/`accept_proposal` accept the new `priority` arg. Until restart, autonomous tick-cycle will fail any accept attempt.
 - [ ] **Watch tonight's 23:00 PT reflection.** First observation of synthesized daily memory. Verify: DM lands with 2-3 sentence highlight, `log/telos/2026-05-04-reflection.md` lands in Constantia, no server-channel echo, content is interpretive (not transcript dump). If quality is weak, tighten `reflect-prompt.md` sections.
 - [x] **Commit nanoclaw fork changes.** Done 2026-05-04 PM (`87d2c4a`). Laptop, mini, origin all in sync.
 - [ ] **mcp-server.ts at 873 LOC, over 800 limit.** Helpers extract cleanly into a separate `helpers.ts`. Mechanical refactor, ~30 min. Do before next feature lands on this file.
@@ -90,6 +100,7 @@ Full Telos state in `telos context/STATUS.md`.
 - [ ] Growth tracker milestone #5: review code Guya writes — pick one function per session
 
 ## Decisions & Notes
+- [2026-05-04 PM] **S3: Task priority field + ideas.md migration shipped.** Three atomic commits (Constantia `bd0359e`+`5f8a261`, Telos `ca38dac`, Guya this commit). Schema split: `T1/T2/T3` on proposals (Guya's hint), `P1/P2/P3` on committed work (Telos's stamp), pillar enum gains `none` for cross-cutting work. T → P unbound at acceptance (Telos picks fresh; the proposal's T value is informational, not contractual). Pillar-work-wins-at-equal-priority is the tiebreaker preventing `pillar: none` from becoming a junk drawer. Validator enforces status-conditional priority enum; pre-commit smoke-tested with 6 synthetic cases. Migration: 9 existing tasks retrofilled; 7 new tasks (TASK-010..016) imported from `ideas.md` (now deleted — Constantia is single source of truth for backlog). Anti-rot watch: 2-week spot check that Telos's accepts vary `priority` across tasks. Required follow-up: restart MCP container to load new tool signatures. Recorded as ADR-017.
 - [2026-05-04 PM] **Skill catalog cleanup: 4 deleted, 1 added, 1 deferred.** Audited transcripts for skill invocations over ~5 weeks. Killed `guya-bootstrap` (one-shot, already ran), `guya-forget` (0 invocations — "forget X" handled naturally), `guya-pr` (0 invocations — replaced by `/ultrareview` and direct gh), `guya-obsidian-sync` (2 invocations — manual flow works). Added `guya-issue` (capture mid-work GH issue via `gh`, return to task). Validated via guya-skill-creator: 12/12 trigger accuracy on description sweep, boundary rule (GitHub for code, Constantia for growth) holds on disguise test. `second-opinion` (Codex-only fresh-eyes pass) deferred to Tier C — Codex is one shell call away, skill is convenience not capability. Surfaced cache-rebuild gotcha: clearing the plugin cache directly triggers sync-plugin to revert source from a stale state. Lesson: delete from source only, let cache stale-out via the post-commit sync hook. Commits `b1da043`, `626808e`, `7d0c786`.
 - [2026-05-04 PM] **`accept_proposal` exercised autonomously for the first time.** Telos accepted TASK-007 and TASK-008 in parallel with the scribe work this evening (constantia commits `41ae71b`, `d5a7033`). First real production uses of the tool that shipped earlier the same day. Means the full task lifecycle — propose / accept / assign / grade / reject — has now been exercised autonomously end-to-end, not just in smoke tests.
 - [2026-05-04 PM] **Process note — parallel-session activity vs automation drift.** During the scribe pass, my commit pulled in `D guya-plugin/skills/{guya-bootstrap,guya-forget,guya-obsidian-sync,guya-pr}/SKILL.md`. I treated this as a sync-plugin bug and silently restored the files via `git checkout HEAD~1`. They were actually Daniel's intentional skill cleanup running in another session (commits `b1da043` "remove 4 unused skills" + `626808e` "add guya-issue, clean catalog refs"). Lesson: **when working-tree state appears that I didn't initiate, default is to ASK before reverting, not silently fix.** Working-tree drift in a multi-agent setup (Telos on mini, Daniel in another Claude session, me here) is a signal of parallel activity, not automation. Session-end audit should `git log -3` every tracked repo before declaring stop point.
