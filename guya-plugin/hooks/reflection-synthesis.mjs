@@ -5,18 +5,16 @@
  *   Exports:
  *     - synthesizeFromReflections(opts) -> Promise<SynthesisResult | null>
  *     - readReflections(reflectionsDir, max) -> Array<{filename, isManual, body}>
+ *     - readConstantiaReflections(constantiaPath, max) -> Array<{filename, isManual, body}>
  *     - readGuidelines(strategicDir) -> Array<{filename, frontmatter, body}>
  *     - validateIdentityProposals(result, minSources) -> SanitizedResult
  *
- *   Phase 1 (current): generates proposals + writes them to a dry-run
- *     inspection file at <globalDir>/.last-synthesis.json. Does NOT touch
- *     identity files. Does NOT commit anything.
- *   Phase 2 (next): a separate applySynthesisResult() will route the
- *     three streams to disk + git commits.
- *
- *   Why a separate module: keeps guya-session-end.mjs under the 800 LOC
- *   rule (already at 743), and lets this be unit-tested independently
- *   with a mocked Anthropic client.
+ *   Reflection source resolution: Constantia `log/guya/` is primary
+ *   (cross-project, canonical, every entry is from /guya-reflect).
+ *   Project-local `reflectionsDir` is fallback when Constantia is
+ *   unavailable, and is the only home for pre-Constantia-integration
+ *   entries (before 2026-04-17). Synthesis runs against ONE source per
+ *   call to avoid duplicates.
  *
  *   Anti-oscillation guardrail: identityProposals with fewer than
  *   minReflectionsForIdentityChange (default 2) source reflections are
@@ -83,6 +81,30 @@ export function readReflections(reflectionsDir, max = DEFAULT_MAX_REFLECTIONS) {
     filename,
     isManual: filename.includes('-manual'),
     body: readFileSafe(join(reflectionsDir, filename)) || '',
+  })).filter(r => r.body.length > 0);
+}
+
+/**
+ * Read recent Guya reflections from Constantia's `log/guya/` directory.
+ *
+ * Constantia is the canonical, cross-project home for /guya-reflect outputs
+ * (see ADR-016 for the author-based directory split). Every file in
+ * `log/guya/` is Guya-authored, so we don't need to filter by frontmatter.
+ *
+ * Returns the same shape as readReflections() so callers can swap sources.
+ * `isManual` is set to `true` for all entries — Constantia logs only contain
+ * reflect outputs, not auto-generated trace dumps. Sort key is filename
+ * descending; Constantia filenames are `YYYY-MM-DD-{project}-{shortid}.md`
+ * so lex desc ≈ newest first.
+ */
+export function readConstantiaReflections(constantiaPath, max = DEFAULT_MAX_REFLECTIONS) {
+  if (!constantiaPath) return [];
+  const dir = join(constantiaPath, 'log', 'guya');
+  const files = listMdFiles(dir).sort().reverse().slice(0, max);
+  return files.map(filename => ({
+    filename,
+    isManual: true,
+    body: readFileSafe(join(dir, filename)) || '',
   })).filter(r => r.body.length > 0);
 }
 
@@ -239,12 +261,13 @@ export function validateIdentityProposals(result, minSources = DEFAULT_MIN_REFLE
  *
  * @param {object} opts
  * @param {object} opts.client - Anthropic SDK client (or mock with .messages.create)
- * @param {string} opts.reflectionsDir - Path to .guya/memory/reflections (project-local)
+ * @param {string} [opts.reflectionsDir] - Path to .guya/memory/reflections (project-local fallback)
  * @param {string} [opts.globalDir] - Path to ~/.claude/guya
  * @param {string} opts.pluginRoot - Path to plugin root (for reading agent prompt)
  * @param {number} [opts.maxReflections=5]
  * @param {number} [opts.minReflectionsForIdentityChange=2]
  * @param {boolean} [opts.dryRun=true] - Phase 1: always true. Phase 2 will flip this.
+ * @param {boolean} [opts.forceLocal=false] - Skip Constantia, read from reflectionsDir only.
  * @returns {Promise<object|null>} Synthesis result or null on failure.
  */
 export async function synthesizeFromReflections({
@@ -255,6 +278,7 @@ export async function synthesizeFromReflections({
   maxReflections = DEFAULT_MAX_REFLECTIONS,
   minReflectionsForIdentityChange = DEFAULT_MIN_REFLECTIONS_FOR_IDENTITY_CHANGE,
   dryRun = true,
+  forceLocal = false,
 } = {}) {
   if (!client || !client.messages || typeof client.messages.create !== 'function') {
     process.stderr.write(`${LOG_PREFIX} no client provided, skipping\n`);
@@ -264,16 +288,28 @@ export async function synthesizeFromReflections({
     process.stderr.write(`${LOG_PREFIX} no pluginRoot provided, skipping\n`);
     return null;
   }
-  if (!reflectionsDir) {
-    process.stderr.write(`${LOG_PREFIX} no reflectionsDir provided, skipping\n`);
-    return null;
-  }
 
-  const reflections = readReflections(reflectionsDir, maxReflections);
+  // Source resolution: Constantia primary, project-local fallback.
+  let reflections = [];
+  let source = 'none';
+  if (!forceLocal) {
+    const constantia = resolveConstantiaPath();
+    if (constantia.path) {
+      reflections = readConstantiaReflections(constantia.path, maxReflections);
+      if (reflections.length > 0) source = `constantia:${constantia.path}/log/guya`;
+    } else {
+      process.stderr.write(`${LOG_PREFIX} Constantia unavailable (${constantia.error}), falling back to local\n`);
+    }
+  }
+  if (reflections.length === 0 && reflectionsDir) {
+    reflections = readReflections(reflectionsDir, maxReflections);
+    if (reflections.length > 0) source = `local:${reflectionsDir}`;
+  }
   if (reflections.length === 0) {
-    process.stderr.write(`${LOG_PREFIX} no reflections found in ${reflectionsDir}, skipping\n`);
+    process.stderr.write(`${LOG_PREFIX} no reflections found (Constantia + local both empty), skipping\n`);
     return null;
   }
+  process.stderr.write(`${LOG_PREFIX} reading ${reflections.length} reflections from ${source}\n`);
 
   const systemPrompt = readAgentPrompt(pluginRoot, 'guya-reflection-synthesizer');
   if (!systemPrompt) {

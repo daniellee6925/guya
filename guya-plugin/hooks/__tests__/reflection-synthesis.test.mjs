@@ -30,6 +30,7 @@ import { fileURLToPath } from 'url';
 import {
   synthesizeFromReflections,
   readReflections,
+  readConstantiaReflections,
   validateIdentityProposals,
 } from '../reflection-synthesis.mjs';
 
@@ -109,6 +110,61 @@ describe('readReflections', () => {
   });
 });
 
+describe('readConstantiaReflections', () => {
+  let root;
+  let constantiaPath;
+  let logDir;
+  beforeEach(() => {
+    root = mkdtempSync(join(tmpdir(), 'guya-constantia-'));
+    constantiaPath = join(root, 'constantia');
+    logDir = join(constantiaPath, 'log', 'guya');
+    mkdirSync(logDir, { recursive: true });
+  });
+  afterEach(() => { rmSync(root, { recursive: true, force: true }); });
+
+  it('reads from log/guya/, sorted newest-first, capped at max', () => {
+    writeFileSync(join(logDir, '2026-04-20-guya-aaa.md'), 'oldest');
+    writeFileSync(join(logDir, '2026-05-01-lina_platform-bbb.md'), 'middle (cross-project)');
+    writeFileSync(join(logDir, '2026-05-06-guya-ccc.md'), 'newest');
+
+    const r = readConstantiaReflections(constantiaPath, 5);
+    assert.equal(r.length, 3);
+    assert.equal(r[0].filename, '2026-05-06-guya-ccc.md');
+    assert.equal(r[2].filename, '2026-04-20-guya-aaa.md');
+    assert.ok(r.every(x => x.isManual === true), 'all Constantia entries marked isManual');
+  });
+
+  it('caps at max and prefers newest', () => {
+    for (let i = 1; i <= 10; i++) {
+      writeFileSync(join(logDir, `2026-04-${String(i).padStart(2, '0')}-guya-x.md`), `body-${i}`);
+    }
+    const r = readConstantiaReflections(constantiaPath, 3);
+    assert.equal(r.length, 3);
+    assert.equal(r[0].filename, '2026-04-10-guya-x.md');
+  });
+
+  it('returns [] when constantiaPath is null', () => {
+    assert.deepEqual(readConstantiaReflections(null, 5), []);
+  });
+
+  it('returns [] when log/guya/ does not exist', () => {
+    const empty = mkdtempSync(join(tmpdir(), 'guya-constantia-empty-'));
+    try {
+      assert.deepEqual(readConstantiaReflections(empty, 5), []);
+    } finally {
+      rmSync(empty, { recursive: true, force: true });
+    }
+  });
+
+  it('filters out empty bodies', () => {
+    writeFileSync(join(logDir, '2026-05-06-guya-empty.md'), '');
+    writeFileSync(join(logDir, '2026-05-05-guya-real.md'), 'real content');
+    const r = readConstantiaReflections(constantiaPath, 5);
+    assert.equal(r.length, 1);
+    assert.equal(r[0].filename, '2026-05-05-guya-real.md');
+  });
+});
+
 describe('validateIdentityProposals', () => {
   it('drops proposals with <2 sourceReflections (default threshold)', () => {
     const input = {
@@ -166,6 +222,7 @@ describe('synthesizeFromReflections', () => {
       reflectionsDir: dirs.reflectionsDir,
       globalDir: dirs.globalDir,
       pluginRoot: PLUGIN_ROOT,
+      forceLocal: true,
     });
 
     assert.ok(result, 'result must not be null');
@@ -201,6 +258,7 @@ describe('synthesizeFromReflections', () => {
       reflectionsDir: dirs.reflectionsDir,
       globalDir: dirs.globalDir,
       pluginRoot: PLUGIN_ROOT,
+      forceLocal: true,
     });
     assert.equal(result.identityProposals.length, 1);
     assert.equal(result.identityProposals[0].file, 'user.md');
@@ -214,6 +272,7 @@ describe('synthesizeFromReflections', () => {
         reflectionsDir: empty.reflectionsDir,
         globalDir: empty.globalDir,
         pluginRoot: PLUGIN_ROOT,
+        forceLocal: true,
       });
       assert.equal(result, null);
     } finally {
@@ -230,6 +289,7 @@ describe('synthesizeFromReflections', () => {
       reflectionsDir: dirs.reflectionsDir,
       globalDir: dirs.globalDir,
       pluginRoot: PLUGIN_ROOT,
+      forceLocal: true,
     });
     assert.equal(result, null);
   });
@@ -244,6 +304,7 @@ describe('synthesizeFromReflections', () => {
       reflectionsDir: dirs.reflectionsDir,
       globalDir: dirs.globalDir,
       pluginRoot: PLUGIN_ROOT,
+      forceLocal: true,
     });
     assert.ok(result);
     assert.equal(result.guidelineEdits.length, 1);
@@ -257,6 +318,7 @@ describe('synthesizeFromReflections', () => {
       reflectionsDir: dirs.reflectionsDir,
       globalDir: dirs.globalDir,
       pluginRoot: PLUGIN_ROOT,
+      forceLocal: true,
     });
     assert.deepEqual(result.guidelineEdits, []);
     assert.deepEqual(result.userProfileAdditions, []);
@@ -269,6 +331,7 @@ describe('synthesizeFromReflections', () => {
       reflectionsDir: dirs.reflectionsDir,
       globalDir: dirs.globalDir,
       pluginRoot: PLUGIN_ROOT,
+      forceLocal: true,
     });
     assert.equal(result, null);
   });
@@ -282,6 +345,7 @@ describe('synthesizeFromReflections', () => {
       reflectionsDir: dirs.reflectionsDir,
       globalDir: dirs.globalDir,
       pluginRoot: PLUGIN_ROOT,
+      forceLocal: true,
     });
     assert.equal(result, null);
   });
