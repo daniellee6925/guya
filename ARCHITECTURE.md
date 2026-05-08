@@ -1,6 +1,6 @@
 # guya — Architecture
 
-> Last updated: 2026-05-05
+> Last updated: 2026-05-08 PT (post Telos reorg Phases 0-2c)
 
 ## Current Architecture
 
@@ -140,7 +140,8 @@ The scribe is invoked from the git hook rather than PostToolUse:Bash because Pos
 ### Evolution Pipeline (manual via /guya-evolve)
 
 ```
-.guya/memory/reflections/ (manual reflections via /guya-reflect)
+Constantia log/guya/ (primary — cross-project /guya-reflect outputs)
+        │   fallback: .guya/memory/reflections/ (project-local, pre-Constantia)
         │
         ├── + Telos profile from Constantia (if available)
         │
@@ -155,6 +156,8 @@ The scribe is invoked from the git hook rather than PostToolUse:Bash because Pos
                 │
                 ▼ commit-identity.mjs → git commit to ~/.claude/guya/ (versioned repo)
 ```
+
+**Reflection source resolution (changed 2026-05-06, commit `d589953`).** The synthesizer reads from Constantia's `log/guya/` directory as the primary source — every entry there is a `/guya-reflect` output, regardless of which project it was written from. Project-local `.guya/memory/reflections/` is consulted only as a fallback when Constantia is unreachable (and as the home for pre-2026-04-17 entries written before Constantia integration). Synthesis runs against ONE source per call to avoid duplicates; `forceLocal: true` skips Constantia for testing. This closes a cross-project signal leak: reflections written from non-Guya projects (lina_platform, sdf-dev, auto_eval) land in Constantia and were previously invisible to evolve when run from `/Users/daniel/Desktop/guya`. Aligns the pipeline with vision.md §3.1 — Constantia is the canonical cross-project shared truth; project-local `.guya/` is project-specific context only.
 
 **Key decision (2026-04-11):** Manual invocation over auto session-end trigger. Reflections are written deliberately (via /guya-reflect), so consumption should be deliberate too. Auto-fire invited silent rot — the API key died for 6 days with no one noticing because the auto loop ran unattended. SessionStart surfaces a backlog nudge ("📝 N reflections accumulated") when /guya-evolve hasn't run recently.
 
@@ -192,21 +195,30 @@ Guya (executor)                    Telos (mentor)
 
 **Evolve:** `readConstantiaProfile()` reads Telos's non-stub profile assessments as additional synthesis input, so Guya can calibrate proposals against Telos's longitudinal view.
 
-**Task schema (extended 2026-05-04 PM, ADR-017).** Every task in `tasks/` has a required `priority` field with a status-conditional enum, validated by Constantia's pre-commit hook:
+**Task schema (post 2026-05-08 reorg — supersedes ADR-017's T/P prefix).** `tasks/` is now four sibling subdirs, each with its own ID prefix and lifecycle:
 
-| Status | `priority` enum | Set by |
-|--------|-----------------|--------|
-| `proposed` | `T1` \| `T2` \| `T3` | Guya (or Telos when self-proposing) — a hint |
-| `assigned` / `in-progress` / `complete` / `graded` | `P1` \| `P2` \| `P3` | Telos — stamped on accept, mutable on grade |
-| `rejected` | preserved as-was | n/a (never re-validated) |
+| Dir | Prefix | Lifecycle | Purpose |
+|-----|--------|-----------|---------|
+| `tasks/proposals/` | `T-NNN` | `proposed → accepted \| rejected` | Recommendations awaiting accept/reject. Carry `target: task\|learn\|curriculum` field. |
+| `tasks/tasks/` | `P-NNN` | `assigned → in-progress → complete → graded` (+ `blocked`, `abandoned`) | Committed P-task work. |
+| `tasks/learn/` | `L-NNN` | same as tasks | Curriculum-paced learning, references curriculum + module. |
+| `tasks/learn/curricula/` | `<slug>.md` | n/a (free-form) | Durable structured plans (e.g., `bytebytego-systems.md`). |
+| `tasks/reminders/` | `R-NNN` | `pending→fired→archived` (one-shot) or `active→paused\|retired` (cron) | Scheduled fires with flat `schedule_type` + `schedule_at`/`schedule_expr`. |
+| `tasks/archive/2026-05-07/` | `TASK-NNN` (legacy) | `status: archived` (read-only) | 17 pre-reorg TASK files preserved for audit. Validator skips. |
 
-Semantics: T1/P1 = next thing, displaces standing work. T2/P2 = real work, no urgency floor. T3/P3 = backburner. No T0/P0 emergency tier (YAGNI). The T → P conversion at acceptance is **unbound** — Telos picks P fresh against current portfolio, not bound to the proposal's T value. T is a hint, not a contract.
+**Priority is plain numeric `1|2|3`** across proposals/tasks/learn (no T/P prefix — the ADR-017 prefix scheme is dropped). Validator enforces explicit re-grade at proposal acceptance (`acceptProposal` requires `priority` arg; not auto-carried from `target_priority` hint). Reminders skip priority entirely. **Pillar enum is `1 | 2 | 3 | none`** on the same three categories. Reminders skip pillar.
 
-The `pillar` field enum was extended from `1 | 2 | 3` to `1 | 2 | 3 | none`. `pillar: none` admits cross-cutting infra / process / non-growth work that still has to ship. At equal priority, pillar work wins over `pillar: none` (tick-prompt rule, mitigates junk-drawer drift).
+**Terminal-without-grade for tasks is `abandoned`** (was `rejected`). `rejected` is now reserved for proposals only. Mirrors the proposal-vs-committed split semantically.
 
-The post-commit manifest builder adds a `Priority` column and sorts rows: status priority (assigned > in-progress > complete > proposed > graded > rejected) → priority within status → ID.
+**Reminder schedule is flat fields** (not nested YAML — keeps the existing flat frontmatter parser working without YAML deps):
+- `schedule_type: once` requires `schedule_at: <ISO-timestamp>`. Status: pending→fired→archived.
+- `schedule_type: cron` requires `schedule_expr: <5-field cron>`. Status: active→paused→retired.
 
-**Backlog ownership (changed 2026-05-04 PM).** Constantia is now the single source of truth for backlog. The previous `ideas.md` at the Guya repo root has been deleted; its 7 entries were migrated to Constantia tasks `TASK-010..016` as `status: proposed` with appropriate T-priorities. Surfaced ideas now flow `/guya` thinking → propose task in Constantia (`status: proposed, priority: T*`) → Telos triages via `accept_proposal` → assigned/rejected. There is no parallel ideas list.
+**MANIFEST is one file with 4 sections** (`tasks/MANIFEST.md`): Tasks (P-tasks), Learn (L-tasks), Proposals (T-proposals), Reminders (R-tasks). Post-commit hook walks all four dirs and rewrites sections. Session-start reads this single file at priority 0.
+
+**Curriculum reference flow.** L-tasks carry `curriculum: <slug>` + `module: <num|name>` + `success: <criterion>` + `by: <due-YYYY-MM-DD>`. Curriculum file at `tasks/learn/curricula/<slug>.md` must exist (validator + tool-runtime both check). At 10pm learn tick, `grade_learn` evaluates Daniel's writeup against the L-task's `success` criterion via knowledge-check Q (live Q&A, not async-only) and writes evidence with `{strength|habit|tentative}` calibration.
+
+**Backlog ownership (still: Constantia is single source of truth).** Surfaced ideas flow: Telos `propose_task` (target=task|learn|curriculum) → T-proposal in `tasks/proposals/` → Daniel/Telos triages via `accept_proposal` → spawns the right artifact in the right dir.
 
 ### Context Assembly (session-start)
 
@@ -243,9 +255,20 @@ The `guya-setup` skill installs the git post-commit hook into any repo's `.git/h
 
 ### Telos Runtime — Cross-Repo Architecture
 
-Telos (the mentor agent in the three-identity architecture, ADR-009) is no longer just identity files — as of 2026-05-04 it is a running, autonomous agent with hands. It has its runtime in a separate git repo (a fork of nanoclaw at `daniellee6925/nanoclaw`, checked out locally at `~/Desktop/telos` and on the Mac Mini at `/Users/guya/telos`), writes into a third repo (`daniellee6925/constantia`), and gets woken on a schedule (twice-daily ticks + nightly reflection).
+Telos (the mentor agent in the three-identity architecture, ADR-009) is no longer just identity files — as of 2026-05-04 it is a running, autonomous agent with hands. It has its runtime in a separate git repo (a fork of nanoclaw at `daniellee6925/nanoclaw`, checked out locally at `~/Desktop/telos` and on the Mac Mini at `/Users/guya/telos`), writes into a third repo (`daniellee6925/constantia`), and gets woken on a schedule.
 
-The runtime now spans three layers — **action**, **memory**, **reflection** — built incrementally and all live as of 2026-05-04 PM.
+**Post 2026-05-08 reorg snapshot.** The full design + plan + content checklist is in `docs/2026-05-08-telos-reorg.md` (canonical reference for the new state). Per-phase rollback in `docs/2026-05-08-rollback-runbook.md`. Pre-reorg state snapshot in `docs/2026-05-08-pre-reorg-state.md` (active session id, cron entries, runtime config — used to verify rollback if needed).
+
+Key shifts from prior state:
+- **Constantia task schema** split into 4 sibling dirs: `tasks/{proposals,tasks,learn,learn/curricula,reminders,archive/2026-05-07}/`. Plain numeric priority `1|2|3` across proposals/tasks/learn (supersedes ADR-017's T/P prefix). Per-dir lifecycle enums. Reminder `schedule_type` + flat `schedule_at`/`schedule_expr` fields. 17 legacy TASK files archived.
+- **Telos work session** runs new tick rhythm: 9am morning + 1pm midday (NEW) + 9pm evening + 11pm reflection. New tick prompts in `groups/telos/tick-{morning,midday,evening}-prompt.md`. Reflect prompt unchanged. CLAUDE.local.md tool inventory updated.
+- **MCP tool inventory grew from 7 to 12.** New: `propose_task` (writes T-NNN with target field), `assign_learn` (writes L-NNN with curriculum check), `add_reminder` (R-NNN with flat schedule fields), `grade_learn` (mirrors grade_task for L-tasks), `read_curriculum` (read-only fetch). `acceptProposal` rewritten for target-field routing (target=task spawns P-NNN; target=learn spawns L-NNN with curriculum existence check; target=curriculum promotes proposal body to `learn/curricula/<id>.md`).
+- **3-session Telos architecture planned** (Phases 3+4 pending): existing session preserved as `work` (114-message history retained); new `learn` session (Socratic mentor + /guya-learn methodology + WebSearch/WebFetch + 5 daily ticks); new `life` session (Korean default + 두식 persona + 5 daily ticks; reminders fire here via launchd). Sessions share Constantia for memory; per-session CLAUDE.local.md addenda enforce tone separation.
+- **Reminder firing infra planned** (Phase 5): launchd plist `com.guya.reminder-fire.plist` runs `scripts/check_reminders.sh` every minute. Script reads `tasks/reminders/R-*.md` as single source of truth, evaluates schedule + last_fired, inserts message into life session's `inbound.db` when due, updates last_fired in R file. No second state store (no nanoclaw cron rows for reminders) — drift impossible.
+
+The historical narrative (3-layer build through 2026-05-04 PM, 6-tool MCP server, twice-daily tick, single session) is preserved below for context — **but the current state is post-reorg.** Where they conflict, the post-reorg snapshot above is authoritative.
+
+The runtime spans three layers — **action**, **memory**, **reflection** — built incrementally through 2026-05-04 PM, then schema-migrated and tool-extended through 2026-05-08.
 
 **Cross-repo map.**
 
@@ -369,17 +392,20 @@ Telos reflection fires (cron: 0 23 * * *)
                     (tasks/MANIFEST.md → priority-0 context; profile/ via /guya-evolve)
 ```
 
-**Cross-repo HEAD snapshot (2026-05-04 PM).** Mini synced to all three.
+**Cross-repo HEAD snapshot (2026-05-08 PT — post reorg Phases 0-2c).** All three converged at tagged states.
 
-| Repo | HEAD |
-|------|------|
-| `daniellee6925/guya` | `03b297f` |
-| `daniellee6925/nanoclaw` | `87d2c4a` (6-tool MCP server + reflect-prompt.md + .gitignore unignore for reflect-prompt + tightened tick-prompt) |
-| `daniellee6925/constantia` | `7dfc6cb` (task working tree cleanup) |
+| Repo | HEAD | Pre-reorg tag |
+|------|------|---------------|
+| `daniellee6925/guya` | `7f11634` (working tree has 3 new design docs uncommitted: telos-reorg.md, rollback-runbook.md, pre-reorg-state.md) | `pre-reorg-2026-05-08` at `7f11634` |
+| `daniellee6925/nanoclaw` | `df6c829` (Phases 2a/2b/2c shipped + deployed to mini) | `pre-reorg-2026-05-08` at `2270de8` |
+| `daniellee6925/constantia` | `cd6651a` (Phase 1 shipped) → `536522b` (Phase 1 amendment: schedule schema flatten) | `pre-reorg-2026-05-08` at `b5b6873` |
 
 **Known carry-forwards.**
-- `mcp-server.ts` is 873 LOC — over the 800 LOC limit by 73; helpers extract cleanly into a separate file as a follow-up.
-- Post-commit manifest hook globs working-tree files including untracked, which caused the TASK-007 phantom-in-manifest issue earlier on 2026-05-04. Filter to tracked files in the next pass.
+- `mcp-server.ts` grew to 1255 LOC in Phase 2b (was 834 LOC pre-reorg). Now well over the 800 LOC LLM-design-pattern limit. Time to extract: per-tool handler files (one per category — tasks, learn, reminders, evidence, reflection, etc.) + a shared validators module.
+- Inline validation logic across 9 tool handlers — extract to `validators.ts` to lock the calibration rule and other invariants under unit tests.
+- Test debt: Phase 2 added ~600 lines TS with zero new tests. Phase 1 helpers tests still cover only pure functions.
+- Post-commit manifest hook globs working-tree files including untracked. Low priority.
+- nanoclaw spawns the per-group MCP server via `bun /workspace/agent/tools/mcp-server.ts` directly — no compile step for per-group tools (only `src/` compiles to `dist/`). Future Telos tool changes deploy via push + pull on mini + restart, no `pnpm build` for tools themselves.
 
 ---
 
@@ -486,3 +512,5 @@ Drift detection on Telos's own behavior — is the tick defaulting to `do_nothin
 | 2026-05-04 PM | Constantia hooks installed as symlinks (data-tier silent-rot fix; ADR-013 family) | Mini's `.git/hooks/` had only `pre-commit.sample` — Telos's commits had been bypassing all schema validation since Constantia's setup. Same meta-pattern as ADR-011/012/013 (silent rot of trusted enforcement living in a "this can't fail" guard), but at the data-validation tier instead of the harness tier. Both clones now symlink `.git/hooks/{pre,post}-commit` to `hooks/` source files; future hook edits auto-apply, no copy drift. The next fresh clone of constantia onto a new machine will need the symlink installed (consider a setup script if a third clone ever happens) |
 | 2026-05-04 | ADR-017 task priority field shipped — T/P split namespaces, pillar `none` for cross-cutting work, ideas.md → Constantia migration | Required field `priority` on tasks with status-conditional enum: `proposed` → T1\|T2\|T3 (Guya's hint); `assigned`/`in-progress`/`complete`/`graded` → P1\|P2\|P3 (Telos's stamp); `rejected` preserved as-was. T → P at acceptance is unbound — Telos picks P fresh against portfolio, T is a hint not a contract. `pillar` enum extended to `1\|2\|3\|none` for cross-cutting infra/process work; pillar work wins at equal priority. `assign_task` and `accept_proposal` MCP tools now require `priority` arg. Tick-prompt rewritten: action priority dominates (grade > accept > kill-stale > assign > nothing); within a category, highest P/T wins. Constantia is now single source of truth for backlog — `ideas.md` deleted at Guya repo root; 7 entries migrated to Constantia tasks TASK-010..016 as `status: proposed`. Affected commits: guya `9b08d96` (ADR + ideas.md deletion), constantia `bd0359e` (schema), nanoclaw fork `ca38dac` (priority-aware MCP tools + tick-prompt) |
 | 2026-05-04 | reflect-prompt.md reasoning-bug fix — explicit "truth is the file, not the transcript" + synthesis-DM-always rules; restored 807fb0b reflection content lost when 23:00 PT cron wrote a "duplicate check" placeholder over an intentionally-cleared slot | Two reasoning bugs surfaced when the cron fired into a cleared slot. (A) Telos pre-judged "duplicate cron fire" from its own DM transcript instead of trusting `write_reflection`'s file-existence guard, and wrote placeholder content over the intentionally-cleared 2026-05-04 reflection. (B) The bug-report DM ("overwrite protection isn't working") replaced the synthesis DM, so Daniel got debug output instead of the daily synthesis. Fix: reflect-prompt §1 says "the truth source is the file, not the transcript"; §4 reframes the synthesis DM as the daily contract that always sends — anomalies go in a SEPARATE second DM. Reflection content restored from constantia `807fb0b` via constantia commit `80dad30`. Fork commit `44a54fe` |
+| 2026-05-06 | Evolve reads reflections from Constantia primary, project-local fallback (commit d589953). Closed cross-project signal leak per vision.md §3.1. |
+| 2026-05-08 | Telos reorg: 4-namespace task split + 3-session Telos plan + 13 ticks/day + numeric priority (supersedes ADR-017's T/P prefix) — full design in `docs/2026-05-08-telos-reorg.md` | 5 blockers surfaced by Daniel: legacy task accumulation, single conflated namespace, sparse 2x-daily tick cadence, undefined Pillar 1, single Telos chat. Single working session locked 12 design decisions and shipped Phases 0-2c. Schema: `tasks/{proposals,tasks,learn,learn/curricula,reminders,archive/2026-05-07}/`. Priority becomes plain numeric `1|2|3` across proposals/tasks/learn — validator enforces explicit re-grade at proposal accept (the actual anti-rot mechanism, prefix theater dropped). Reminders skip priority/pillar; flat `schedule_type` + `schedule_at`/`schedule_expr` fields (avoids YAML dep). Terminal-without-grade for tasks is `abandoned` (rejected reserved for proposals). 3-session Telos planned (work=existing session preserved, learn=Socratic+web-tools fresh, life=Korean+두식 fresh) — supersedes the 5/5 split-language-Telos plan; sessions share Constantia for memory propagation. Reminder firing infra (Phase 5): launchd cron + `check_reminders.sh` reads R-files as single source of truth, no nanoclaw cron drift. Implementation: Phase 0 snapshots + runbook + state capture; Phase 1 schema + hooks (constantia `cd6651a` + `536522b`); Phase 2a helpers + 2 tools (telos `c0be63f`); Phase 2b acceptProposal rewrite + 5 new tools (telos `26fe607`); Phase 2c work session prompts + addendum + 1pm cron + mini deploy + smoke (telos `df6c829`). Discovery during deploy: nanoclaw spawns per-group MCP server via `bun .ts` directly — only nanoclaw core compiles via `pnpm build`; future Telos tool changes deploy via push+pull+restart, no build step. 4 review passes caught + auto-fixed 8 issues in TS work, including curriculum-overwrite-of-unreadable-file (fs.access broad catch). Phases 3+4+5+6 pending. ADR-018 entry in CLAUDE.md pending Phase 6 cutover; ADR-017 to be marked superseded then |
