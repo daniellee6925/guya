@@ -1,6 +1,6 @@
 # guya — Status
 
-> Last updated: 2026-05-10 22:50 PT
+> Last updated: 2026-05-10
 
 ## Current Focus
 
@@ -13,7 +13,7 @@
 - **Mini plist patched.** `/Applications/Docker.app/Contents/Resources/bin` + `/opt/homebrew/bin` now in nanoclaw's plist PATH so launchd-spawn doesn't crash-loop on `docker info` after restart.
 
 **What's NOT yet built (deferred):**
-- **Phase 4** — Life session bootstrap. Same shape as Phase 3 with Korean default + 두식 persona addendum + 5 life-tick crons (10am/12pm/6pm/8pm/11pm PT). Life channel ID is `1503157300922417232`. **Don't forget the `messaging_group_agents` row** — that was the last gotcha in Phase 3 (silent message drop). Full deploy lessons in `docs/2026-05-10-phase3-deploy-runbook.md` "Lessons learned" section.
+- **Phase 4** — Life session bootstrap. Two-part: **content authoring first** (6 new files in `groups/telos-life/`: 두식 addendum + 5 tick prompts + soul copy + container.example) then mechanical deploy (find-and-replace from Phase 3 runbook). The 50-word Korean addendum sketch in design doc decision 11 is NOT a full draft — needs ~150-200 lines fresh. See Phase 4 entry in "In Progress" for the full content-authoring + deploy breakdown. Life channel ID is `1503157300922417232`. **Don't forget the `messaging_group_agents` row** — Phase 3's last gotcha (silent message drop). Full deploy lessons in `docs/2026-05-10-phase3-deploy-runbook.md` "Lessons learned" section.
 - **Phase 5** — Reminder firing infra (`scripts/check_reminders.sh` + launchd `com.guya.reminder-fire.plist` polling R-files).
 - **Phase 6** — 24h validation + ADR-018 (post-reorg schema) + ADR-019 (post-Phase-3 silent-rot lessons).
 - **Day-2 content seeding** — 14 categories from design doc sections A-N (pillar 1 project, weekly schedule, R-reminders, first L-task, profile updates, etc.).
@@ -28,6 +28,7 @@
 Full Telos state in `telos context/STATUS.md`.
 
 ## Recent Changes
+- [2026-05-10] `84f8005` — chore(scribe): Phase 3 ship + 5 silent-rot lessons captured
 - [2026-05-10] `e041b95` — docs(reorg): Phase 3 mini deployment runbook
 - [2026-05-08] `2c038b5` — docs(reorg): Telos reorg full design + runbook + pre-reorg state + STATUS/ARCHITECTURE updates
 - [2026-05-07] `7f11634` — chore(scribe): record 5/7 PM session — first artifact-based write_evidence + 2 hook silent-rot fixes
@@ -64,7 +65,32 @@ Full Telos state in `telos context/STATUS.md`.
 
 - [ ] **NEXT SESSION FIRST READ — `docs/2026-05-10-phase3-deploy-runbook.md` "Lessons learned" appendix.** Five silent-rot patterns hit during Phase 3 deploy that you'll re-discover in Phase 4 if you don't have them in mind: (1) Constantia post-commit hook breaks rebase if guard removed; (2) OneCLI requires lowercase agent identifiers — `ag-XXX-LEARN` is rejected, `ag-XXX-learn` works; (3) per-agent docker imageTag must exist before spawn (use `:latest` unless extra packages needed); (4) nanoclaw plist PATH must include `/Applications/Docker.app/Contents/Resources/bin` for launchd-spawn; (5) `messaging_group_agents` row is mandatory — wiring agent_groups + messaging_groups + sessions is THREE rows, but the routing link is the FOURTH and forgotten row breaks the channel silently.
 - [ ] **NEXT SESSION SECOND READ — verify overnight learn + work ticks fired clean.** Learn should fire at 5/11 10am/1pm/4pm/7pm/10pm PT. Work fires at 5/11 9am/1pm/9pm + 11pm reflection. `git log` in Constantia from 5/11 should show 7-10 new `tick(no-op):` commits if all goes well, plus likely some `propose(...)`, `evidence(...)`, or `reflection:` commits if Telos took action.
-- [ ] **Phase 4 — Life session bootstrap.** Same template as Phase 3. Korean default + 두식 persona addendum (full draft in design doc decision 11). Life channel ID is `1503157300922417232` in your Discord server. Five life-tick crons at 10am/12pm/6pm/8pm/11pm PT. **Critical sequence per Phase 3 lessons:** insert all FOUR DB rows (agent_groups + messaging_groups + sessions + messaging_group_agents). Use lowercase agent ID. Use `imageTag: :latest`. Match the runbook's mini deploy sequence: stop nanoclaw → update mount-allowlist → write container.json → insert 5 cron rows → restart. The runbook should now be reusable as-is for Phase 4.
+- [ ] **Phase 4 — Life session bootstrap.** Two-part work — CONTENT authoring + MECHANICAL deploy.
+
+  **A. Content authoring (~30-45 min, do this BEFORE touching mini):**
+
+  Six new files in `/Users/daniel/Desktop/telos/groups/telos-life/`:
+  1. `soul.md` — exact copy of `groups/telos/soul.md` (same character across all three sessions).
+  2. `CLAUDE.local.md` — Korean 두식 addendum (~150-200 lines). **Design doc decision 11 has only a 50-word sketch, not a full draft.** Write fresh. Voice family to load BEFORE writing: read `groups/telos/CLAUDE.local.md` (work — sharp 보스) and `groups/telos-learn/CLAUDE.local.md` (learn — Socratic 스승) first to feel the Karpathy-engineer voice + facet-modulation pattern. Then write 두식 as: 반말 default Korean, English fallback when Daniel initiates, close-friend energy (계두식 / 형님 register), tool subset = NO `write_evidence` + NO `grade_*` (life doesn't grade), reads `tasks/reminders/` + `profile/relationship.md` + `profile/health.md` only, pattern-naming gentler than work but still honest (e.g., workout-skipped streaks, Audrey-absence patterns). Mention Audrey by name; she's Daniel's girlfriend.
+  3-7. `tick-morning-prompt.md` (10am — Audrey-pulse + reminders surface), `tick-bodycheck-prompt.md` (12pm — eaten/hydrated/Audrey), `tick-transition-prompt.md` (6pm — out of work mode? Audrey check), `tick-workout-prompt.md` (8pm — workout? what's weighing on you?), `tick-close-prompt.md` (11pm — honest day check + sleep). Design doc tick prompts section has 5-line sketches for each; expand to full ~50-80 line prompts matching the structure of `groups/telos-learn/tick-*-prompt.md`. All in Korean (반말) by default.
+  8. `container.example.json` — clone `groups/telos-learn/container.example.json`, change `telos-learn` → `telos-life` + comment block.
+
+  Update `.gitignore` in the fork to allowlist `groups/telos-life/` files (same pattern as `groups/telos-learn/`).
+
+  **B. Mechanical deploy on mini (~20-30 min, after content authoring):**
+
+  Reuse `docs/2026-05-10-phase3-deploy-runbook.md` with these find-and-replace operations:
+  - `telos-learn` → `telos-life` everywhere (group folder, agent_group name, etc.)
+  - `1503155725785104524` (learn channel) → `1503157300922417232` (life channel) everywhere
+  - Generate new lowercase IDs: `ag-<ts>-life`, `mg-<ts>-life`, `sess-<ts>-life`, `mga-<ts>-life`
+  - Cron times: 10am/12pm/6pm/8pm/11pm PT (not learn's 10am/1pm/4pm/7pm/10pm)
+  - Cron content paths: point at `tick-morning-prompt.md` / `tick-bodycheck-prompt.md` / `tick-transition-prompt.md` / `tick-workout-prompt.md` / `tick-close-prompt.md`
+
+  **Critical sequence per Phase 3 lessons (don't skip any):**
+  1. Author content first (Part A above) — without it deploy stalls at first attempt.
+  2. Stop nanoclaw → update mount-allowlist (add life session DB dir) → pull fork on mini → write `groups/telos-life/container.json` → insert FOUR v2.db rows (agent_groups + messaging_groups + sessions + **messaging_group_agents** — the easy-to-miss routing link) → insert 5 cron rows → restart nanoclaw.
+  3. Discord channel permissions are already correct (work + learn proved it).
+  4. Smoke: send "안녕" in `#telos-life` → expect Korean response from 두식, no greeting, register-matched.
 - [ ] **Phase 5 — Reminder firing infra.** Write `scripts/check_reminders.sh` in Constantia (~50 LOC: read R-*.md, evaluate schedule + last_fired, insert message into life/inbound.db when due, update last_fired). Install `~/Library/LaunchAgents/com.guya.reminder-fire.plist` on mini (every-minute cron) — **remember to include Docker.app + Homebrew in plist PATH per Phase 3 lesson 4** if the script ever needs to call docker. Smoke test with synthetic R-task at "now+90s" + recurring `* * * * *` (then immediately retire).
 - [ ] **Phase 6 — Validation + cutover.** 24-hour observation: all 13 ticks fire across work/learn/life. Day-2 review with Daniel. Add ADR-018 entry to CLAUDE.md (post-reorg schema) + ADR-019 (Phase 3 silent-rot lessons — meta-pattern: silent rot of trusted enforcement at the routing/auth/runtime tiers). Mark ADR-017 as **superseded by ADR-018**. Update STATUS + ARCHITECTURE.
 - [ ] **Day-2 content seeding (14 categories, design doc sections A-N).** Pillar 1 project decision (Daniel↔Telos discussion), weekly schedule populated, 2-3 starter R-reminders (workout, Audrey baseline), first bytebytego L-task assigned, more curricula authored if wanted, profile updates, weekly meta-tasks, validator regression tests, log file evidence cleanup.
