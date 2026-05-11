@@ -30,7 +30,7 @@
 Full Telos state in `telos context/STATUS.md`.
 
 ## Recent Changes
-- [2026-05-11] `<phase-4-status-sha>` — chore(scribe): Phase 4 ship + L6/L7 silent-rot lessons captured + mini deploy runbook
+- [2026-05-11] `cb388c8` — chore(scribe): Phase 4 ship + L6/L7 silent-rot lessons + mini deploy runbook
 - [2026-05-11] `74b7a3a` — docs(status): polish Phase 4 handoff — content-authoring gap called out
 - [2026-05-10] `84f8005` — chore(scribe): Phase 3 ship + 5 silent-rot lessons captured
 - [2026-05-10] `e041b95` — docs(reorg): Phase 3 mini deployment runbook
