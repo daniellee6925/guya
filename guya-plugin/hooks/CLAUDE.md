@@ -68,6 +68,17 @@ Fires on `PostToolUse:Write|Edit`. Appends a JSONL entry to `.guya/evolution/tra
 ### guya-session-end.mjs
 Fires on `SessionEnd` and `PreCompact`. Runs the evolution pipeline: classifies accumulated traces (haiku), synthesizes guidelines from high-confidence classifications (sonnet), and writes new tactical guidelines to `.guya/evolution/guidelines/tactical/`. Makes Anthropic API calls — budget up to 30 seconds.
 
+### reflection-synthesis.mjs
+Shared module (not a hook script). Imported by `guya-session-end.mjs` and the `/guya-evolve` skill to generate self-edit proposals from recent reflections. Reflection source resolution is **Constantia `log/guya/` primary, project-local `reflectionsDir` as fallback** when Constantia is unavailable — project-local-only reads silently dropped cross-project reflections (lina_platform, sdf-dev, auto_eval) written via `/guya-reflect` that land in Constantia. Closes vision.md §3.1.
+
+Exports:
+- `synthesizeFromReflections(opts)` — main entry. `reflectionsDir` is now optional (ignored when Constantia is available and `forceLocal` is false). Optional `forceLocal: false` flag skips Constantia entirely (used for test isolation, since the dev machine has `~/.claude/guya/constantia.json`).
+- `readConstantiaReflections(constantiaPath, max)` — reads Guya-authored reflections from Constantia's `log/guya/` (cross-project, canonical, every entry is from `/guya-reflect`).
+- `readReflections(reflectionsDir, max)` — project-local fallback reader.
+- `readGuidelines(strategicDir)` and `validateIdentityProposals(result, minSources)` — also exported for the synthesizer pipeline and unit tests.
+
+Synthesis runs against ONE source per call to avoid duplicates. The anti-oscillation guardrail (identityProposals require ≥2 source reflections) lives here, not in the caller.
+
 ### review-evidence.mjs
 Shared utility (not a hook script). Reads and writes `.guya/evolution/review-evidence.jsonl`. Used by `guya-pre-commit-review.mjs` to check for evidence and by the review skills to record it.
 

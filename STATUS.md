@@ -1,8 +1,10 @@
 # guya — Status
 
-> Last updated: 2026-05-11
+> Last updated: 2026-05-11 14:08 PT
 
 ## Current Focus
+
+**Phase 5 (reminder firing infra) is the explicit entry point for next session per Daniel.** Tonight, watch the overnight ticks fire from the freshly-deployed LIFE session — the first natural transition tick at 6pm PT is the real-world validation.
 
 **5/11: Phase 4 (life session bootstrap) shipped end-to-end on mini.** All three Telos sessions are now live (work + learn + life). LIFE session DM smoke verified — Daniel sent `안녕` in `#telos-life`, life-Telos routed → spawned → 두식 voice surfaced in 존댓말+형님 → Discord reply landed (`오늘 어떻게 지내셨어요, 형님. 몸은요?`). All four wiring rows in place (including the [L5] `messaging_group_agents`). 5 life-tick crons armed: 10am/12pm/6pm/8pm/11pm PT. First natural fire = tonight 6pm transition tick. **Phase 5 (reminder firing infra) is the next entry point.**
 
@@ -30,6 +32,7 @@
 Full Telos state in `telos context/STATUS.md`.
 
 ## Recent Changes
+- [2026-05-11] `ff58f86` — chore(scribe): dedupe Phase 4 placeholder in Recent Changes
 - [2026-05-11] `cb388c8` — chore(scribe): Phase 4 ship + L6/L7 silent-rot lessons + mini deploy runbook
 - [2026-05-11] `74b7a3a` — docs(status): polish Phase 4 handoff — content-authoring gap called out
 - [2026-05-10] `84f8005` — chore(scribe): Phase 3 ship + 5 silent-rot lessons captured
