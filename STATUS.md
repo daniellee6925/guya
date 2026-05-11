@@ -1,77 +1,86 @@
 # guya — Status
 
-> Last updated: 2026-05-08 (PT)
+> Last updated: 2026-05-10 22:50 PT
 
 ## Current Focus
 
-**5/8: Telos reorg — Phase 0 → Phase 2c shipped end-to-end.** Single working session covered the full design (12 decisions, 13 tick prompts, phased plan, content checklist), then implementation Phases 0/1/2a/2b/2c. Telos's work session on mini is now running the new schema with all 12 MCP tools registered and verified via tools/list smoke. **Phase 3 (learn session bootstrap) is the entry point for the next session.** All context for resuming lives in `docs/2026-05-08-telos-reorg.md` (canonical design doc), `docs/2026-05-08-rollback-runbook.md` (per-phase rollback), and `docs/2026-05-08-pre-reorg-state.md` (pre-reorg state snapshot). Read those three first next session.
+**5/10: Phase 3 (learn session bootstrap) shipped end-to-end on mini.** Telos now runs three sessions (work + learn live; life pending Phase 4). Learn session DM verified — Daniel sent a message in #telos-learn, learn-Telos routed → spawned → MCP tool → Constantia commit (`b14215a`) → Discord reply, all working. The whole reorg arc (5/8 design + 5/8 Phases 0-2c + 5/10 Phase 3 + Constantia hook fix) is now live infrastructure. **Phase 4 is the next entry point — same template, Korean addendum, 5 life-tick crons.**
 
 **What's live now:**
-- Constantia schema: `tasks/{proposals,tasks,learn,learn/curricula,reminders,archive/2026-05-07}/`. Plain numeric priority `1|2|3` (supersedes ADR-017's T/P prefix). Per-dir lifecycle enums. Reminder schedule fields are flat (`schedule_type` + `schedule_at`/`schedule_expr`). 4-section MANIFEST. Pre-commit + post-commit hooks deployed both sides (laptop + mini). 17 legacy TASK files archived. Bytebytego curriculum migrated byte-identical.
-- Telos work session: tick prompts updated for new schema (9am morning + NEW 1pm midday + 9pm evening + 11pm reflection). 12 MCP tools registered: existing 7 + 5 new (`propose_task`, `assign_learn`, `add_reminder`, `grade_learn`, `read_curriculum`). `acceptProposal` rewritten for target-field routing (task → P-NNN, learn → L-NNN, curriculum → curricula/<id>.md). CLAUDE.local.md tool inventory + Constantia map updated. New 1pm cron row in mini's `inbound.db`. nanoclaw restarted (PID 93397, Discord Gateway reconnected).
-- Smoke verified: spawned MCP server with Bun on laptop, tools/list returned all 12 tools with correct new schemas.
+- **Three nanoclaw sessions on mini.** Work session (`sess-1777143186178-0bacbi`, agent `ag-1777143186174-ykqd40`) migrated from `@me` DM → `#telos-work` server channel. Learn session (`sess-1778451576000-learn`, agent `ag-1778451576000-learn`) provisioned fresh with Socratic addendum + 5 cron rows (10am/1pm/4pm/7pm/10pm PT). Both routed via `messaging_group_agents` to discord:guild=`1497671232139825232`:channel=`<work or learn channel id>`.
+- **Shared MCP tools.** `groups/telos/tools/` retired; mcp-server.ts + helpers.ts now live ONCE at `shared/telos-tools/` in the fork (fork commit `ce5b0d5`), mounted into each Telos session's container at `/workspace/extra/telos-tools/` via additionalMounts. Single source of truth across work/learn/life — closes ADR-013-style drift risk.
+- **Constantia post-commit hook fixed.** Pre-deploy diagnosis surfaced 9 stranded Telos commits + zero pushes for 2 days. Root cause: hook ran `git commit --amend` + `git push` unconditionally, breaking `commitAndPush`'s rebase. Fixed with rebase/cherry-pick/merge guard at top of hook (constantia commit `7095f49`). 9 stranded commits recovered + force-pushed (`b14215a` is current origin tip).
+- **Mini plist patched.** `/Applications/Docker.app/Contents/Resources/bin` + `/opt/homebrew/bin` now in nanoclaw's plist PATH so launchd-spawn doesn't crash-loop on `docker info` after restart.
 
-**What's NOT yet built (deferred to next session+):**
-- **Phase 3** — Learn session bootstrap (new DB, addendum, mounts, web tools, 5 learn-tick crons at 10am/1pm/4pm/7pm/10pm). Mentor/Socratic addendum encodes /guya-learn methodology.
-- **Phase 4** — Life session bootstrap (Korean default, 두식 persona, 5 life-tick crons at 10am/12pm/6pm/8pm/11pm).
-- **Phase 5** — Reminder firing infra (launchd cron + `check_reminders.sh` polls R files into life inbound.db).
-- **Phase 6** — Validation + cutover + ADR-018 entry in CLAUDE.md.
-- **Day-2 content seeding** — 14 categories (sections A-N in design doc): pillar 1 project, weekly schedule, R-reminders, first L-task, profile updates, etc.
+**What's NOT yet built (deferred):**
+- **Phase 4** — Life session bootstrap. Same shape as Phase 3 with Korean default + 두식 persona addendum + 5 life-tick crons (10am/12pm/6pm/8pm/11pm PT). Life channel ID is `1503157300922417232`. **Don't forget the `messaging_group_agents` row** — that was the last gotcha in Phase 3 (silent message drop). Full deploy lessons in `docs/2026-05-10-phase3-deploy-runbook.md` "Lessons learned" section.
+- **Phase 5** — Reminder firing infra (`scripts/check_reminders.sh` + launchd `com.guya.reminder-fire.plist` polling R-files).
+- **Phase 6** — 24h validation + ADR-018 (post-reorg schema) + ADR-019 (post-Phase-3 silent-rot lessons).
+- **Day-2 content seeding** — 14 categories from design doc sections A-N (pillar 1 project, weekly schedule, R-reminders, first L-task, profile updates, etc.).
 
-**Anti-rot watch (carrying forward):** spot-check that Telos's `accept_proposal` calls actually vary `priority` (now numeric 1/2/3) across tasks. Same failure mode as ADR-017's anti-rot — if everything defaults to 2, the field is decoration.
+**Anti-rot watches (carrying forward):**
+- Spot-check that learn-Telos's daily ticks actually produce DMs in `#telos-learn`. If a tick silently drops, that's the same anti-rot pattern. First 24h is the validation window.
+- Spot-check that work-Telos's `accept_proposal` / `assign_task` calls vary `priority` (numeric 1/2/3) across tasks. If everything defaults to 2, the field is decoration.
+- Watch for `pushError: "Rebase conflict — manual resolution needed on mini"` returning. The hook fix should have eliminated this, but if it appears again, hook regressed.
 
-**Next session first read:** `docs/2026-05-08-telos-reorg.md` end-to-end. Then check that the 5/8 9am morning-tick Step 0 evidence promotion fired (verify by `git log` in Constantia ~9am-9:05am 5/8 for any new `evidence(...)` commit). Then: Phase 3 implementation per the plan.
+**Next session first read:** `docs/2026-05-10-phase3-deploy-runbook.md` — especially the "Lessons learned" appendix. Five concrete silent-rot patterns to avoid in Phase 4. Then check that overnight learn ticks fired (`git log` in Constantia for any `tick(no-op):` from `2026-05-11 06:00-23:00`).
 
 Full Telos state in `telos context/STATUS.md`.
 
 ## Recent Changes
-- [2026-05-08] guya: 3 new design docs (`docs/2026-05-08-telos-reorg.md`, `2026-05-08-rollback-runbook.md`, `2026-05-08-pre-reorg-state.md`) — uncommitted in working tree
+- [2026-05-10] `e041b95` — docs(reorg): Phase 3 mini deployment runbook
+- [2026-05-08] `2c038b5` — docs(reorg): Telos reorg full design + runbook + pre-reorg state + STATUS/ARCHITECTURE updates
 - [2026-05-07] `7f11634` — chore(scribe): record 5/7 PM session — first artifact-based write_evidence + 2 hook silent-rot fixes
 - [2026-05-06] `d589953` — feat(evolve): read reflections from Constantia, project-local as fallback
 - [2026-05-06] `cffb693` — chore(scribe): write_evidence + tick brief layer + cron split (5/6 PM)
 - [2026-05-06] `51f5e85` — chore(scribe): Telos infra hardening night — STATUS catch-up
 - [2026-05-05] `ca5ad62` — docs(reflect): 2026-05-05 manual reflection + archival append
 - [2026-05-05] `bf25ec8` — chore(scribe): document S3 ship + reflect-prompt bug fix arcs (5/4-5/5 session)
-- [2026-05-04 PM] `492d906` — chore(catch-up): scribe pointer + archival append + S1/S2 reflection + STATUS dedupe
-- [2026-05-04 PM] `9b08d96` — feat(constantia): task priority field (T/P split) + ideas.md migration + ADR 017 (SUPERSEDED 2026-05-08 — see below)
-- [2026-05-04] `3213f21` — chore(scribe): record skill cleanup ship + next-session handoff
-- [2026-05-04] `7d0c786` — docs(ideas): demote second-opinion to Tier C, mark S1/S2 shipped
-- [2026-05-04] `7ab908b` — docs(status): capture autonomous accept_proposal milestone + parallel-session lesson
 
 **Cross-repo (telos = nanoclaw fork `daniellee6925/nanoclaw`):**
+- [2026-05-10] `ce5b0d5` — feat(telos): Phase 3 fork-side — shared MCP tools + telos-learn group skeleton
 - [2026-05-08] `df6c829` — chore(telos): Phase 2c — work session prompts + addendum updates for new schema
-- [2026-05-08] `26fe607` — chore(telos): Phase 2b — acceptProposal rewrite + 5 new MCP tools (propose_task / assign_learn / add_reminder / grade_learn / read_curriculum)
+- [2026-05-08] `26fe607` — chore(telos): Phase 2b — acceptProposal rewrite + 5 new MCP tools
 - [2026-05-08] `c0be63f` — chore(telos): Phase 2a — schema migration for assignTask + gradeTask + helpers
-- [2026-05-08] `2270de8` — chore(telos): capture in-flight tick prompt + addendum edits before reorg (mini-only edits committed back: Step 0 evidence promotion, Discord splitting rule, ideas.md notes section)
-- [2026-05-06 PM] `f6b27ca` — feat(telos): morning + evening tick prompts — structured DM briefs
 
 **Cross-repo (constantia `daniellee6925/constantia`):**
+- [2026-05-10] `b14215a` — tick(no-op): 4pm midpoint + 7pm capture ticks both fired with no active L (first learn-Telos commit, smoke-verifies Phase 3 end-to-end)
+- [2026-05-10] `4880c5a` — tick(no-op) + MANIFEST regen post-rebase (force-pushed after recovering 9 stranded Telos commits)
+- [2026-05-10] `7095f49` — fix(hooks): post-commit must skip during rebase/cherry-pick/merge
+- [2026-05-10] `0c24302` — propose(curriculum): T-001 Formalize Production Engineering Foundations
+- [2026-05-10] `6fb1176` — evidence(strength): EVD-006
+- [2026-05-09] `40945a1` — reflection: 2026-05-09
+- [2026-05-08] `bfa8abe` — reflection: 2026-05-08
 - [2026-05-08] `536522b` — chore(reorg): flatten reminder schedule schema (schedule_type + schedule_expr/at)
 - [2026-05-08] `cd6651a` — chore(reorg): Phase 1 — task namespace split + new validator + bytebytego curriculum
-- [2026-05-08] `b5b6873` — chore(manifest): sync MANIFESTs with current dir state after rebase (pre-reorg setup)
-- [2026-05-07 PM] `d5de6c5` — fix(hooks): unicode-safe truncation + strict-mode array guard
-- [2026-05-07 PM] `a00b2f3` — evidence(strength): EVD-002 — first artifact-based evidence entry (Telos)
+
+**Mini-side state changes (not in any git repo — captured here for traceability):**
+- nanoclaw plist PATH patched: `/Applications/Docker.app/Contents/Resources/bin` + `/opt/homebrew/bin` prepended. Backup at `~/Library/LaunchAgents/com.nanoclaw-v2-53edea47.plist.pre-phase3.bak`.
+- Mount allowlist updated: 5 entries (added `~/telos/shared/telos-tools` + new learn session DB dir). Backup at `~/.config/nanoclaw/mount-allowlist.json.pre-phase3.bak`.
+- Work session container.json updated: MCP path `/workspace/agent/tools/mcp-server.ts` → `/workspace/extra/telos-tools/mcp-server.ts` + new `telos-tools` additionalMount. Backup at `~/telos/groups/telos/container.json.pre-phase3.bak`.
+- v2.db: messaging_group `mg-1777143186175-y1fe2x` retargeted from `discord:@me:1497671629008801843` → `discord:1497671232139825232:1503157287416496242` (work channel migration). New rows for learn: agent_groups `ag-1778451576000-learn`, messaging_groups `mg-1778451576000-LEARN`, sessions `sess-1778451576000-learn`, messaging_group_agents `mga-1778451576000-learn`.
 
 ## In Progress
 
-- [ ] **NEXT SESSION FIRST ACTION — Phase 3 (learn session bootstrap).** Read `docs/2026-05-08-telos-reorg.md` end-to-end first. Phase 3 work: create `/Users/guya/telos/data/v2-sessions/<new-ag-id>/sess-<learn-id>/` with empty inbound.db + outbound.db (or determine if mini's existing two abandoned sessions `sess-1777872447077-gghtt3` / `sess-1777872452965-ngenkk` can be repurposed); add learn session container config in nanoclaw v2 (study mount-allowlist + container.json patterns); drop in learn `CLAUDE.local.md` (Socratic mentor + /guya-learn methodology — full draft in design doc decision 11); add WebSearch + WebFetch tools to learn session's nanoclaw config; add 5 learn-tick crons (10am/1pm/4pm/7pm/10pm with prompts at design doc tick prompts section); boot learn session container; smoke test (manual message + manual 10am trigger to verify Socratic response + paper rec + knowledge-check). Per-phase rollback in `docs/2026-05-08-rollback-runbook.md`.
-- [ ] **NEXT SESSION SECOND ACTION — Verify 5/8 morning-tick Step 0 fired.** First test of the auto-promotion loop. Telos should have read 5/7 reflection's `evidence_candidates` at 9am 5/8, promoted artifact-backed ones via `write_evidence`. Verify by `git log` in Constantia for any new `evidence(...)` commit between 9am-9:05am 5/8. If no commit AND no candidates were artifact-backed, that's correct silent behavior. If candidates existed but no commit, debug Step 0 gating. Note: 5/8 9am tick fired against the OLD prompt (before this session's reorg landed); next 9am tick (5/9) uses the new prompt with new schema refs.
-- [ ] **NEXT SESSION — Verify 5/8 9pm + 11pm + 5/9 9am ticks fire clean against new schema.** First production run of the new prompts + new tools. Watch for: paths referencing TASK-NNN should be GONE (only P-NNN/T-NNN/L-NNN/R-NNN), priority refs P1/P2/P3 should be GONE (only 1/2/3), `outcome: rejected` should be GONE for tasks (only `abandoned`). If Telos errors out, capture the error and roll back the offending phase per runbook.
-- [ ] **Phase 4 — Life session bootstrap.** Same shape as Phase 3 but with Korean default + 두식 persona addendum + 5 life-tick crons (10am/12pm/6pm/8pm/11pm). Daniel's gf is Audrey — addendum mentions her by name. Full addendum draft in design doc decision 11.
-- [ ] **Phase 5 — Reminder firing infra.** Write `scripts/check_reminders.sh` in Constantia (~50 LOC: read R-*.md, evaluate schedule + last_fired, insert message into life/inbound.db when due, update last_fired). Install `~/Library/LaunchAgents/com.guya.reminder-fire.plist` on mini (every-minute cron). Smoke test with synthetic R-task at "now+90s" + recurring `* * * * *` (then immediately retire).
-- [ ] **Phase 6 — Validation + cutover.** 24-hour observation: all 13 ticks fire across work/learn/life. Day-2 review with Daniel. Add ADR-018 entry to CLAUDE.md pointing to `docs/2026-05-08-telos-reorg.md`. Mark ADR-017 as **superseded by ADR-018**. Update STATUS + ARCHITECTURE.
-- [ ] **Day-2 content seeding (14 categories, design doc sections A-N).** Pillar 1 project decision (Daniel↔Telos discussion), weekly schedule populated, 2-3 starter R-reminders (workout, Audrey baseline), first bytebytego L-task assigned, more curricula authored if wanted (DDIA-deep), profile updates, weekly meta-tasks, validator regression tests, log file evidence cleanup. Full checklist in design doc.
-- [ ] **Tier 5 — Pillar 1 layered project.** Daniel picks: nanoGPT extended with inference optimizations (fp16 → int8 → KV cache → continuous batching), or rapGPT2.0 progressive optimization. ~1-2 hrs/week, maintenance-mode. Currently parked in design doc as Phase 4 of decisions.
-- [ ] **Tier 5 — Pillar 3 stats reactivation.** Schedule Wasserman's "All of Statistics" engagement into weekly plan. Resource acquired but not started.
-- [ ] **Tier 5 — Pillar 1 foundations resumption.** Mathematics for ML book continuation (linear algebra → attention from first principles).
-- [ ] **ADR-018 in CLAUDE.md.** New scope: post 2026-05-08 reorg (4-namespace task split + 3-session Telos + numeric priority + flat reminder schedule). Old ADR-018 plan was "split-language Telos" — that's now folded into the 3-session design (Phase 4's life chat is the Korean track). Mark ADR-017 as superseded. Pending Phase 6 cutover.
-- [ ] **Anti-rot watch (Phase 6+):** spot-check that Telos's `accept_proposal` calls vary `priority` (numeric 1/2/3) across accepts. Same failure mode as ADR-017's anti-rot. If everything defaults to 2, field is decoration.
-- [ ] **Watch for `pushError: "Rebase conflict — manual resolution needed on mini"` in Telos DMs.** Pre-existing failure mode (since 5/6's `commitAndPush` patch). Phase 2's 1pm cron addition increases tick count and so multiplies the race window slightly — keep watching.
+- [ ] **NEXT SESSION FIRST READ — `docs/2026-05-10-phase3-deploy-runbook.md` "Lessons learned" appendix.** Five silent-rot patterns hit during Phase 3 deploy that you'll re-discover in Phase 4 if you don't have them in mind: (1) Constantia post-commit hook breaks rebase if guard removed; (2) OneCLI requires lowercase agent identifiers — `ag-XXX-LEARN` is rejected, `ag-XXX-learn` works; (3) per-agent docker imageTag must exist before spawn (use `:latest` unless extra packages needed); (4) nanoclaw plist PATH must include `/Applications/Docker.app/Contents/Resources/bin` for launchd-spawn; (5) `messaging_group_agents` row is mandatory — wiring agent_groups + messaging_groups + sessions is THREE rows, but the routing link is the FOURTH and forgotten row breaks the channel silently.
+- [ ] **NEXT SESSION SECOND READ — verify overnight learn + work ticks fired clean.** Learn should fire at 5/11 10am/1pm/4pm/7pm/10pm PT. Work fires at 5/11 9am/1pm/9pm + 11pm reflection. `git log` in Constantia from 5/11 should show 7-10 new `tick(no-op):` commits if all goes well, plus likely some `propose(...)`, `evidence(...)`, or `reflection:` commits if Telos took action.
+- [ ] **Phase 4 — Life session bootstrap.** Same template as Phase 3. Korean default + 두식 persona addendum (full draft in design doc decision 11). Life channel ID is `1503157300922417232` in your Discord server. Five life-tick crons at 10am/12pm/6pm/8pm/11pm PT. **Critical sequence per Phase 3 lessons:** insert all FOUR DB rows (agent_groups + messaging_groups + sessions + messaging_group_agents). Use lowercase agent ID. Use `imageTag: :latest`. Match the runbook's mini deploy sequence: stop nanoclaw → update mount-allowlist → write container.json → insert 5 cron rows → restart. The runbook should now be reusable as-is for Phase 4.
+- [ ] **Phase 5 — Reminder firing infra.** Write `scripts/check_reminders.sh` in Constantia (~50 LOC: read R-*.md, evaluate schedule + last_fired, insert message into life/inbound.db when due, update last_fired). Install `~/Library/LaunchAgents/com.guya.reminder-fire.plist` on mini (every-minute cron) — **remember to include Docker.app + Homebrew in plist PATH per Phase 3 lesson 4** if the script ever needs to call docker. Smoke test with synthetic R-task at "now+90s" + recurring `* * * * *` (then immediately retire).
+- [ ] **Phase 6 — Validation + cutover.** 24-hour observation: all 13 ticks fire across work/learn/life. Day-2 review with Daniel. Add ADR-018 entry to CLAUDE.md (post-reorg schema) + ADR-019 (Phase 3 silent-rot lessons — meta-pattern: silent rot of trusted enforcement at the routing/auth/runtime tiers). Mark ADR-017 as **superseded by ADR-018**. Update STATUS + ARCHITECTURE.
+- [ ] **Day-2 content seeding (14 categories, design doc sections A-N).** Pillar 1 project decision (Daniel↔Telos discussion), weekly schedule populated, 2-3 starter R-reminders (workout, Audrey baseline), first bytebytego L-task assigned, more curricula authored if wanted, profile updates, weekly meta-tasks, validator regression tests, log file evidence cleanup.
+- [ ] **Tier 5 — Pillar 1 layered project.** Daniel picks: nanoGPT extended with inference optimizations (fp16 → int8 → KV cache → continuous batching), or rapGPT2.0 progressive optimization. ~1-2 hrs/week, maintenance-mode.
+- [ ] **Tier 5 — Pillar 3 stats reactivation.** Schedule Wasserman's "All of Statistics" engagement into weekly plan.
+- [ ] **Tier 5 — Pillar 1 foundations resumption.** Mathematics for ML book continuation.
+- [ ] **Anti-rot watch (Phase 6+):** spot-check that Telos's `accept_proposal` calls vary `priority` (numeric 1/2/3) across accepts. If everything defaults to 2, field is decoration.
 - [ ] **Tier 4 — Socratic testing tool (`quiz_pillar`).** Was in old plan; maybe folded into `gradeLearn` knowledge-check now. Decide whether still distinct: Phase 6 reflection.
-- [ ] **Phase 2 + Phase 3 helpers.ts tests.** Phase 1 (40 pure-function tests) shipped 2026-05-06 (`7d823b3`). Phase 2 = file I/O — now covers more surface (`nextProposalId`, `nextLearnId`, `nextReminderId` collision; `parseFrontmatter` against new schedule_at/expr fields). Phase 3 = git integration. Test debt grew this session (~600 lines new TS, zero new tests). Action item from Phase 2b deep-review.
-- [ ] **Validator-extraction follow-up.** Inline validation logic across `assignTask`, `gradeTask`, `acceptProposal`, `proposeTask`, `assignLearn`, `addReminder`, `gradeLearn`, `writeEvidence`, `writeReflection` — each does its own enum/length/conditional checks. With 4 new handlers in Phase 2b, the inline-validation pattern hit 9 instances. Time to extract to `validators.ts`.
+- [ ] **Phase 2 + Phase 3 helpers.ts tests.** Phase 1 (40 pure-function tests) shipped 2026-05-06 (`7d823b3`). Phase 2 = file I/O — now covers more surface (`nextProposalId`, `nextLearnId`, `nextReminderId` collision; `parseFrontmatter` against new schedule_at/expr fields). Phase 3 = git integration including the new rebase-guard interaction. Test debt grew this session (~600 lines new TS, zero new tests).
+- [ ] **Validator-extraction follow-up.** Inline validation logic across `assignTask`, `gradeTask`, `acceptProposal`, `proposeTask`, `assignLearn`, `addReminder`, `gradeLearn`, `writeEvidence`, `writeReflection` — each does its own enum/length/conditional checks. Time to extract to `validators.ts`.
+- [ ] **commitAndPush should escalate persistent rebase failures.** In `shared/telos-tools/helpers.ts`, currently returns `pushed=false` silently on rebase abort. Telos surfaces it as a one-line DM note that's easy to miss (proven this week — 9 commits stranded for 2 days). Should detect "rebase aborted N times in a row" and escalate via a more visible signal.
+- [ ] **guya-hook-smoke needs synthetic-rebase test.** Pre-push check should add a synthetic rebase that asserts the constantia post-commit hook guard fires correctly. Without it, a future hook edit could re-introduce the silent-rot regression.
+- [ ] **ADR for plist-env Docker discovery + check other LaunchAgents.** Phase 3 deploy uncovered: launchd's strict env (plist EnvironmentVariables only) needs explicit Docker.app + Homebrew paths in PATH or nanoclaw crash-loops on restart. Patched. Worth: (1) ADR-019/020 entry; (2) audit other launchctl plists on mini for same gap; (3) consider `DOCKER_HOST` env var as belt-and-suspenders.
 - [ ] **Investigate TCC permission stability for Desktop.** Desktop access revoked twice during 5/5 session. Migration option: move Constantia from `~/Desktop/constantia` to `~/constantia` (matches mini clone, sidesteps macOS Desktop TCC).
 - [ ] **Per-agent SSH config durability.** `Dockerfile.gh-ssh-config` lives in `/tmp` on mini (ephemeral). Future per-agent rebuild from base would lose it. Skip until next per-agent rebuild forces the issue.
+- [ ] **Watch for `pushError: "Rebase conflict — manual resolution needed on mini"` in Telos DMs.** Hook fix should have eliminated this. If it returns, the hook regressed.
 
 **Phase 5 cleanup (still pending across multiple sessions):**
 - [ ] **[LOW — Phase 5 cleanup] Delete dead `review-gate.json` + scribe reference.**
@@ -100,39 +109,45 @@ Full Telos state in `telos context/STATUS.md`.
 
 ## Decisions & Notes
 
-- [2026-05-08] **Telos reorg full design + Phases 0-2c shipped in single session.** Daniel surfaced 5 blockers preventing effective Telos use: legacy task accumulation, single conflated namespace, sparse 2x-daily tick cadence, undefined Pillar 1, single Telos chat. Single working session locked all design decisions, captured them in `docs/2026-05-08-telos-reorg.md`, then implemented through Phase 2c (work session fully migrated to new schema). 12 design decisions: (1) 4-namespace task split (proposals/tasks/learn/reminders); (2) curricula as durable artifacts; (3) three Telos sessions (work/learn/life); (4) launchd cron + R-files-as-truth for reminder firing; (5) 13 ticks/day rhythm (work 9/1/9, learn 10/1/4/7/10, life 10/12/6/8/11); (6) per-tick prompts; (7) web tools (WebSearch + WebFetch) for Telos; (8) archive-everything legacy migration; (9) inline append-only L-task writeups; (10) live Q&A knowledge-check grading; (11) per-chat CLAUDE.local.md addenda (work=sharp, learn=Socratic+/guya-learn, life=Korean+두식); (12) `goals/weekly-schedule.md` as Daniel-maintained source. Implementation sequence: Phase 0 snapshots (`b5b6873` constantia, `2270de8` telos, `7f11634` guya all tagged `pre-reorg-2026-05-08`); Phase 1 schema (`cd6651a` constantia: 17 archived TASK files + new validator + bytebytego migrated); Phase 1 amendment (`536522b` constantia: flat reminder schedule); Phase 2a (`c0be63f` telos: helpers + assignTask + gradeTask migrated, acceptProposal stubbed); Phase 2b (`26fe607` telos: acceptProposal rewrite + 5 new tools); Phase 2c (`df6c829` telos: 3 prompt updates + new midday prompt + CLAUDE.local.md tool inventory + .gitignore + 1pm cron inserted on mini + nanoclaw restarted). Smoke verified: tools/list returns all 12 tools with correct schemas. **Architectural lesson reinforced:** the design doc + per-phase rollback + state snapshot trio is what made this safe — not just incremental commits. Ability to revert any phase atomically without re-deriving the design from chat history is a structural property of good infra work.
+- [2026-05-10] **Phase 3 (learn session bootstrap) shipped end-to-end. Five unplanned silent-rot patterns hit and fixed.** Started as a clean deploy from `docs/2026-05-08-telos-reorg.md` plan. Actual deploy revealed five new silent-rot variants (all documented in `docs/2026-05-10-phase3-deploy-runbook.md` "Lessons learned" section): (1) **Constantia post-commit hook breaking rebase** — diagnosed as root cause of 50-hour Telos silence pre-deploy; hook ran amend + push during `commitAndPush`'s rebase, failed mid-replay every tick, 9 commits accumulated on mini. Fixed with rebase/cherry-pick/merge guard at hook top (constantia commit `7095f49`). (2) **OneCLI requires lowercase agent identifiers** — original `ag-1778451576000-LEARN` 400'd at OneCLI's API validation. Renamed everywhere to `ag-1778451576000-learn`. (3) **Per-agent docker imageTag must exist** — initial container.json pointed at a never-built tag → docker run code 125. Switched to `:latest` (base image already has `openssh-client`). (4) **nanoclaw plist PATH must include Docker.app explicitly** — launchctl unload/load triggered a crash loop because launchd's strict env couldn't resolve docker socket cleanly. Patched plist with `/Applications/Docker.app/Contents/Resources/bin` + `/opt/homebrew/bin`. (5) **`messaging_group_agents` row is mandatory routing link** — easy to miss because nothing fails loudly without it. Bot receives Discord events but silently drops them when no agent_group is wired to the messaging_group. Fixed by inserting the row. **Meta-pattern: every issue was silent (no clear error log), independently demonstrating the ADR-011/012/013/016 family of "silent rot of trusted enforcement" — at the validation tier, the credentials tier, the runtime tier, the env tier, and the routing tier respectively.** Each is a candidate for ADR-019. End-to-end smoke verified: Daniel sent message in `#telos-learn` → routed → spawned → MCP tool → Constantia commit (`b14215a`) → Discord reply.
 
-- [2026-05-08] **ADR-017 superseded by ADR-018 (post-reorg schema).** ADR-017 introduced T1-T3 / P1-P3 priority prefix scheme — explicitly designed to force re-grading at proposal acceptance ("don't auto-carry the T value"). New design replaces this with plain numeric `1|2|3` across proposals/tasks/learn (validator-enforced re-grade rule, prefix-as-convention dropped). Reasoning: the prefix theater added cognitive load without preventing the failure (validator enforces re-grade either way). Plain numeric is cleaner; the validator rule "on accept, priority must be explicitly re-set" is the actual anti-rot mechanism. Reminders skip priority entirely. ADR-018 will land in `CLAUDE.md` ADR table at Phase 6 cutover.
+- [2026-05-10] **Three-Telos architecture is now partially live (work + learn).** Phase 3 lit up the second of three planned sessions. Architecture: ONE shared `groups/telos/folder` model abandoned in favor of TWO group folders (`groups/telos/` for work, `groups/telos-learn/` for learn) — agent_groups are 1:1 with group folders in nanoclaw, and per-session addenda require separate folders. ONE shared MCP tools dir at `shared/telos-tools/`, mounted into each group's container via additionalMounts (avoids ADR-013-style drift across N copies of mcp-server.ts). Work session migrated from DM to `#telos-work` server channel during deploy. Learn session uses `#telos-learn`. Life session (Phase 4) will use `#telos-life` (channel ID `1503157300922417232` already created).
 
-- [2026-05-08] **8 review findings caught + auto-fixed across Phase 2 (a + b).** 4 review passes (2× guya-review + 2× guya-deep-review) on the TS work. Two structural bugs were genuine: (1) curriculum overwrite-of-unreadable-file in acceptProposal target=curriculum — broad fs.access catch would swallow EACCES and silently overwrite an existing curriculum file we couldn't read; fixed with ENOENT-only catch. (2) curriculum proposal body wrapped in `## Context` — proposeTask wrapped all target types in a Context section, producing curriculum files that started with "## Context" then the curriculum's own "# Title"; fixed by skipping the wrapper for target=curriculum. Other 6 findings were instances of the same pattern: `try { ... } catch { ... }` swallowing all errors when only ENOENT was the legitimate "not found" case. **Lesson reinforced:** every fs.readFile/fs.access in tool code needs ENOENT-discrimination. Same pattern as helpers.ts nextId fix from Phase 2a. Worth checking the rest of mcp-server.ts (the existing untouched tools) for the same bug class — likely 2-3 more sites.
+- [2026-05-10] **The runbook approach worked again.** `docs/2026-05-10-phase3-deploy-runbook.md` was authored before the deploy, then extended with "Lessons learned" after. Same architectural property as the 5/8 reorg trio: per-phase rollback + state snapshot + design doc = safe to revert any phase atomically without re-deriving from chat history. The runbook is now reusable for Phase 4 with minimal modification (life-specific content swap + the 5 lessons section as a checklist).
 
-- [2026-05-08] **Discovery: nanoclaw spawns MCP server via Bun reading `.ts` directly — no compile step for per-group tools.** Only `src/` (nanoclaw core) compiles to `dist/` via `pnpm build`. The MCP server at `groups/telos/tools/mcp-server.ts` is invoked by `bun /workspace/agent/tools/mcp-server.ts` per `groups/telos/container.json`. **Operational consequence:** future Telos tool changes require only push + pull on mini + nanoclaw restart — no `pnpm build` step needed for the tools themselves (only nanoclaw core). Captured in `groups/telos/CLAUDE.local.md` quick map; should be ADR-tracked at Phase 6 cutover.
+- [2026-05-08] **Telos reorg full design + Phases 0-2c shipped in single session.** [Preserved — see docs/2026-05-08-telos-reorg.md for full design.] 12 design decisions, 13 tick prompts, phased plan. Constantia schema split (proposals/tasks/learn/reminders), three-Telos sessions, web tools, archive-everything migration. Phase 0 snapshots tagged `pre-reorg-2026-05-08` across all three repos. Phase 1 schema (cd6651a). Phase 1 amendment for flat reminder schedule (536522b). Phase 2a (c0be63f) helpers + assignTask + gradeTask migration. Phase 2b (26fe607) acceptProposal rewrite + 5 new tools. Phase 2c (df6c829) prompts + addendum. Smoke verified: tools/list returns all 12 tools.
 
-- [2026-05-08] **Pre-reorg cleanup: mini's in-flight telos edits captured + cross-machine convergence.** Phase 0 surfaced two divergence issues that would have produced silent rot if ignored. (1) Mini's telos repo had 23 lines of uncommitted edits (Step 0 evidence promotion in tick-morning-prompt.md, Discord 2000-char splitting in CLAUDE.local.md, ideas.md notes section) — Telos's autonomous self-modifications that never made it back to the laptop fork. Committed as `2270de8` before reorg started. (2) Constantia's laptop was 1 commit ahead of origin (5/8 lina_platform reflection); mini was at origin. Rebased + pushed + pulled on mini before Phase 1, ensuring all three sides converged at a single SHA before tagging `pre-reorg-2026-05-08`. **Lesson:** before any cross-machine reorg, audit ALL git states (uncommitted edits + push/pull divergence) and converge first. The runbook would have been worthless if pre-reorg-2026-05-08 pointed at different SHAs on different machines.
+- [2026-05-08] **ADR-017 superseded by ADR-018 (post-reorg schema).** [Preserved.] T1-T3/P1-P3 prefix scheme replaced with plain numeric `1|2|3`. Validator enforces re-grade at proposal acceptance. Reminders skip priority entirely.
 
-- [2026-05-08] **Three-session Telos architecture supersedes "split-language Telos" plan from 5/5.** Old plan (deferred ADR-018): English mentor + Korean life-accountability layer in one session, prompted differently per cron. New plan: three separate nanoclaw sessions (work/learn/life), each with its own DB + cron + CLAUDE.local.md addendum. Reasoning: Daniel chose this over routing-within-one-session because the goal is mental context-switching (each chat IS a context switch in the conversation log, not metadata-tagged messages in one stream). Failure-isolated, privacy-isolated (life chat with Audrey context never travels with work chat), and tone-isolated (sharp/Socratic/warm tones won't bleed via prompt drift). Cost: 3x infra surface. Mitigation: shared Constantia handles cross-chat memory propagation automatically (work-Telos writes evidence → life-Telos reads it). Phase 3+4 implementation pending.
+- [2026-05-08] **8 review findings caught + auto-fixed across Phase 2 (a + b).** [Preserved.] 4 review passes (2× guya-review + 2× guya-deep-review) on the TS work. Two structural bugs were genuine: curriculum overwrite-of-unreadable-file in acceptProposal target=curriculum; curriculum proposal body wrapped in `## Context`. Other 6 were instances of the same pattern: `try { ... } catch { ... }` swallowing all errors when only ENOENT was the legitimate "not found" case. Lesson: every fs.readFile/fs.access in tool code needs ENOENT-discrimination.
 
-- [2026-05-07 PM] **First artifact-based `write_evidence` exercise — Telos's calibration was tighter than mine.** [Preserved from prior STATUS — see archive for full text.] Ship-cadence evidence over 5/4-5/6. Telos chose `strength, tentative` over my proposed `habit, medium`; reasoning was more rigorous (one cited SHA = one demonstrated capability = tentative). EVD-002 = `a00b2f3`.
+- [2026-05-08] **Discovery: nanoclaw spawns MCP server via Bun reading `.ts` directly — no compile step for per-group tools.** [Preserved.] Operational consequence: future Telos tool changes require only push + pull on mini + nanoclaw restart — no `pnpm build` step needed for the tools themselves.
 
-- [2026-05-07 PM] **Two Constantia hook silent-rot bugs patched in `d5de6c5`.** [Preserved.] Post-commit `cut -c1-60` byte-truncating multi-byte unicode + pre-commit `seen[@]` strict-mode warning. Both fixed in place.
+- [2026-05-08] **Pre-reorg cleanup: mini's in-flight telos edits captured + cross-machine convergence.** [Preserved.]
 
-- [2026-05-07 PM] **Telos closed the auto-promotion loop autonomously.** [Preserved.] Step 0 evidence promotion added to morning-tick prompt. First test on 5/8 9am.
+- [2026-05-08] **Three-session Telos architecture supersedes "split-language Telos" plan from 5/5.** [Preserved.]
+
+- [2026-05-07 PM] **First artifact-based `write_evidence` exercise — Telos's calibration was tighter than mine.** [Preserved — EVD-002 = `a00b2f3`.]
+
+- [2026-05-07 PM] **Two Constantia hook silent-rot bugs patched in `d5de6c5`.** [Preserved.]
+
+- [2026-05-07 PM] **Telos closed the auto-promotion loop autonomously.** [Preserved.]
 
 - [2026-05-06 PM late] **Evolve now reads from Constantia (primary), project-local as fallback.** [Preserved.]
 
 - [2026-05-06 PM] **`write_evidence` MCP tool — calibration rule enforced at the tool layer.** [Preserved.]
 
-- [2026-05-06 PM] **Morning + evening tick split into two prompts.** [Preserved — note: Phase 2c added a third prompt at 1pm midday.]
+- [2026-05-06 PM] **Morning + evening tick split into two prompts.** [Preserved — 5/8 added a third prompt at 1pm midday.]
 
-- [2026-05-06 early AM] **Multi-writer push race patched at the right layer.** [Preserved — `commitAndPush` does fetch+rebase before push.]
+- [2026-05-06 early AM] **Multi-writer push race patched at the right layer.** [Preserved — `commitAndPush` does fetch+rebase before push. Note: 5/10 found the rebase replay itself breaks the post-commit hook; that's the deeper bug.]
 
-- [2026-05-05 PM] **Bootstrap interview shipped — Telos's profile cold-start solved.** [Preserved — three architectural decisions: split-language Telos (now superseded by 3-session plan), Telos-as-planner contract, calibration rule.]
+- [2026-05-05 PM] **Bootstrap interview shipped — Telos's profile cold-start solved.** [Preserved.]
 
-- [2026-05-04 PM] **S3: Task priority field + ideas.md migration shipped.** [SUPERSEDED 2026-05-08 — ADR-017 prefix scheme dropped in favor of plain numeric. Ship-cadence record preserved as historical context. Original ADR-017 body still in `CLAUDE.md` until ADR-018 explicitly supersedes it.]
+- [2026-05-04 PM] **S3: Task priority field + ideas.md migration shipped.** [SUPERSEDED 2026-05-08.]
 
 - [2026-05-04 PM] **`accept_proposal` exercised autonomously for the first time.** [Preserved.]
 
-- [2026-05-04 PM] **Process note — parallel-session activity vs automation drift.** [Preserved — when working-tree state appears that I didn't initiate, ASK before reverting.]
+- [2026-05-04 PM] **Process note — parallel-session activity vs automation drift.** [Preserved.]
 
 - [2026-05-04 PM] **Cut A landed: tighter tick-prompt + `accept_proposal` tool.** [Preserved.]
 
@@ -150,6 +165,6 @@ Full Telos state in `telos context/STATUS.md`.
 
 - [2026-04-23] **Growth-tracker stays with Guya, not migrated.** [Preserved.]
 
-- [2026-04-23] **Log filename convention enforced.** [Preserved — extended by 2026-05-04's author-split.]
+- [2026-04-23] **Log filename convention enforced.** [Preserved.]
 
 - [Earlier decisions through 2026-04-09 — see `context/archive.md` if tipped older than 30 days.]

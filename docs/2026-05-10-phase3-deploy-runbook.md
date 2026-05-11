@@ -392,3 +392,86 @@ The session DB dir at `$LEARN_DB_DIR` can be left in place (orphaned but harmles
 - Watch for tick-fire issues over the next 24h. The 5 learn ticks should produce 5 outbound DMs per day. If any tick silently drops, that's the ADR-013 anti-rot pattern — investigate before Phase 4.
 - The work session's tick-fire pattern should be unchanged — no regressions from the shared-tools refactor.
 - Phase 4 (life session) follows the same template. Replicate this runbook with `telos-life` group + Korean addendum + 5 life-tick crons.
+
+---
+
+## Lessons learned (added 2026-05-10 post-deploy)
+
+The actual Phase 3 deploy hit five issues this runbook didn't predict. All five are silent-rot variants — operations that fail without surfacing the failure. Documented here so the Phase 4 deploy doesn't re-discover them.
+
+### 1. Constantia post-commit hook breaks rebase (root cause of 50-hour silence pre-deploy)
+
+**Symptom:** Telos appears to silently stop pushing to Constantia for days. Local commits stack on mini, origin sees nothing.
+
+**Cause:** `hooks/post-commit` runs `git commit --amend` and `git push` unconditionally. When `commitAndPush` does `git rebase origin/main` and replays N local commits, the post-commit fires per replayed commit. Amend fails ("cannot amend during cherry-pick"), MANIFEST regeneration dirties the working tree, next rebase step fails with "your local changes would be overwritten." Rebase aborts. Local commit stays. Push never happens. Next tick repeats the cycle. 9 commits accumulated over 2 days before noticed.
+
+**Fix:** Constantia commit `7095f49` — added rebase/cherry-pick/merge guard at top of `hooks/post-commit`. Hook now exits 0 with a stderr log line if `$GIT_DIR/rebase-merge`, `rebase-apply`, `CHERRY_PICK_HEAD`, or `MERGE_HEAD` exists.
+
+**Lesson:** any hook that mutates git state must check whether git is mid-operation. Standard pattern; should be in a code-review checklist for any future hook.
+
+### 2. OneCLI requires lowercase agent identifiers
+
+**Symptom:** `OneCLI gateway error — container will have no credentials` in nanoclaw error log. Container spawns but Claude can't authenticate to anything (no API keys). Messages stay pending forever.
+
+**Cause:** OneCLI's `/api/agents` endpoint validates identifiers: `"Identifier must be 1-50 characters, start with a letter, and contain only lowercase letters, numbers, and hyphens"`. Our initial agent_group ID `ag-1778451576000-LEARN` had uppercase `LEARN` → 400 Bad Request → no credentials wired.
+
+**Fix:** Renamed agent_group to `ag-1778451576000-learn`. Required updating: agent_groups.id (PK), sessions.agent_group_id (FK), session DB dir name, container.json `agentGroupId` + `imageTag`, mount-allowlist path entry. Five places.
+
+**Lesson:** **always use lowercase + hyphens for nanoclaw IDs.** Match the existing convention `ag-<13-digit-ts>-<6-char-lowercase-rand>` (e.g. `ag-1777143186174-ykqd40`). Don't use semantic suffixes like `-LEARN` or `-life`.
+
+### 3. Per-agent docker image tag must exist
+
+**Symptom:** `Container exited code=125` immediately after spawn. No container logs (auto-removed). Smoke message stays pending.
+
+**Cause:** Initial `container.json` had `imageTag: nanoclaw-agent-v2-53edea47:ag-<id>` — a per-agent image tag that's only built by `buildAgentGroupImage()` after explicit invocation. Until that runs, the tag doesn't exist in docker → docker run fails with code 125.
+
+**Fix:** Set `imageTag` to `nanoclaw-agent-v2-53edea47:latest` (the base image). The base image already has `openssh-client` baked in (per `container/Dockerfile`), so no per-agent build is strictly needed for the standard Telos package set.
+
+**Lesson:** new agent groups should start with `imageTag: ":latest"` unless they need apt/npm packages beyond what the base provides. Run `buildAgentGroupImage()` only when divergence from base is required.
+
+### 4. nanoclaw plist PATH must include Docker.app explicitly
+
+**Symptom:** After any `launchctl unload + load` cycle, nanoclaw enters a 10-second crash loop with `Failed to reach container runtime: dial unix /Users/guya/.docker/run/docker.sock: connect: no such file or directory`. Manual `docker info` from your shell works fine.
+
+**Cause:** launchd's strict env only contains the plist's `EnvironmentVariables`. The original PATH was `/usr/local/bin:/usr/bin:/bin:/Users/guya/.local/bin`. While `/usr/local/bin/docker` exists as a Docker Desktop symlink, the docker context resolution apparently needs more env to work cleanly under launchd. Process kept failing the `docker info` startup check.
+
+**Fix:** Edit the plist `EnvironmentVariables.PATH` to prepend `/Applications/Docker.app/Contents/Resources/bin:/opt/homebrew/bin:`. After unload/load, nanoclaw boots cleanly. Backup at `~/Library/LaunchAgents/com.nanoclaw-v2-53edea47.plist.pre-phase3.bak`.
+
+**Lesson:** any LaunchAgent that calls docker must include `/Applications/Docker.app/Contents/Resources/bin` in its plist PATH explicitly. The May 8 memory entry "Nanoclaw LaunchAgent Missing Homebrew in PATH" warned about the Homebrew side; this is the Docker.app side. Both belong in plist PATH.
+
+### 5. messaging_group_agents row missing → silent message drop (the gotcha that fooled us at the very end)
+
+**Symptom:** Bot has correct Discord channel permissions. Messages from Daniel reach the bot via Gateway (visible as `GATEWAY_MESSAGE_CREATE` events in nanoclaw stdout log). But no `Message routed` log entry follows, and the message never appears in the session inbound DB. Telos never responds.
+
+**Cause:** Wiring a new agent_group to a Discord channel requires FOUR coordinated rows in `v2.db`, not three:
+- `messaging_groups` — defines the destination (channel_type + platform_id)
+- `agent_groups` — defines the agent (folder, name, id)
+- `sessions` — links agent_group to messaging_group
+- **`messaging_group_agents`** — the routing link that tells nanoclaw "incoming messages on this messaging_group should wake this agent_group"
+
+The first three are obvious. The fourth is easy to miss because nothing fails loudly without it — the routing layer just silently drops messages from any messaging_group that has no `messaging_group_agents` row pointing at an agent_group.
+
+**Fix:** Insert a `messaging_group_agents` row for every new agent_group. Schema:
+```sql
+INSERT INTO messaging_group_agents (id, messaging_group_id, agent_group_id, session_mode, priority, created_at, engage_mode, engage_pattern, sender_scope, ignored_message_policy)
+VALUES (
+  'mga-<ts>-<short>',
+  '<your new mg id>',
+  '<your new agent_group id>',
+  'shared',  -- session_mode
+  0,         -- priority
+  datetime('now'),
+  'pattern', -- engage_mode
+  '.',       -- engage_pattern (regex; '.' = match any)
+  'all',     -- sender_scope (accept all senders)
+  'drop'     -- ignored_message_policy
+);
+```
+
+**Lesson:** **for Phase 4 and any future session bootstrap, the wiring sequence is:** (1) messaging_groups row → (2) agent_groups row → (3) **messaging_group_agents row** → (4) sessions row → (5) destinations row in the new session's inbound.db. Skipping (3) silently breaks the whole channel.
+
+### Meta-pattern (all 5 lessons)
+
+Every issue above was silent — no clear error log, no failure surface, just the absence of expected behavior. This is the same family as ADR-011/012/013/016 — silent rot of trusted enforcement. The Phase 3 deploy validated those ADRs by independently demonstrating the pattern five more times.
+
+The deeper takeaway: when wiring infrastructure that involves N coordinated tables/configs/permissions, the failure modes from missing one are almost always silent. Write smoke tests that verify the END-TO-END behavior (a message inserted at step 1 produces an output at step N), not the individual steps.
