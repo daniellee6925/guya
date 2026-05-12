@@ -109,9 +109,40 @@ Validator enums (verified in `hooks/pre-commit:182,188`): once → `pending|fire
 - **L6** transient 125 on first spawn after kickstart — N/A (no nanoclaw restart needed).
 - **L7** synthetic test messages without Discord routing contaminate session state — **mitigated** by routing via real cron fire path. Test reminders fire through the SAME poll-loop as real ticks, so no "no destination" pattern can leak.
 
-## Lessons learned (filled after deploy)
+## Lessons learned
 
-_TBD — capture surprises here, candidates for ADR-019._
+**L8 — Phase 5 infra delivers; LIFE addendum has no `<reminder>` handler.**
+Three smoke fires (R-003 cron at 23:46, R-002 once-shot at 23:47:22, R-003 cron at 23:47) all landed as `kind=task` rows in `inbound.db` and were processed by life-Telos (status → `completed`). **Zero outbound DMs** in `#telos-life`. The container saw the `<reminder>` XML, found no matching tick-prompt or addendum rule, and chose silence (or `do_nothing`). The phase split is now explicit: Phase 5 = pipe-in (laptop → host scheduler → inbox), content seeding = pipe-out (addendum teaches Telos how to surface a reminder). Tomorrow at 6pm PT, real `R-001` (movie reminder) is the natural test. If it stays silent, patch `groups/telos-life/CLAUDE.local.md` with a `<reminder>` handler: surface title + body via Discord DM, suggest action, distinguish once-shot ack vs recurring nudge.
+
+**L9 — Surgical host deploy avoids a dirty repo block.**
+Mini's `~/telos` had an unrelated uncommitted prompt edit (`groups/telos/tick-midday-prompt.md`) that blocked `git pull --rebase`. Instead of stashing or asking the user to clean up, the deploy used:
+```
+git -C ~/telos fetch origin                  # safe, no working-tree changes
+git -C ~/telos show origin/main:launchd/com.guya.reminder-fire.plist \
+  | sed substitution > ~/Library/LaunchAgents/com.guya.reminder-fire.plist
+```
+The plist's permanent home is `~/Library/LaunchAgents/`, not the repo. The repo template was used as a *source* via `git show`, never checked out. Generalizes: any host-only deploy artifact doesn't need the source repo to be clean — fetch + show + redirect is the move. Worktree state preserved verbatim.
+
+**L10 — Constantia's post-commit hook pushes automatically, so an explicit `git push` from the same session is a no-op.**
+After committing on mini (`git commit ...`), the constantia post-commit hook ran and pushed. The subsequent explicit `git push` returned `Everything up-to-date`. Not a bug, just an idiom worth recognizing — without context, "Everything up-to-date" right after a fresh commit reads like a failure. Verification: `git log --oneline -3` showed both my commit AND the hook's MANIFEST regen commit, both on origin.
+
+**L11 — Script's own commit-and-push (for once-shot status flip) worked end-to-end on first try.**
+`b384891 fire(reminder): R-002` was the script's batched commit at end of fire run. It pushed cleanly via the same Phase 3 L1 rebase-guarded hook path. Validates that the batched-commit pattern in `check_reminders.sh` (lines 297-313) is wire-compatible with Telos's `commitAndPush` helper semantics — same rebase-with-autostash + push-and-warn flow. Phase 3 L1 fix is still holding 2 days later.
+
+### Anti-rot watches added by Phase 5
+
+- **Tomorrow 5/12 18:00 PT — real R-001 fires.** If `#telos-life` stays silent, the content gap is confirmed and `<reminder>` handler should be added to LIFE addendum.
+- **Sidecar corruption recovery is one-way** — if `last_fired.json` ever resets due to corruption, every active cron R-file fires once in the next minute (false positive burst). Acceptable but worth watching the log for unexpected `WARN sidecar JSON corrupt — resetting` lines.
+- **`R-003` is `status: retired` not deleted** — left in the repo as a known-good test artifact. If R-IDs become a contention point, archive it.
+
+### Candidates for ADR-019
+
+The L1-L11 set now spans 11 silent-rot variants across Phases 3-5. Three structural buckets:
+1. **Routing/auth/runtime tier** (L1-L5 from Phase 3)
+2. **Spawn/state tier** (L6-L7 from Phase 4)
+3. **Content/contract tier** (L8 from Phase 5 — infra ships fine but the recipient agent doesn't have a contract for the new message type)
+
+L9-L11 are operational rather than silent-rot: L9 is a deploy pattern, L10 is an idiom-to-recognize, L11 is a positive confirmation. Probably not ADR-worthy themselves but worth captioning in the meta-pattern.
 
 ## Known limitations (v1)
 
