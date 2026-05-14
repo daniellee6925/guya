@@ -1,12 +1,28 @@
 # guya — Status
 
-> Last updated: 2026-05-14
+> Last updated: 2026-05-14 (late evening)
 
 ## Current Focus
 
-**5/11 late night: Phase 5 (reminder firing infra) shipped end-to-end on mini.** Three smoke fires validated host side: R-003 cron `* * * * *` fired at 23:46 + 23:47, R-002 once-shot fired at 23:47:22 (past schedule_at 23:47:05), R-003 retired (status active→retired) skipped on subsequent runs. Sidecar idempotency works, status auto-flip pushed back via batched git commit. **One observation:** all 3 inbound rows marked `status=completed` but **zero outbound DMs in #telos-life** — life-Telos has no `<reminder>` handler in its addendum yet. Phase 5 = pipe-in validated; pipe-out (content authoring) is Day-2 / Phase 6 territory. **Real R-001 (movie reminder) tomorrow 5/12 18:00 PT is the natural test for the content gap.**
+**5/14 marathon session — Phase 6 substantially closed + 3 pillar curricula authored + L-task system bootstrapped.** Three silent-rot bugs discovered, diagnosed, fixed across LIFE + LEARN sessions: empty destinations tables (ADR-019), Claude SDK resume freezes system prompt (ADR-018), stale `:latest` docker image missing openssh-client (ADR-020). All three Telos sessions now healthy: ssh in containers, SSH git remote, destinations seeded, scope-clarify addendum loaded, agents responding to chat-sdk. Three full bytebytego-grade pillar curricula authored to Constantia (P1 v2 954 lines, P2 v3 619 lines, P3 646 lines). Four L-tasks active under new 2-main + 2-light model with prefixed schema (`L-P1-001`, `L-P2-001`, `L-P3-001`, plus grandfathered `L-001` for prod-eng-foundations).
 
-**5/11: Phase 4 (life session bootstrap) shipped end-to-end on mini.** All three Telos sessions are now live (work + learn + life). LIFE session DM smoke verified — Daniel sent `안녕` in `#telos-life`, life-Telos routed → spawned → 두식 voice surfaced in 존댓말+형님 → Discord reply landed (`오늘 어떻게 지내셨어요, 형님. 몸은요?`). All four wiring rows in place (including the [L5] `messaging_group_agents`). 5 life-tick crons armed: 10am/12pm/6pm/8pm/11pm PT.
+**What's live now:**
+
+- **Three nanoclaw sessions on mini, all healthy.** Work (`sess-1777143186178-0bacbi`) + Learn (`sess-1778451576000-learn`) + Life (`sess-1778531816000-life`). All three containers have ssh installed (via `docker tag` from working WORK image — see ADR-020), all three have `unnamed`-named destinations seeded (per ADR-019), all three have the scope-clarify addendum loaded (per ADR-018). Mini's Constantia git remote reverted to SSH (no PAT, deploy key path).
+- **`:latest` image points to WORK's working SHA** (`95d7b5f22676`). All future spawns of LIFE + LEARN inherit it. Anti-rot: keep per-agent tags and `:latest` re-pointed after every image build.
+- **3 pillar curricula authored end-to-end.** Pillar 1 LLM Serving (16 weeks, 20 modules, capstone = Production Serving Cookbook), Pillar 2 Production Agentic Systems (19 weeks including 8-week OSS launch sprint capstone), Pillar 3 Eval Methodology (14 weeks, 11 modules + 2 capstone evals — SDF FEAT-3 realism/diversity + Telos grade calibration audit). All three follow the same bytebytego-grade per-module structure: theme + why + reading + 6 concept-check questions + 3 application options (no effort hints) + cross-application + by-end-of-module markers.
+- **Content plan doc** at `docs/2026-05-12-content-plan.md` is the rollup. Tranche 1 closed (curricula + weekly schedule + profile scaffolds + Pillar 1 project decision all done). Tranche 2 closed (Pillars 2 + 3 curricula authored).
+- **Four active L-tasks** under 2-main + 2-light model:
+  - **Main:** `L-P1-001` (Pillar 1 Module 1 — attention math, Saturday block, due 2026-05-24) + `L-P2-001` (Pillar 2 Module 1 — agent loop, daily organic work, due 2026-05-21)
+  - **Light:** `L-001` (prod-eng-foundations Module 1 — Linux process model, due 2026-05-17) + `L-P3-001` (Pillar 3 Module 1 — probability + RVs via Wasserman Ch. 1-3, daily nibbles, due 2026-05-21)
+  - **Bytebytego** intentionally deferred — picks up after the 4 active L-tasks complete.
+- **L-task ID schema** is now prefixed: `L-P1-NNN` (Pillar 1), `L-P2-NNN` (Pillar 2), `L-P3-NNN` (Pillar 3), `L-PEF-NNN` (prod-eng-foundations), `L-BBG-NNN` (bytebytego). L-001 grandfathered. Constantia MANIFEST handles prefixes without modification — verified.
+
+**What's NOT yet built (deferred):**
+- **Pillar 2 LEARN tick-prompt update** — current tick prompts assume one active L-task. With 4 active, the morning tick may surface clumsily. Watch for tomorrow's tick behavior; patch if it doesn't gracefully list multiple.
+- **Phase 6 final closeout** — 24-hour validation window for tomorrow's morning ticks (10am LIFE + 9am WORK + 10am LEARN). If all three land in Discord, Phase 6 fully closed; otherwise debug.
+- **Pillar 2 concept-tagging** — handled in L-P2-001's "Notes" section as running log. Today's ADR-018/019/020 work already tagged.
+- **Bytebytego curriculum** stays as-is until L-task slot opens.
 
 **What's live now:**
 - **Three nanoclaw sessions on mini.** Work (`sess-1777143186178-0bacbi` / ag `ag-1777143186174-ykqd40`) + Learn (`sess-1778451576000-learn` / ag `ag-1778451576000-learn`) + **LIFE (`sess-1778531816000-life` / ag `ag-1778531816000-life`, mg `mg-1778531816000-life`, mga `mga-1778531816000-life`)**. LIFE channel `#telos-life` is `discord:1497671232139825232:1503157300922417232`. 5 life-tick crons: 10am morning / 12pm bodycheck / 6pm transition / 8pm workout / 11pm close PT.
@@ -19,21 +35,36 @@
 - **Phase 6** — 24h validation + ADR-018 (post-reorg schema) + ADR-019 (silent-rot lessons L1-L8 from Phases 3-5 combined).
 - **Day-2 content seeding** — 14 categories from design doc sections A-N (pillar 1 project, weekly schedule, R-reminders including workout + 매님 baseline, first bytebytego L-task, profile updates including initial `profile/relationship.md` + `profile/health.md` scaffolds, etc.).
 
-**Anti-rot watches (carrying forward + new for Phase 4):**
-- **Tonight 5/11: 6pm transition / 8pm workout / 11pm close ticks should each produce a Korean DM in #telos-life.** First 24h is the validation window for life-Telos. Spot-check tomorrow morning.
-- Spot-check that learn-Telos's daily ticks still produce DMs in `#telos-learn` (carry-over from Phase 3).
-- Spot-check that work-Telos's `accept_proposal` / `assign_task` calls vary `priority` (numeric 1/2/3) across tasks. If everything defaults to 2, the field is decoration.
-- Watch for `pushError: "Rebase conflict — manual resolution needed on mini"` returning. The hook fix should have eliminated this; if it returns, hook regressed.
-- **New [L6] watch:** if a future `launchctl kickstart` of nanoclaw produces TWO consecutive `Container exited code=125` for the same session within 2 minutes (one is transient Docker warm-up, two is a real bug).
-- **New [L7] watch:** if injecting a synthetic test message into any session inbox, kill the container immediately after the test message processes — before any real message arrives. Otherwise the agent's session state retains the no-destination pattern and routes real responses to scratchpad instead of Discord.
-- **New [L8] watch:** tomorrow 5/12 18:00 PT real R-001 fire — if `#telos-life` stays silent, content gap confirmed and `<reminder>` handler should be added to LIFE addendum. If a Korean DM lands, the addendum already had implicit handling.
-- **New: sidecar JSON corruption recovery is one-way.** Script resets `last_fired.json` to `{}` on corruption, causing every active cron R-file to fire once next minute (false-positive burst). Watch for unexpected `WARN sidecar JSON corrupt — resetting` lines in `~/Library/Logs/com.guya.reminder-fire.log` on mini.
+**Anti-rot watches (active going forward):**
+- **Tomorrow 5/15 morning ticks (9am WORK + 10am LIFE + 10am LEARN) MUST land Discord DMs.** This is the real validation of today's ADR-018/019/020 fixes. If any session goes silent, debug fast.
+- **L-task tick handling.** Tomorrow's LEARN morning tick will surface 4 active L-tasks. If the tick prompt struggles (only mentions one, garbles priorities, etc.), patch the tick-prompt to handle multiple gracefully.
+- **30-min container ceiling.** All three Telos containers get killed every ~30 min by nanoclaw's absolute-ceiling enforcement. When a tick is due near a kill/respawn cycle, the new container may auto-complete the task without agent processing (today's LEARN 1pm miss had this contributor). If this pattern repeats for tomorrow's ticks, investigate ceiling logic vs spawn-triggered-by-task-row interaction.
+- **Bulk SQL cleanup discipline (ADR-020 anti-rot).** Any future `UPDATE messages_in SET status='completed' WHERE...` MUST filter `AND process_after < datetime('now')`. Future-scheduled recurring tasks get silently killed otherwise.
+- **`:latest` image drift watch.** If a future docker build or commit recreates `:latest` without explicit re-tag from the working per-agent image, ssh may disappear again. Pre-deploy check: `docker exec <container> sh -c "which ssh && which git"`.
+- **Telos's `accept_proposal` / `assign_task` priority variation** (carry-over). Spot-check that calls actually vary `priority` (1/2/3). If everything defaults to 2, field is decoration.
+- **Sidecar JSON corruption recovery** (carry-over). Watch `~/Library/Logs/com.guya.reminder-fire.log` on mini for `WARN sidecar JSON corrupt — resetting` lines — would cause every active cron R-file to fire once next minute.
+- **L6 watch (carry-over):** two consecutive `Container exited code=125` for same session within 2 min = real bug, not warm-up.
+- **L7 watch (carry-over):** synthetic test messages without `platform_id`/`channel_type` contaminate session state.
 
-**Next session first read:** `docs/2026-05-11-phase5-deploy-runbook.md` — especially the "Lessons learned" section (L8-L11). Then check whether overnight life + work + learn ticks fired AND whether real R-001 (movie reminder) fired at 5/12 18:00 PT (`git log` in Constantia for any `tick(no-op):` or `fire(reminder): R-001` between 5/11 18:00 PT and 5/12 20:00 PT). If R-001 fired but no Korean DM in `#telos-life`, that's the content gap — patch `groups/telos-life/CLAUDE.local.md` to handle `<reminder>` payloads.
+**Next session first read:**
+
+1. **L-task status** — `cat constantia/tasks/MANIFEST.md` (Learn section) to see what's active. Currently 4 L-tasks across all 3 pillars + prod-eng-foundations.
+2. **Tomorrow's tick fires** — `git log --oneline` in Constantia from this evening forward. Should see commits like `tick(no-op): morning brief...` per session per day. If any session is silent, container/tick debugging.
+3. **`docs/2026-05-12-content-plan.md`** — the canonical map. All three pillar curricula now linked from there.
+4. **ADRs 018, 019, 020** in `CLAUDE.md` — newest entries documenting today's discoveries. Plus the L12 + L13 retrofix sections in Phase 3 + 4 deploy runbooks.
 
 Full Telos state in `telos context/STATUS.md`.
 
 ## Recent Changes
+- [2026-05-14] `763026d` — docs(content-plan): mark E.3 done — Pillar 3 curriculum shipped
+- [2026-05-14] `ac1eb89` — docs(content-plan): Pillar 1 v2 — bytebytego-grade detail matching Pillar 2 v3
+- [2026-05-14] `649b7fc` — docs(content-plan): Pillar 2 v3 — learning-focused, 19 weeks, OSS capstone
+- [2026-05-14] `6e709bf` — docs(content-plan): mark E.2 done — Pillar 2 curriculum shipped
+- [2026-05-14] `460588a` — docs(adr): ADR-020 — image staleness + bulk SQL cleanup pitfall
+- [2026-05-14] `e213d9e` — docs: ADR-019 + Phase 3/4 runbook L12 retrofix
+- [2026-05-14] `52a623d` — docs(content-plan): Tranche 1 close — B shipped, C scoped-down, F done
+- [2026-05-14] `06a7f8e` — docs(content-plan): lock Pillar 1 + point at curriculum
+- [2026-05-14] `c112522` — chore(scribe): 5/14 batch — content plan + ADR-018 follow-up
 - [2026-05-14] `e4bacae` — docs(adr): ADR-018 — Claude SDK resume freezes system prompt
 - [2026-05-11] `676754d` — docs(phase5): ship — lessons L8-L11, smoke validation results, content gap flagged
 - [2026-05-11] `f4c91ac` — docs(phase5): pre-deploy runbook for reminder firing infra
@@ -126,6 +157,40 @@ Full Telos state in `telos context/STATUS.md`.
 - [ ] Growth tracker milestone #5: review code Guya writes — pick one function per session.
 
 ## Decisions & Notes
+
+- [2026-05-14 marathon session, ~12+ hours] **Phase 6 substantially closed + 3 pillar curricula authored + L-task system bootstrapped.** Single longest session of the project so far. Three distinct work streams interleaved:
+
+  **Stream 1 — Silent-rot debugging marathon (Phase 6 work).** Daniel reported "ticks not delivered to LIFE in LEARN" mid-day. Initial diagnosis (mine) was wrong twice before converging on root cause. Telos itself produced a diagnosis ("No destination configured / need admin to wire up") that I initially dismissed as hallucination but was actually correct — line 125 of `destinations.ts` literally returns that string when the destinations table is empty. Three ADRs surfaced from the debugging:
+  - **ADR-018: Claude SDK `resume` freezes the system prompt.** nanoclaw passes both `resume: <continuation>` AND `systemPrompt.append: <addendum>` to Claude Agent SDK; the SDK uses the original session's system prompt on resume and ignores new `append`. So all our previous addendum edits (LIFE 6a731d9 from 5/12) never reached the running agents. `/clear` is the only deploy mechanism for addendum changes. Confirmed empirically via WORK /clear test ~12:42 AM PT — fresh session immediately responded with substantive Karpathy-engineer engagement (surfaced L-001 4-day slip, named SIGTERM/SIGKILL gap). Pre-/clear protocol: agent synthesizes observations into Constantia profile files before clearing. Validated on WORK: work-Telos wrote 4 patterns to `profile/*.md` (constantia `227f6a8`) before /clear; fresh session post-clear engaged from the new profile state.
+  - **ADR-019: Per-session `destinations` table requires explicit seeding.** Phase 3 (LEARN) + Phase 4 (LIFE) deploy runbooks both missed this step. WORK had it populated from original setup (single row `unnamed|work|channel|discord|...`); LIFE + LEARN had empty tables. nanoclaw's `buildSystemPromptAddendum()` injects "You currently have no configured destinations" into the system prompt when empty; agent produces tick responses but never wraps in `<message to="...">` because no destination names exist; text goes to scratchpad. Masked for 4 days by session memory inheritance from chat-sdk Daniel-pings (which carry routing on inbound row). `/clear` stripped the mask. Fix: `INSERT INTO destinations` rows for LIFE + LEARN matching WORK's pattern + kickstart nanoclaw + /clear each session.
+  - **ADR-020: Per-agent docker image tag drift from `:latest` (ssh-missing bug) + bulk SQL cleanup pitfall.** Two related findings. (a) WORK uses per-agent tag `:ag-1777143186174-ykqd40` (built Phase 2 era with `openssh-client` baked in). LIFE + LEARN spawn from `:latest`, which was rebuilt at some unknown later point WITHOUT `openssh-client`. Result: commits land locally on mini but `git push` from container fails silently with `cannot run ssh: No such file or directory`. Fix: `docker tag` from working WORK image to `:latest`. (b) During cleanup of stale tick rows earlier in the same session, I ran `UPDATE messages_in SET status='completed' WHERE kind='task' AND status='pending'` without filtering `process_after` — prematurely killed today's LEARN 1pm recall tick. Nanoclaw inserted a replacement but capacity issues prevented agent processing. Anti-rot: bulk SQL cleanup against `messages_in` MUST filter `process_after < datetime('now')`.
+
+  Also documented during the session: **PAT-in-URL leakage failure mode.** Attempted Path B (HTTPS+PAT instead of SSH) for the ssh-missing bug; git's error output echoed the PAT in two separate shell invocations before redaction pipes could process them. Daniel rotated PAT twice in 30 min before pivoting back to SSH (Path A via `docker tag`). Lesson logged: PAT-in-URL patterns are unsafe to iterate on; use credential helpers or file-mounted secrets if HTTPS auth is ever required again.
+
+  **Stream 2 — Three pillar curricula authored to bytebytego depth.**
+  - **Pillar 1 (LLM Serving + Inference) v2** at `constantia/tasks/learn/curricula/pillar-1-llm-serving.md` (954 lines, constantia commit `dc1da65`). 20 modules across 7 phases + capstone (Production Serving Cookbook + optional OSS escalation as `llm-serving-bench`). 16 weeks at 3-5 hrs/week. Hardware-gated: RunPod RTX 4090 default ($0.50/hr), A100 40GB for Phases 5 + 7. Total estimated spend $80-150. Model: Llama 3.1 8B Instruct as the locked target.
+  - **Pillar 2 (Production Agentic Systems) v3** at `constantia/tasks/learn/curricula/pillar-2-agentic-systems.md` (619 lines, constantia commit `4b8c483`). 11 modules across 3 foundational phases + 8-week open-source launch sprint capstone. 19 weeks total. Live-lab format: Guya + Telos IS the codebase under study; reading paired with audit + concept-check + optional application. Open-source capstone is the multi-personality framework slice (NOT Constantia + Guya which stay private). Addresses the "single-user scale credibility" gap. Daniel-stated priority over LangGraph fluency — framework deliberately dropped in v3.
+  - **Pillar 3 (Eval Methodology) v1** at `constantia/tasks/learn/curricula/pillar-3-eval-methodology.md` (646 lines, constantia commit `d346868`). 11 modules across 4 phases + 2 capstone evals shipped to production (SDF realism/diversity metrics — closes FEAT-3 backlog; Telos grade calibration audit — statistical test of evolution-loop effectiveness). 14 weeks. Wasserman *All of Statistics* as the spine (Daniel's baseline is "grasp not concrete" → Phase 1 builds foundations from scratch, careful pacing). McElreath as friendlier Bayesian alternative. Cross-application sections in every module connect concepts to SDF + Pillar 1/2 (Pillar 3 explicitly services the others — not standalone).
+
+  **Stream 3 — L-task system bootstrapped under 2-main-2-light operational model.**
+  - **Capacity reality acknowledged:** 4 active curricula × 3 hrs/week each = 12 hrs/week is aggressive but Daniel-validated as sustainable given (a) Pillar 1 has dedicated Saturday block, (b) Pillar 2 work happens organically through daily Guya/Telos sessions (the audit + ship pattern), (c) Pillar 3 + prod-eng-foundations run "light" mode (daily nibbles — one Wasserman section per evening, one short video per day).
+  - **Mode classification:** Main = focused dedicated sessions (Pillar 1 Saturday block, Pillar 2 daily Guya/Telos work). Light = small daily actions across multiple days (prod-eng-foundations videos, Wasserman daily reading).
+  - **L-task ID schema:** prefixed by curriculum. `L-P1-NNN` (Pillar 1), `L-P2-NNN` (Pillar 2), `L-P3-NNN` (Pillar 3), `L-PEF-NNN` (prod-eng-foundations), `L-BBG-NNN` (bytebytego). L-001 grandfathered (in-flight from 5/11). Constantia MANIFEST handles prefixes without modification — verified post-commit.
+  - **Four L-tasks active:** L-001 (prod-eng-foundations Module 1 / Linux processes / light burst / due 5/17), L-P1-001 (Pillar 1 Module 1 / attention math / Saturday main / due 5/24), L-P2-001 (Pillar 2 Module 1 / agent loop / daily organic main / due 5/21), L-P3-001 (Pillar 3 Module 1 / Wasserman foundations / light nibbles / due 5/21). Bytebytego deferred until first 4 complete.
+  - **Pillar 2 concept-tagging** lives in L-P2-001's "Notes" section as running log. Today's ADR-018/019/020 work already tagged there with explicit module-mapping (ADR-019 cemented Module 1 concept-check #5; ADR-020 cemented #6; ADR-018 cemented Module 2 territory).
+
+  **Phase 6 status:** Substantially closed. ADR docs landed (018, 019, 020), Phase 3 + 4 runbooks patched with L12 + L13 retrofix sections, three Telos sessions confirmed healthy (ssh + destinations + scope-clarify + responding). Remaining for full Phase 6 closeout: 24-hour validation window for tomorrow's morning tick fires (9am WORK + 10am LIFE + 10am LEARN). If all three land in Discord, Phase 6 100% done.
+
+  **Mistakes I (Guya) should remember:**
+  - Initially dismissed Telos's correct self-diagnosis as hallucination. Should have verified before dismissing.
+  - Rabbit-holed for ~90 min on SSH/HTTPS push debugging when the original "ticks not delivering" bug was already fixed. Daniel called me back to convergence; I documented it as a feedback memory.
+  - Unfiltered bulk UPDATE prematurely killed a future-scheduled tick. Filter pattern (`AND process_after < datetime('now')`) is now in ADR-020.
+  - Initially proposed 11 specific features for Pillar 2 (project-plan shape); Daniel corrected to learning-curriculum shape. v3 reflects the correction.
+  - Misread Daniel's "Pillar 2 happens organically" as "no L-tasks needed for Pillar 2" — was wrong; he just meant "I have plenty of time because I'm already doing the work daily." L-P2-001 added.
+
+  **Constantia commits today (rough chronology):** destinations seeded → /clear LIFE + LEARN → addendum patches → image retag → SDF push reverted to SSH → 3 pillar curricula authored → 3 new L-tasks. Specific SHAs in commit history.
+
+  **Guya commits today:** ADR-018 (`e4bacae`), 5/14 scribe batch (`c112522`), Pillar 1 lock (`06a7f8e`), Tranche 1 close (`52a623d`), ADR-019 + L12 retrofix (`e213d9e`), ADR-020 + L13 retrofix (`460588a`), Pillar 2 v3 update (`649b7fc`), Pillar 1 v2 update (`ac1eb89`), Pillar 3 done (`763026d`).
 
 - [2026-05-11 late night] **Phase 5 (reminder firing infra) shipped end-to-end on mini in ~3 hours.** Locked two design decisions before code: (1) `last_fired` for cron lives in mini-local sidecar JSON only — keeps Constantia commit log clean (cron fires don't churn git); R-file frontmatter `last_fired` stays null in git. (2) Message content uses XML wrap `<reminder id="..." title="..." schedule_(at|expr)="...">body</reminder>` rather than plain prose — future-proof for LIFE addendum to learn distinct handling. `kind='task'` matches existing scheduling-module path. Built 340-LOC `scripts/check_reminders.sh` (constantia `a8d1fd7`): 5-field cron subset (`*`, `N`, `N-M`, `N,M`, `*/N`), busy_timeout=5000 for sqlite3 contention with nanoclaw, JSON-validated sidecar with reset-on-corruption, trap-cleanup for `.tmp.$$` files. Plist template (telos `18620a6`) with Docker.app+Homebrew PATH per L4. **Surgical host deploy** sidestepped a dirty repo on mini: `git fetch origin` + `git show origin/main:launchd/... | sed > ~/Library/LaunchAgents/...` — no working-tree touch (L9). Smoke validated all four paths: cron fires every match, once-shot fires past schedule_at, retired stops firing, sidecar idempotency holds, R-002 status auto-flip pushed back (`b384891`). **Observation:** all 3 inbound rows marked `status=completed` but zero outbound DMs in `#telos-life`. life-Telos receives `<reminder>` cleanly, the LIFE addendum just doesn't have a handler. **Phase 5 = pipe-in validated; pipe-out (5-line addendum edit) is the natural Phase 6 / Day-2 wedge.** Real R-001 (movie reminder) fires tomorrow 5/12 18:00 PT — the natural test for the content gap. **In-flight mini-side prompt edit preserved untouched**: `groups/telos/tick-midday-prompt.md` has uncommitted Daniel-authored edit on mini adding required closing questions ("What are you on right now? What do you need to finish by EOD?") — not auto-committed because attribution is Daniel's, not Guya's. Surface to Daniel for commit when convenient.
 
