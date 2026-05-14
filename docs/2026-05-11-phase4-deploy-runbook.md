@@ -545,3 +545,7 @@ ssh mini 'sqlite3 /Users/guya/telos/data/v2-sessions/ag-1778531816000-life/sess-
 Then: `launchctl kickstart -k gui/$(id -u)/com.nanoclaw-v2-53edea47` + `/clear` in `#telos-life`.
 
 **For Phase 5+ deploys — add destinations seeding as a step between session DB provisioning and cron-row INSERTs.** See Phase 3 runbook "[L12]" section for the verification step. Without this seeding, ticks fire but never reach Discord; fingerprint in nanoclaw logs is `[poll-loop] WARNING: agent output had no <message to="..."> blocks — nothing was sent`.
+
+## [L13 — retrofix, added 2026-05-14 13:30 PT] Image staleness — `:latest` lacks `openssh-client`
+
+Same gap as Phase 3 runbook (see Phase 3 [L13] section + ADR-020 for full diagnosis). LIFE container spawned from `:latest` which lacked `openssh-client`. Fixed via `docker tag` from WORK's working per-agent image to `:latest`. **For Phase 5+ deploys: add `docker exec <container> sh -c "which ssh && which git"` verification step before declaring deploy complete.** Use `docker tag` not `docker commit` for retag operations. Bulk SQL cleanups on `messages_in` must filter `process_after < datetime('now')`.

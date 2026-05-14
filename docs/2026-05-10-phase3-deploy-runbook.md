@@ -502,3 +502,21 @@ VALUES ('unnamed', '<session-name>', 'channel', 'discord', '<discord:guild_id:ch
 Verify with: `sqlite3 <session-inbound.db> "SELECT COUNT(*) FROM destinations;"` — expect `> 0`. Without this step, the agent will appear to function (logs show successful "Result:" output) but Discord receives nothing — the canonical fingerprint in nanoclaw logs is: `[poll-loop] WARNING: agent output had no <message to="..."> blocks — nothing was sent`.
 
 **Operational debt flagged:** destinations table is mini-local in inbound.db, not versioned anywhere. If a session DB is recreated, destinations must be re-seeded manually. Worth migrating to a `groups/<session>/destinations.json` versioned config with auto-seed at container spawn.
+
+## [L13 — retrofix, added 2026-05-14 13:30 PT] Image staleness — `:latest` lacks `openssh-client`
+
+Discovered after L12. LIFE + LEARN spawn from `nanoclaw-agent-v2-53edea47:latest`, which was rebuilt at some point WITHOUT `openssh-client` (current Dockerfile line 52 has it; the running image doesn't). WORK uses per-agent tag `:ag-1777143186174-ykqd40` (built Phase 2 era with ssh). Result: WORK pushes via deploy key OK; LIFE/LEARN containers commit locally but `git push` fails with `cannot run ssh: No such file or directory`. Masked for ~4 days — commits-without-push doesn't surface a user-facing error.
+
+**Fix applied 2026-05-14 13:20 PT:** `docker tag nanoclaw-agent-v2-53edea47:ag-1777143186174-ykqd40 nanoclaw-agent-v2-53edea47:latest` (aliases `:latest` to WORK's working image SHA). Kickstart nanoclaw; new LIFE/LEARN containers spawn from retagged `:latest` with `/usr/bin/ssh` present. Confirmed via `git ls-remote` from inside each container.
+
+**For future session deploys — add this verification step** after the session container spawns:
+
+```bash
+docker exec <container-name> sh -c "which ssh && which git" || echo "MISSING REQUIRED BINARY — re-tag image or rebuild"
+```
+
+Without this check, push failures are silent until /clear strips session memory (per ADR-018).
+
+**Avoid `docker commit` for retag operations** — it produces image metadata issues (entrypoint inheritance, FS state from running container). Use `docker tag` instead.
+
+**Bulk SQL cleanup on `messages_in` MUST filter `process_after`** — same-day mistake: running `UPDATE messages_in SET status='completed' WHERE kind='task' AND status='pending'` without a `process_after` filter marked future-scheduled recurring tasks completed, killing today's LEARN 1pm recall tick. Always use `AND process_after < datetime('now')`. See ADR-020 for full diagnosis.
