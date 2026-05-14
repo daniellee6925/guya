@@ -1,6 +1,6 @@
 # guya — Status
 
-> Last updated: 2026-05-11
+> Last updated: 2026-05-14
 
 ## Current Focus
 
@@ -34,6 +34,8 @@
 Full Telos state in `telos context/STATUS.md`.
 
 ## Recent Changes
+- [2026-05-14] `e4bacae` — docs(adr): ADR-018 — Claude SDK resume freezes system prompt
+- [2026-05-11] `676754d` — docs(phase5): ship — lessons L8-L11, smoke validation results, content gap flagged
 - [2026-05-11] `f4c91ac` — docs(phase5): pre-deploy runbook for reminder firing infra
 - [2026-05-11] `08d6e41` — chore(scribe): Phase 4 docs sync + ADR-023 + hooks/CLAUDE.md catch-up
 - [2026-05-11] `ff58f86` — chore(scribe): dedupe Phase 4 placeholder in Recent Changes
