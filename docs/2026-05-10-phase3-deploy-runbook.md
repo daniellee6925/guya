@@ -475,3 +475,30 @@ VALUES (
 Every issue above was silent — no clear error log, no failure surface, just the absence of expected behavior. This is the same family as ADR-011/012/013/016 — silent rot of trusted enforcement. The Phase 3 deploy validated those ADRs by independently demonstrating the pattern five more times.
 
 The deeper takeaway: when wiring infrastructure that involves N coordinated tables/configs/permissions, the failure modes from missing one are almost always silent. Write smoke tests that verify the END-TO-END behavior (a message inserted at step 1 produces an output at step N), not the individual steps.
+
+---
+
+## [L12 — retrofix, added 2026-05-14] Missing destinations table seeding
+
+**Bug discovered post-/clear on 2026-05-14 ~12pm PT.** This runbook missed seeding the per-session `destinations` table in inbound.db. LEARN session's container therefore started with empty destinations → nanoclaw's `destinations.ts:buildSystemPromptAddendum()` injected `"You currently have no configured destinations. You cannot send messages until an admin wires one up."` into the system prompt → agent produced tick responses but never wrapped in `<message to="...">` because no destination names existed → output went to scratchpad → no Discord delivery for cron-fired ticks. Masked for ~4 days by the agent's Claude session memory inheriting successful outbound patterns from chat-sdk Daniel pings (those have routing on the inbound row; ticks don't). `/clear` (ADR-018) stripped the mask. Full diagnosis: ADR-019.
+
+**Retrofix command (LEARN):**
+
+```bash
+ssh mini 'sqlite3 /Users/guya/telos/data/v2-sessions/ag-1778451576000-learn/sess-1778451576000-learn/inbound.db \
+  "INSERT INTO destinations (name, display_name, type, channel_type, platform_id, agent_group_id) \
+   VALUES (\"unnamed\", \"learn\", \"channel\", \"discord\", \"discord:1497671232139825232:1503155725785104524\", NULL);"'
+```
+
+Then: `launchctl kickstart -k gui/$(id -u)/com.nanoclaw-v2-53edea47` (rebuilds system prompt addendum at container spawn) + `/clear` in `#telos-learn` (forces fresh Claude session that reads new addendum).
+
+**For future session deploys — add as Step 6.5 (between session DB provisioning and cron-row INSERTs):**
+
+```sql
+INSERT INTO destinations (name, display_name, type, channel_type, platform_id, agent_group_id)
+VALUES ('unnamed', '<session-name>', 'channel', 'discord', '<discord:guild_id:channel_id>', NULL);
+```
+
+Verify with: `sqlite3 <session-inbound.db> "SELECT COUNT(*) FROM destinations;"` — expect `> 0`. Without this step, the agent will appear to function (logs show successful "Result:" output) but Discord receives nothing — the canonical fingerprint in nanoclaw logs is: `[poll-loop] WARNING: agent output had no <message to="..."> blocks — nothing was sent`.
+
+**Operational debt flagged:** destinations table is mini-local in inbound.db, not versioned anywhere. If a session DB is recreated, destinations must be re-seeded manually. Worth migrating to a `groups/<session>/destinations.json` versioned config with auto-seed at container spawn.

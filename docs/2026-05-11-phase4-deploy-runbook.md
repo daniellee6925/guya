@@ -527,3 +527,21 @@ LIFE_CHANNEL  = 1503157300922417232 (Discord #telos-life)
 - **Cron times shifted**: 10am/12pm/6pm/8pm/11pm (NOT 10am/1pm/4pm/7pm/10pm).
 - **Tick prompt filenames different**: morning/bodycheck/transition/workout/close (NOT morning/recall/midpoint/capture/close).
 - **Smoke test in Korean** — the language rule and 매님 referent and 합쇼체/해요체 fluidity are the things that must visibly work.
+
+---
+
+## [L12 — retrofix, added 2026-05-14] Missing destinations table seeding
+
+**Bug discovered post-/clear on 2026-05-14 ~12pm PT.** Same gap as Phase 3 runbook (see Phase 3 runbook "[L12]" section + ADR-019 for full diagnosis). LIFE session's container started with empty destinations → system prompt addendum reported "no destinations configured" → agent produced tick responses but never wrapped in `<message to="...">` → output went to scratchpad → no Discord delivery for cron-fired ticks. Masked for ~3 days by Claude session memory; surfaced immediately after `/clear` (ADR-018).
+
+**Retrofix command (LIFE):**
+
+```bash
+ssh mini 'sqlite3 /Users/guya/telos/data/v2-sessions/ag-1778531816000-life/sess-1778531816000-life/inbound.db \
+  "INSERT INTO destinations (name, display_name, type, channel_type, platform_id, agent_group_id) \
+   VALUES (\"unnamed\", \"life\", \"channel\", \"discord\", \"discord:1497671232139825232:1503157300922417232\", NULL);"'
+```
+
+Then: `launchctl kickstart -k gui/$(id -u)/com.nanoclaw-v2-53edea47` + `/clear` in `#telos-life`.
+
+**For Phase 5+ deploys — add destinations seeding as a step between session DB provisioning and cron-row INSERTs.** See Phase 3 runbook "[L12]" section for the verification step. Without this seeding, ticks fire but never reach Discord; fingerprint in nanoclaw logs is `[poll-loop] WARNING: agent output had no <message to="..."> blocks — nothing was sent`.
