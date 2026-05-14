@@ -85,19 +85,25 @@ This doc captures: (a) the canonical Day-2 content todo list, organized by gate 
 
 ---
 
-## Pillar 2 Curriculum — Production Agentic Systems (LOCKED 2026-05-14)
+## Pillar 2 Curriculum — Production Agentic Systems (LOCKED 2026-05-14, revised same day)
 
-**Full curriculum:** [`constantia/tasks/learn/curricula/pillar-2-agentic-systems.md`](../../constantia/tasks/learn/curricula/pillar-2-agentic-systems.md)
+**Full curriculum:** [`constantia/tasks/learn/curricula/pillar-2-agentic-systems.md`](../../constantia/tasks/learn/curricula/pillar-2-agentic-systems.md) (619 lines, bytebytego-grade detail)
 
-**One-paragraph summary:** Live-lab project. Guya + Telos IS the codebase under study. 13 modules + 1 capstone across 4 phases (Foundations / Orchestration + Multi-Agent / Reliability + Observability / Capstone) over 12-14 weeks at ~3 hrs/week. Every module pairs reading (paper / docs / source code) with an audit of the running system, producing either an ADR-style note, an `evidence/PILLAR2-*.md` file, or a shipped/proposed PR. End state = body of ADRs + evidence notes + PRs demonstrating ability to read agent architecture and improve it.
+**One-paragraph summary:** Learning-focused curriculum (not a project plan). 11 modules across 3 phases over weeks 1-11 teach concepts (agent loop, state management, tool design, orchestration, memory, reflection, failure modes, retry/idempotency, observability, deploy gates) through reading + concept-check + optional application. Each module includes a cross-application section connecting the concept to SDF / BosonAI day-job work so learning compounds beyond Telos. **Phase 4 (Weeks 12-19) is an open-source launch sprint** — carve a release-worthy slice of the multi-personality agent framework, refactor for generalization, ship docs + reference personas + CI, launch publicly. Constantia + the Guya layer + Daniel-specific personas stay private. End state = 11 weeks of cemented concepts + a public open-source project with real users.
 
-**No hardware required.** Pillar 2 runs entirely against existing Guya + Telos systems on laptop + mini. Zero cloud cost.
+**Total span:** 19 weeks (Phase 1-3 = ~3 hrs/week, Phase 4 = 5-7 hrs/week launch sprint, can stretch to 12 weeks of lighter launch effort if needed).
 
-**Cadence:** Parallel with Pillar 1 once Pillar 1 hits Phase 2 (~W3). Evening reading slots (M/T/Th 22:00-23:00 stretch).
+**No hardware required.** Pillar 2 runs entirely against existing systems. Zero cloud cost.
 
-**Capstone options:** drift detector for Guya's evolution pipeline / replay harness for Telos ticks / reliability dashboard for three-session architecture / Daniel's choice from operational pain points.
+**Cadence:** Parallel with Pillar 1 once Pillar 1 hits Phase 2 (~Pillar 1 W3). Evening reading slots.
 
-**First L-task to assign:** Module 1 — the agent loop trace through Telos from cron fire to Discord delivery.
+**Why the open-source capstone matters:** Addresses the "single-user system" credibility gap honestly — 10 real users find 10 edge cases your private instance never surfaces. Also forces clean architecture (framework vs Daniel's instance), produces portfolio-grade artifact, and creates marketable positioning ("opinionated framework for personal-agent use cases" rather than competing on generality).
+
+**What this curriculum WILL teach:** reading agent architecture, naming failure modes, designing tools/routing/memory/observability for non-deterministic systems, recognizing silent-rot patterns, shipping under constraints.
+
+**What it WON'T teach:** framework fluency for stacks you don't use (LangGraph deliberately dropped), production scale beyond few-tenant (SDF covers this), greenfield design from blank page (already have this from Guya + Telos), ML training/inference (Pillar 1), statistical eval rigor (Pillar 3).
+
+**First L-task to assign:** Module 1 — the agent loop. Read ReAct + Anthropic + Lilian Weng, trace one Telos tick end-to-end, answer concept-check without notes.
 
 ---
 
