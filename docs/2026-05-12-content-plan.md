@@ -41,7 +41,7 @@ This doc captures: (a) the canonical Day-2 content todo list, organized by gate 
 ### Tranche 2 — Pillar 2 + 3 curricula + identity polish (parallel with Tranche 1)
 
 - [x] **E.2 Pillar 2 curriculum** AUTHORED 2026-05-14 at `constantia/tasks/learn/curricula/pillar-2-agentic-systems.md` (constantia commit `76f4dc0`). 221 lines. Live-lab format using Guya + Telos as the codebase under study. 13 modules + 1 capstone over 12-14 weeks at ~3 hrs/week. Phases: Foundations / Orchestration + Multi-Agent / Reliability + Observability / Capstone. No hardware required (Guya + Telos already run locally). Capstone options: drift detector / replay harness / reliability dashboard / Daniel's choice. First L-task to assign: Module 1 (agent loop trace).
-- [ ] **E.3 Pillar 3 curriculum** authored per scaffold below → `constantia/tasks/learn/curricula/pillar-3-eval-methodology.md`
+- [x] **E.3 Pillar 3 curriculum** AUTHORED 2026-05-14 at `constantia/tasks/learn/curricula/pillar-3-eval-methodology.md` (constantia commit `d346868`, 646 lines). Bytebytego-grade detail matching P1 v2 / P2 v3 structure. 14 weeks, 11 modules + 2 capstone evals. Phases: Stats Foundations (Wks 1-4) / Eval Design (5-7) / Production Eval (8-11) / Capstone (12-14). **TWO real evals shipped** — SDF realism/diversity (closes FEAT-3 backlog) + Telos grade calibration audit. Reading spine: Wasserman primary + McElreath alternative + Kohavi/Tang/Xu + HELM/Chatbot-Arena papers. Each module has TWO cross-application sections (to SDF day-job AND to Pillars 1/2 — Pillar 3 services others). No GPU/hardware required. First L-task: Module 1 (probability + random variables) via Wasserman Ch. 1-3.
 - [ ] **G. Pillars review** — confirm 3 pillars are still right at next review (2026-05-17).
 - [ ] **H. Telos identity refresh** — confirm 두식 voice / Doosik persona inheritance is current across all three sessions post-Phase 5.
 - [ ] **F (extended)** — domains list (SDF, BosonAI synthetic data, agentic systems, ML systems design) + news sources (Twitter, blogs, arxiv categories) into profile.
@@ -107,48 +107,29 @@ This doc captures: (a) the canonical Day-2 content todo list, organized by gate 
 
 ---
 
-## Pillar 3 Curriculum Scaffold — Eval Methodology
+## Pillar 3 Curriculum — Eval Methodology (LOCKED 2026-05-14)
 
-> **Intent:** Get statistically rigorous about non-deterministic systems. Confidence intervals on pass rates, drift detection, shadow eval, A/B test design when outcomes are noisy. The actuarial-lens wedge that differentiates Daniel from "ML engineer who ships and prays."
->
-> **Cadence:** ~2-3 hrs/week, ~10-12 weeks. Heaviest stats workload up front; later modules pair with Pillar 1 (eval inference quality) and Pillar 2 (eval Guya/Telos's effect on Daniel).
->
-> **Per-module flow:** read (60-90 min) → derive or compute by hand (45 min) → apply to a real SDF / Guya / Telos eval scenario (30 min).
+**Full curriculum:** [`constantia/tasks/learn/curricula/pillar-3-eval-methodology.md`](../../constantia/tasks/learn/curricula/pillar-3-eval-methodology.md) (646 lines, bytebytego-grade detail)
 
-### Phase 1: Statistical Foundations (Modules 1-4)
+**One-paragraph summary:** The actuarial-lens curriculum. 11 modules + 2 capstone evals across 4 phases (Stats Foundations / Eval Design / Production Eval / Capstone) over 14 weeks at ~3 hrs/week. Phase 1 builds statistical foundations from scratch (your baseline is "grasp not concrete" — Wasserman is the spine, McElreath as friendlier Bayesian alternative). Phases 2-3 cover eval design (LLM-as-judge biases, pairwise/Elo, eval set construction) and production eval (A/B testing, drift detection, shadow/canary, CUPED variance reduction). **Phase 4 ships TWO real evals** — SDF realism/diversity metrics (FEAT-3 backlog item closed) + Telos grade calibration audit (statistical test of whether the evolution loop is actually working).
 
-1. **Probability + random variables, re-grounded.** *Reading:* Wasserman "All of Statistics" Ch. 1-3. *Derive:* CLT, binomial → normal approximation by hand.
-2. **Estimation + confidence intervals.** *Reading:* Wasserman Ch. 6-7. *Compute:* given 100 LLM eval pass/fail outcomes with 73 passes, what's the 95% CI? Use Wilson, Clopper-Pearson, and normal approximation; explain the differences.
-3. **Hypothesis testing + p-values.** *Reading:* Wasserman Ch. 10. *Compute:* you ran two prompt variants on 50 items each; variant A scored 38/50, variant B 42/50 — is the difference significant?
-4. **Bayesian estimation basics.** *Reading:* Wasserman Ch. 11; Stan / PyMC intro docs. *Compute:* beta-binomial posterior over pass rate; how does the posterior update with more samples?
+**Total span:** 14 weeks at ~3 hrs/week (Phase 1-3) + ~5-6 hrs/week (Phase 4 capstone).
 
-### Phase 2: Eval Design (Modules 5-7)
+**No hardware required.** Pure reading + applied math + production integration.
 
-5. **Eval set construction.** Coverage, difficulty calibration, contamination risk, holdouts. *Reading:* "Holistic Evaluation of Language Models" (HELM); HumanEval / MMLU / GSM8K methodology critiques; "What's in My Big Data" papers.
-6. **LLM-as-judge.** Bias modes, position bias, self-preference, calibration. *Reading:* Zheng et al. "Judging LLM-as-a-Judge with MT-Bench"; Anthropic evals blog.
-7. **Pairwise + Elo eval.** When pairwise > absolute scoring; LMSYS Chatbot Arena methodology. *Reading:* Chatbot Arena paper; Bradley-Terry model.
+**Cadence:** Starts after Pillar 2's Phase 1 (~Pillar 2 W3 or W4). Parallel-friendly with both other pillars (no GPU contention with Pillar 1, evening reading shared with Pillar 2).
 
-### Phase 3: Production Eval (Modules 8-10)
+**Why Pillar 3 services others:** Every module has TWO cross-application sections — to SDF (day job) AND to Pillar 1 / Pillar 2 (other curricula). Pillar 3 isn't standalone; it's the eval substrate underneath everything. Pillar 1's "INT8 dropped quality 0.5%" needs Pillar 3 to be defensible. Pillar 2's "this reflection rule improved Telos" needs Pillar 3 to be more than vibes.
 
-8. **A/B testing on non-deterministic systems.** Sample sizes for noisy outcomes; sequential testing pitfalls. *Reading:* Kohavi/Tang/Xu "Trustworthy Online Controlled Experiments" Ch. 17-18 (variance reduction); Optimizely / Airbnb engineering posts.
-9. **Drift detection.** Embedding drift, PSI, KL divergence; KS tests; concept drift vs covariate drift. *Reading:* Gama et al. survey on concept drift; Evidently AI docs.
-10. **Shadow eval + canary.** Running new prompts/models against live traffic without user-facing risk. *Reading:* Google SRE Book Ch. 8 (Release Engineering); LinkedIn / Uber engineering posts on shadow deployment.
+**What this curriculum WILL teach:** computing CIs on any binomial proportion in 60 seconds, designing defensible A/B tests, auditing LLM-as-judge for bias, building drift detection, the actuarial-lens — knowing when claims are real vs noise.
 
-### Phase 4: Capstone (Modules 11-12)
+**What it WON'T teach:** measure theory, causal inference, ML training (different curricula), LLM serving (Pillar 1), agent architecture (Pillar 2).
 
-11-12. **Design + run a real eval.** Pick one of: SDF synthetic-data quality eval, Guya guideline-improvement eval (do guidelines actually shift behavior?), Telos's grade calibration eval (do Telos grades correlate with actual Daniel improvement over a month?). Produce: hypothesis, eval design, sample size justification, results with confidence intervals, decision.
+**Capstone Eval 1 (SDF FEAT-3):** Realism/diversity metrics module integrated into SDF QC, with CIs on every metric. Closes a real backlog item.
 
-### Reference Materials
+**Capstone Eval 2 (Telos grade calibration):** Statistical correlation analysis on whether Telos's A/B/C grades predict measurable Daniel-side improvement. Tests an architectural assumption the system has operated on for weeks. Findings inform whether to trust or redesign the grading rubric.
 
-- **Books:** Wasserman *All of Statistics* (primary); Kohavi/Tang/Xu *Trustworthy Online Controlled Experiments*; Imbens/Rubin *Causal Inference* (later); McElreath *Statistical Rethinking* (excellent Bayesian alternative to Wasserman if Wasserman feels too dry).
-- **Papers:** HELM, Chatbot Arena, MT-Bench, "Holistic Evaluation," LLM-as-judge bias papers.
-- **Code:** OpenAI evals, Anthropic evals, Inspect AI, langfuse eval, weights-and-biases sweeps.
-
-### Grading rubric (for Telos)
-
-- **Derivation** (40%): can Daniel derive the statistical machinery without slide deck reference?
-- **Application** (40%): does the module's applied computation produce a defensible eval design or analysis?
-- **Real artifact** (20%): at least 2 of the 12 modules produce a real eval that ships into SDF / Guya / Telos.
+**First L-task to assign:** Module 1 — probability and random variables. Concrete, requires Wasserman Ch. 1-3 + a Python notebook for simulation.
 
 ---
 
