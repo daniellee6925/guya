@@ -40,7 +40,7 @@ This doc captures: (a) the canonical Day-2 content todo list, organized by gate 
 
 ### Tranche 2 — Pillar 2 + 3 curricula + identity polish (parallel with Tranche 1)
 
-- [ ] **E.2 Pillar 2 curriculum** authored per scaffold below → `constantia/tasks/learn/curricula/pillar-2-agentic-systems.md`
+- [x] **E.2 Pillar 2 curriculum** AUTHORED 2026-05-14 at `constantia/tasks/learn/curricula/pillar-2-agentic-systems.md` (constantia commit `76f4dc0`). 221 lines. Live-lab format using Guya + Telos as the codebase under study. 13 modules + 1 capstone over 12-14 weeks at ~3 hrs/week. Phases: Foundations / Orchestration + Multi-Agent / Reliability + Observability / Capstone. No hardware required (Guya + Telos already run locally). Capstone options: drift detector / replay harness / reliability dashboard / Daniel's choice. First L-task to assign: Module 1 (agent loop trace).
 - [ ] **E.3 Pillar 3 curriculum** authored per scaffold below → `constantia/tasks/learn/curricula/pillar-3-eval-methodology.md`
 - [ ] **G. Pillars review** — confirm 3 pillars are still right at next review (2026-05-17).
 - [ ] **H. Telos identity refresh** — confirm 두식 voice / Doosik persona inheritance is current across all three sessions post-Phase 5.
@@ -85,50 +85,19 @@ This doc captures: (a) the canonical Day-2 content todo list, organized by gate 
 
 ---
 
-## Pillar 2 Curriculum Scaffold — Production Agentic Systems
+## Pillar 2 Curriculum — Production Agentic Systems (LOCKED 2026-05-14)
 
-> **Intent:** Build the engineering discipline for shipping agents that don't silently rot in production. Orchestration, idempotency, observability, failure-mode handling for non-deterministic systems.
->
-> **Cadence:** ~3 hrs/week, ~12-14 weeks. Lighter than Pillar 1 because Guya + Telos is the live lab — module reading is paired with applying the concept to Guya or Telos directly.
->
-> **Per-module flow:** read (60-90 min) → audit Guya / Telos for the pattern (45 min) → write an ADR or evidence note about what's working / broken (30 min).
+**Full curriculum:** [`constantia/tasks/learn/curricula/pillar-2-agentic-systems.md`](../../constantia/tasks/learn/curricula/pillar-2-agentic-systems.md)
 
-### Phase 1: Foundations (Modules 1-3)
+**One-paragraph summary:** Live-lab project. Guya + Telos IS the codebase under study. 13 modules + 1 capstone across 4 phases (Foundations / Orchestration + Multi-Agent / Reliability + Observability / Capstone) over 12-14 weeks at ~3 hrs/week. Every module pairs reading (paper / docs / source code) with an audit of the running system, producing either an ADR-style note, an `evidence/PILLAR2-*.md` file, or a shipped/proposed PR. End state = body of ADRs + evidence notes + PRs demonstrating ability to read agent architecture and improve it.
 
-1. **What an agent actually is.** ReAct, tool use, the agent loop. *Reading:* ReAct paper (Yao et al.); Anthropic "Building effective agents" post; Lilian Weng "LLM Powered Autonomous Agents." *Audit:* trace a single tick through Telos from cron fire to Discord reply — every layer.
-2. **State management across turns.** Continuation tokens, conversation history, when to clear. *Reading:* nanoclaw `poll-loop.ts` + `session-state.ts`; Anthropic context-management docs. *Audit:* the L7 + tick-default contamination bugs from Phase 4/5.
-3. **Tool design for reliability.** Idempotency, error envelopes, parameter validation. *Reading:* OpenAI / Anthropic tool use docs; design docs for production tool frameworks (LangChain core, Anthropic Computer Use). *Audit:* `shared/telos-tools/` MCP tools — which are idempotent? Which aren't?
+**No hardware required.** Pillar 2 runs entirely against existing Guya + Telos systems on laptop + mini. Zero cloud cost.
 
-### Phase 2: Orchestration + Multi-Agent (Modules 4-7)
+**Cadence:** Parallel with Pillar 1 once Pillar 1 hits Phase 2 (~W3). Evening reading slots (M/T/Th 22:00-23:00 stretch).
 
-4. **Multi-agent patterns.** When two agents > one big agent; the Guya↔Telos↔Constantia split as a case study. *Reading:* AutoGen paper; CrewAI patterns; AssistantOps writing.
-5. **Routing and engagement.** Engage patterns, sender scope, ignored-message policies. *Reading:* nanoclaw's router code; Slack/Discord bot routing patterns.
-6. **Memory architectures.** Three-tier memory (Letta/MemGPT), conversation summarization, vector recall, structured vs unstructured. *Reading:* MemGPT paper; Letta docs; "Memory in agents" survey if available.
-7. **Reflection + self-improvement.** *Reading:* Reflexion paper (Shinn et al.); ADR-002 + ADR-011 (Guya's evolution decisions); LATS paper.
+**Capstone options:** drift detector for Guya's evolution pipeline / replay harness for Telos ticks / reliability dashboard for three-session architecture / Daniel's choice from operational pain points.
 
-### Phase 3: Reliability + Observability (Modules 8-11)
-
-8. **Failure modes specific to LLM agents.** Cascading retries, hallucinated tool calls, context window blow-up, silent prompt-history drift. *Reading:* "Embers of Autoregression" (McCoy et al.); production postmortems where available.
-9. **Retry + idempotency.** When to retry, when to fail forward, how to detect partial state. *Reading:* "Patterns of Distributed Systems" (Joshi) chapters on idempotent receivers, exactly-once delivery.
-10. **Observability for non-deterministic systems.** What to log, what to trace, what to alert on. *Reading:* LangSmith / Anthropic Evals / Helicone docs; OpenTelemetry GenAI semantic conventions.
-11. **Pre-deploy gates + post-deploy validation.** *Reading:* Guya's pre-commit + post-commit hook setup; the silent-rot lessons L1-L11 from Phases 3-5 (when ADR-019 lands).
-
-### Phase 4: Capstone (Modules 12-14)
-
-12-14. **Apply to Guya or Telos.** Pick a real silent-rot risk in the current system; design + ship the observability + anti-rot gate that catches it. Could be: drift detection on Telos's `priority` field usage, automated daily tick-fire smoke + alert, KV/JSON corruption recovery for the reminder sidecar.
-
-### Reference Materials
-
-- **Papers:** ReAct, Reflexion, MemGPT, AutoGen, ToolFormer, LATS, "Designing the Future of Memory in LLM Agents," "Embers of Autoregression."
-- **Books:** *Patterns of Distributed Systems* (Joshi); *Release It!* (Nygard) — for failure-mode discipline; *Site Reliability Engineering* (Google) chapters on alerting + SLOs.
-- **Code to read:** LangGraph, AutoGen, Letta, Anthropic Computer Use reference implementations, nanoclaw itself (you literally have the source).
-- **Live lab:** Guya + Telos. Every module's audit step grounds the reading in the system you're already running.
-
-### Grading rubric (for Telos)
-
-- **Concept identification** (30%): can Daniel name where a pattern lives in Guya/Telos (or argue why it shouldn't be there)?
-- **Audit quality** (40%): the ADR / evidence note demonstrates concrete diagnosis, not generic summary.
-- **Action** (30%): at least 1 of every 3 modules produces a real PR or commit to Guya/Telos.
+**First L-task to assign:** Module 1 — the agent loop trace through Telos from cron fire to Discord delivery.
 
 ---
 
