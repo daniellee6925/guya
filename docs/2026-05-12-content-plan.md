@@ -28,11 +28,11 @@ This doc captures: (a) the canonical Day-2 content todo list, organized by gate 
 
 ### Gate (must happen first)
 
-- [ ] **A. Pillar 1 project decision** — the "TBD inference project" that complements SDF. Candidates: nanoGPT extended with progressive serving optimizations (fp16 → int8 → KV cache → continuous batching); rapGPT2.0 progressive optimization; vLLM-style serving stack from scratch; distillation + quantization toolkit. Includes: scope, 1-month / 3-month success criteria, and the rubric Telos will use to grade progress. *Daniel ↔ Telos discussion. Everything in Tranche 1 waits on this.*
+- [x] **A. Pillar 1 project decision** — **LOCKED 2026-05-14: "Production Serving Cookbook."** Operator-mode (not builder-mode) project: deploy and progressively optimize a 7B model (recommended: Llama 3.1 8B Instruct) on vLLM and SGLang. 7 phases, 18 modules, ~16 weeks at 3-5 hrs/week. End state = personal serving cookbook + portfolio-grade benchmark suite. Full curriculum at [`constantia/tasks/learn/curricula/pillar-1-llm-serving.md`](../../constantia/tasks/learn/curricula/pillar-1-llm-serving.md). Pivot rationale (vs original nanoGPT-extended proposal): Daniel's stated end-state is to *operate* production inference engines (vLLM, SGLang), not to build one. Operator-mode produces direct skill match + stronger portfolio signal.
 
 ### Tranche 1 — direct content authoring (unblocks once Pillar 1 picked)
 
-- [ ] **E. Pillar 1 curriculum** authored per scaffold below → `constantia/tasks/learn/curricula/pillar-1-llm-serving.md`
+- [x] **E. Pillar 1 curriculum** AUTHORED 2026-05-14 at `constantia/tasks/learn/curricula/pillar-1-llm-serving.md`. Bytebytego-shaped (~390 lines): hardware requirements, software stack, model selection, 7 phases × ~18 modules + capstone, reference paper table, grading rubric, pre-Phase-2 checklist. Hardware section flags RunPod RTX 4090 ($0.50/hr) as default GPU path; A100 40GB for Phases 5 + 7. Total estimated spend: $80-150 over 16 weeks. **Pre-Phase-2 blocker: GPU access must be confirmed before Module 4 starts.**
 - [ ] **D. First L-task assigned** from Pillar 1 Module 1. Sets LEARN tick's first concrete thing to grade against.
 - [ ] **B. Weekly schedule** → `constantia/goals/weekly-schedule.md`: deep work windows, gym, Audrey time, family contact, weekly planning. Plus decision on update cadence (Sunday tick vs manual).
 - [ ] **C. Starter R-reminders**: workout cadence, sleep prep nudge (11pm), family weekly check-ins (mom/dad/sister), 매님 baseline if not redundant with LIFE tick.
@@ -71,52 +71,17 @@ This doc captures: (a) the canonical Day-2 content todo list, organized by gate 
 
 ---
 
-## Pillar 1 Curriculum Scaffold — LLM Serving + Inference at Scale
+## Pillar 1 Curriculum — Production Serving Cookbook (LOCKED 2026-05-14)
 
-> **Intent:** Build production intuition for serving LLMs at scale. Start from the primitives (how a transformer actually runs an inference step), pivot fast to the production optimizations that matter (KV cache, batching, quantization, speculative decoding), end with multi-tenant serving and cost/latency engineering.
->
-> **Cadence:** ~3-5 hrs/week, ~16-20 weeks total. One module per week unless project work demands it.
->
-> **Per-module flow:** read + watch (90-120 min) → implement or instrument (90-120 min) → connect to TBD inference project (30-60 min) → 3-5 sentence writeup. Same shape as bytebytego curriculum.
+**Full curriculum:** [`constantia/tasks/learn/curricula/pillar-1-llm-serving.md`](../../constantia/tasks/learn/curricula/pillar-1-llm-serving.md)
 
-### Phase 1: Transformer Inference Primitives (Modules 1-4)
+**One-paragraph summary:** Operator-mode project. Deploy and progressively optimize Llama 3.1 8B (or alternative 7B-class model) on vLLM and SGLang across 7 phases: inference primitives (W1-2), vLLM baseline (W3-5), tuning study (W6-7), quantization (W8-9), speculative decoding (W10-11), SGLang head-to-head (W12-13), multi-tenant + production (W14-16). Each module produces a benchmark study or engineering note against a fixed 200-prompt eval set. Capstone = a single repo containing the harness + eval set + per-phase CSVs + cookbook markdown + 1-page README — portfolio-grade artifact.
 
-1. **Attention math + the inference step.** Re-derive scaled dot-product attention; trace one token's forward pass through a small transformer. *Reading:* Karpathy's nanoGPT walkthrough; Lilian Weng "The Transformer Family." *Implement:* tiny single-head attention from scratch in PyTorch.
-2. **KV cache mechanics.** What's actually stored, memory profile, how generation differs from training. *Reading:* "Efficient Memory Management for Large Language Model Serving with PagedAttention" (Kwon et al., vLLM paper) §2-3. *Implement:* add KV cache to nanoGPT's generate loop; measure memory + latency before/after.
-3. **Sampling strategies.** Greedy, top-k, top-p, temperature, beam search; what production picks and why. *Reading:* HuggingFace generation docs; Holtzman et al. "The Curious Case of Neural Text Degeneration." *Implement:* swap samplers, profile latency, A/B perplexity on a fixed prompt set.
-4. **Inference vs training: where the work goes.** Compute-bound vs memory-bound, arithmetic intensity, why H100 ≠ 2× A100 for inference. *Reading:* Horace He's "Making Deep Learning Go Brrrr From First Principles."
+**Hardware requirement (BLOCKING for Phase 2):** RunPod RTX 4090 (~$0.50/hr) as default; A100 40GB upgrade for Phases 5 + 7. Estimated $80-150 total spend over 16 weeks. BosonAI work-provided GPU access is the cheaper alternative if policy allows. Full hardware/software/eval-set/model-selection details in the curriculum file's "Hardware Requirements" section.
 
-### Phase 2: Throughput Optimization (Modules 5-9)
+**Pre-Phase-2 checklist** (resolve before Module 4 starts): GPU access confirmed, CUDA 12.4+ installed, Python 3.10-3.12 venv set up, vLLM + SGLang installed, Llama 3.1 8B Instruct weights downloaded, 200-prompt eval set drafted, HF token configured.
 
-5. **Continuous batching.** Why static batching kills throughput in inference; how Orca / vLLM solve it. *Reading:* Yu et al. "Orca"; vLLM paper §4. *Implement:* port a basic continuous batching scheduler.
-6. **PagedAttention + block KV cache.** Memory fragmentation, virtual memory for attention. *Reading:* vLLM paper §3-4 in depth.
-7. **Speculative decoding.** Draft model + verify model, expected speedup, when it fails. *Reading:* Leviathan et al. "Fast Inference from Transformers via Speculative Decoding"; Chen et al. "Accelerating Large Language Model Decoding with Speculative Sampling." *Implement:* speculative decoding loop with a 70M draft model verifying a larger target.
-8. **Quantization basics.** INT8, INT4, fp16/bf16; calibration vs weight-only vs activation. *Reading:* LLM.int8 (Dettmers); GPTQ (Frantar); AWQ (Lin et al.). *Implement:* quantize a model with one of the libraries (bitsandbytes, AWQ, GPTQ), measure quality drop.
-9. **Compilation + kernel fusion.** PyTorch 2.x compile, Flash Attention, custom CUDA kernels. *Reading:* Flash Attention paper (Dao et al.); Flash Attention 2.
-
-### Phase 3: Multi-Tenant Production Serving (Modules 10-13)
-
-10. **Request scheduling + admission control.** Priority queues, SLA tiers, backpressure. *Reading:* AWS Builders' Library "Caching at scale"; Anthropic / OpenAI public posts on serving architecture.
-11. **Latency engineering.** P50 / P95 / P99, head-of-line blocking in token generation, prefix caching. *Reading:* Google SRE Book Ch. 4 (Service Level Objectives); papers on speculative + chunked prefill.
-12. **Cost engineering.** Cost per million tokens math; H100 vs A100 vs L4; spot vs on-demand. *Reading:* public cost analysis posts (Together, Anyscale, Fireworks comparisons).
-13. **Observability for inference.** Metrics that matter (TTFT, TPOT, throughput, GPU utilization, KV-cache hit rate). *Reading:* vLLM metrics docs; OpenTelemetry semantic conventions for LLM serving.
-
-### Phase 4: Capstone (Modules 14-16)
-
-14-16. **Apply to TBD inference project.** Three weeks of focused project work using the primitives above. Define a concrete optimization arc (e.g., nanoGPT → +KV cache → +continuous batching → +INT8 quantization → measure end-to-end throughput improvement on a fixed eval set).
-
-### Reference Materials
-
-- **Papers:** vLLM (Kwon), Orca (Yu), Flash Attention (Dao), Speculative Decoding (Leviathan / Chen), LLM.int8 (Dettmers), GPTQ (Frantar), AWQ (Lin).
-- **Books:** *Programming Massively Parallel Processors* (Hwu/Kirk); *Deep Learning Systems* (Chen / Tao if it has shipped); CMU 11-664 / 15-749 lecture notes.
-- **Code to read:** vLLM, TGI (HuggingFace), SGLang, llama.cpp, TensorRT-LLM, FlashInfer.
-- **Videos:** Karpathy's "Let's build GPT," "Neural Networks Zero to Hero" series; CMU Catalyst talks; vLLM talks at MLSys.
-
-### Grading rubric (for Telos)
-
-- **Conceptual** (40%): can Daniel re-derive the mechanic from primitives without notes?
-- **Implementation** (40%): does the module-end artifact run + measure correctly?
-- **Connection** (20%): does the 3-5 sentence writeup tie the concept to TBD-inference-project decisions or SDF?
+**Pivot rationale:** Originally proposed nanoGPT-extended (builder-mode). Daniel's stated end-state is to operate production engines (vLLM, SGLang), not build them. Operator-mode produces direct skill match + stronger portfolio signal at staff-level. Phase 1 retains a quick nanoGPT pass-through (~2 weeks) for ground-truth intuition before pivoting to operator work in Phase 2.
 
 ---
 
