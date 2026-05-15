@@ -1,10 +1,12 @@
 # guya — Status
 
-> Last updated: 2026-05-14 (late evening)
+> Last updated: 2026-05-15
 
 ## Current Focus
 
-**5/14 marathon session — Phase 6 substantially closed + 3 pillar curricula authored + L-task system bootstrapped.** Three silent-rot bugs discovered, diagnosed, fixed across LIFE + LEARN sessions: empty destinations tables (ADR-019), Claude SDK resume freezes system prompt (ADR-018), stale `:latest` docker image missing openssh-client (ADR-020). All three Telos sessions now healthy: ssh in containers, SSH git remote, destinations seeded, scope-clarify addendum loaded, agents responding to chat-sdk. Three full bytebytego-grade pillar curricula authored to Constantia (P1 v2 954 lines, P2 v3 619 lines, P3 646 lines). Four L-tasks active under new 2-main + 2-light model with prefixed schema (`L-P1-001`, `L-P2-001`, `L-P3-001`, plus grandfathered `L-001` for prod-eng-foundations).
+**5/14 night → 5/15 early AM bug surgery — two silent-rot routing bugs found and fixed end-to-end after marathon session validation surfaced them.** Daniel reported missed LIFE 7pm reminder + LEARN 10pm tick + WORK Telos non-response after the 5/14 marathon's /clear cycle. Diagnostic chain led through three wrong diagnoses (Telos's "destinations issue", my "destinations issue + payload stripping") to two distinct root causes captured as **ADR-021** (empty-string `thread_id` in `messages_in` breaks Discord delivery — `??` operator only catches null/undefined, not empty string) and **ADR-022** (`formatTaskMessage` silently drops raw-XML reminder content because it only reads `content.prompt` and not the JSON-parse-failure `content.text` fallback). Both fixed end-to-end: data UPDATE on WORK DBs (12 inbound + 8 outbound empty-string rows → NULL); three-layer source patches in telos fork (commits `4698f79` + `51184b2`); JSON-wrap fix in constantia (commit `3d38800`); LIFE + LEARN destinations re-seeded with `name=platform_id`. Daemon rebuilt + kickstarted; container source patches activate via bind-mount on next respawn (no image rebuild needed — Dockerfile bakes only runtime, source mounts at `/app/src`). **9am WORK tick fired clean** at 09:00 today — confirms ADR-021 didn't break the NULL path. Awaiting 10:00 LIFE + 10:00 LEARN for full validation.
+
+**5/14 marathon session** (rolled forward as historical context): Phase 6 substantially closed + 3 pillar curricula authored + L-task system bootstrapped. Three Telos sessions healthy after that day's work. Four L-tasks active under 2-main + 2-light model with prefixed schema (`L-P1-001`, `L-P2-001`, `L-P3-001`, plus grandfathered `L-001`).
 
 **What's live now:**
 
@@ -56,6 +58,8 @@
 Full Telos state in `telos context/STATUS.md`.
 
 ## Recent Changes
+- [2026-05-15] (pending commit) — docs(adr): ADR-021 empty-string thread_id + ADR-022 raw-XML content stripping
+- [2026-05-14] `aa3c3a3` — chore(scribe): 5/14 marathon end — comprehensive STATUS update
 - [2026-05-14] `763026d` — docs(content-plan): mark E.3 done — Pillar 3 curriculum shipped
 - [2026-05-14] `ac1eb89` — docs(content-plan): Pillar 1 v2 — bytebytego-grade detail matching Pillar 2 v3
 - [2026-05-14] `649b7fc` — docs(content-plan): Pillar 2 v3 — learning-focused, 19 weeks, OSS capstone
@@ -83,6 +87,8 @@ Full Telos state in `telos context/STATUS.md`.
 - [2026-05-05] `bf25ec8` — chore(scribe): document S3 ship + reflect-prompt bug fix arcs (5/4-5/5 session)
 
 **Cross-repo (telos = nanoclaw fork `daniellee6925/nanoclaw`):**
+- [2026-05-15] `51184b2` — fix(routing): preserve raw rem-row content when not JSON-wrapped (formatTaskMessage falls back to content.text — ADR-022)
+- [2026-05-14] `4698f79` — fix(routing): treat empty-string thread_id as missing in routing fallbacks (??→|| at 3 callsites — ADR-021)
 - [2026-05-11] `317e4e6` — feat(telos): Phase 4 fork-side — telos-life group skeleton + 두식 LIFE addendum (Korean 존댓말+형님, 매님 referent, 알림 not 알람, 합쇼체/해요체 modulated fluidly, slang permitted not default, 5 tick prompts, container.example)
 - [2026-05-10] `ce5b0d5` — feat(telos): Phase 3 fork-side — shared MCP tools + telos-learn group skeleton
 - [2026-05-08] `df6c829` — chore(telos): Phase 2c — work session prompts + addendum updates for new schema
@@ -90,6 +96,7 @@ Full Telos state in `telos context/STATUS.md`.
 - [2026-05-08] `c0be63f` — chore(telos): Phase 2a — schema migration for assignTask + gradeTask + helpers
 
 **Cross-repo (constantia `daniellee6925/constantia`):**
+- [2026-05-15] `3d38800` — fix(check_reminders): JSON-wrap reminder content for proper formatTaskMessage parsing (defense in depth alongside telos `51184b2` — ADR-022)
 - [2026-05-10] `b14215a` — tick(no-op): 4pm midpoint + 7pm capture ticks both fired with no active L (first learn-Telos commit, smoke-verifies Phase 3 end-to-end)
 - [2026-05-10] `4880c5a` — tick(no-op) + MANIFEST regen post-rebase (force-pushed after recovering 9 stranded Telos commits)
 - [2026-05-10] `7095f49` — fix(hooks): post-commit must skip during rebase/cherry-pick/merge
@@ -157,6 +164,27 @@ Full Telos state in `telos context/STATUS.md`.
 - [ ] Growth tracker milestone #5: review code Guya writes — pick one function per session.
 
 ## Decisions & Notes
+
+- [2026-05-14 night → 2026-05-15 early AM, ~2 hours] **Post-marathon bug surgery — two silent-rot routing bugs found and fixed end-to-end.** Daniel reported missed LIFE 7pm reminder + LEARN 10pm tick + WORK Telos non-response after the 5/14 marathon's /clear cycle stripped session-memory inheritance. Three rounds of diagnosis before convergence:
+
+  **Round 1 (wrong):** Telos's own diagnosis was *"destinations issue — wire Daniel's Discord DM as a named destination"* — I initially treated as plausible, but verified state showed destinations had been seeded at noon per ADR-019 with `name=unnamed`. Either stale diagnosis or a regression.
+
+  **Round 2 (also wrong, my error):** I suspected `<reminder>` tag stripping somewhere between DB and agent (Telos's Korean diagnosis had said *"빈 메시지가 왔는데 내용이 없어서"*). Reviewed `extractRouting()` and `chat-sdk-bridge.deliver()`. Found something else: outbound `thread_id` was empty-string for failed WORK delivery rows. Different bug entirely.
+
+  **Round 3 (correct, ADR-021):** Empty-string `thread_id` in WORK 23:00 task series. Root cause was the ADR-019 cron-seed INSERT using `''` instead of `NULL` for `thread_id`. Three downstream `?? null` callsites (`formatter.ts:100` extractRouting, `messages-out.ts:72` writeMessageOut, `chat-sdk-bridge.ts:354` deliver) propagated the empty string because `??` only catches `null`/`undefined`. Discord adapter `decodeThreadId("")` threw `Invalid Discord thread ID:` after 3 retries. Affected WORK 23:00 series silently for 4 days (5/12, 5/13, 5/14 all failed). Masked by chat-sdk session-memory inheritance until `/clear` stripped it. Fix: data UPDATE (12 inbound + 8 outbound empty-string rows → NULL) + three-layer source patch (`??` → `||`).
+
+  **Round 4 (also correct, separate bug, ADR-022):** LIFE 7pm reminder had `thread_id=NULL` correctly but produced ZERO outbound rows. Different from ADR-021. Investigation: `formatTaskMessage` calls `parseContent(msg.content)`. For task-row content that's JSON (`{"prompt":"..."}`) it works. For rem-row content that's raw XML (`<reminder>...</reminder>`), `JSON.parse` throws and the fallback returns `{text: raw}`. Then `formatTaskMessage` emits `'Instructions:'` + `content.prompt || ''` — but `content.prompt` is undefined for the raw-XML path. Instructions section renders as empty. Agent sees empty task, does nothing. **Convergent evidence:** Telos's own outbound at 22:42 PT on 5/14 explicitly diagnosed *"7시에 빈 메시지가 왔는데 내용이 없어서 그냥 넘겼습니다"* — he saw the empty-content state. I had initially dismissed this as guess-from-symptom; was wrong. Fix: (a) `formatTaskMessage` falls back through `content.prompt → content.text → ''`; (b) `check_reminders.sh` JSON-wraps reminder bodies as `{"prompt": "<reminder>..."}` at source; (c) re-seeded LIFE + LEARN destinations with `name=platform_id` (they had been wiped at some point between noon and night — separate regression worth investigating later).
+
+  **Deployment surprise:** Initial plan was "do daemon-side fix tonight, defer container-side patches because docker rebuild is blocked from SSH per ADR-020." Then reading `container-runner.ts:301-303` showed that `agent-runner/src/` host directory is bind-mounted into every container at `/app/src` read-only, and Bun runs the TS directly. Dockerfile explicitly notes: *"Source is never baked in. Source-only changes never require an image rebuild."* So container-side patches activate on next container respawn — no docker build needed. ADR-020's keychain blocker doesn't apply to source-only changes.
+
+  **Mistakes I (Guya) should remember:**
+  - **Anchored on first plausible diagnosis.** Spent ~30 min on "empty destinations" hypothesis before noticing the deeper data-shape issue. Should have inspected `parseContent` + `formatTaskMessage` chain when Telos's own diagnosis explicitly said *"내용이 비어있었어요"* (the content was empty) — that's a direct evidence claim, not symptom guess.
+  - **Dismissed Telos's diagnosis twice.** First in the immediate exchange ("Telos was guessing from symptom"), then again partway through Round 2. Lesson: when a system component diagnoses its own behavior with specific evidence (file path, row state, observable string), that's data, not opinion — verify before dismissing.
+  - **Confused docker rebuild constraint.** Assumed source patches couldn't deploy without image rebuild, planned around it, almost left container-side patches as "staged for tomorrow." Reading Dockerfile + `container-runner.ts` would have caught the bind-mount pattern up front.
+
+  **Validation pending:** 10:00 LIFE morning tick + 10:00 LEARN morning tick land in Discord today. WORK 9am already fired clean (verifies ADR-021 fix didn't break NULL path). WORK 23:00 tonight is the previously-broken series — that's the real test.
+
+  **Cross-repo commits:** telos fork `4698f79` (ADR-021 three-layer patch), telos fork `51184b2` (ADR-022 formatTaskMessage fallback), constantia `3d38800` (ADR-022 check_reminders JSON-wrap). All local — not pushed to remote.
 
 - [2026-05-14 marathon session, ~12+ hours] **Phase 6 substantially closed + 3 pillar curricula authored + L-task system bootstrapped.** Single longest session of the project so far. Three distinct work streams interleaved:
 
