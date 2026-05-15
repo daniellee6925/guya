@@ -48,3 +48,13 @@ Same as ADR-011/012/013/016/018/019/020/021: silent rot of trusted enforcement, 
 
 - Telos fork `51184b2` — `formatTaskMessage` fallback
 - Constantia `3d38800` — `check_reminders.sh` JSON-wrap
+
+## Correction (2026-05-15)
+
+**Step 3 of the fix — "re-seed LIFE + LEARN destinations with `name=platform_id`" — was at the wrong layer.** Same mistake as the original ADR-019 fix: writing into per-session `destinations` tables instead of the central `agent_destinations`. The host's `writeDestinations()` projection wipes per-session rows on every container wake.
+
+This surfaced 2026-05-15 morning when LEARN's 10am tick produced no Discord output despite the formatter + JSON-wrap fixes being live. Investigation showed LEARN destinations was empty again — the seed had been wiped by the container respawn that processed the tick.
+
+**Correct fix layer:** central `agent_destinations` in `v2.db`. See ADR-019 correction for the SQL.
+
+LEARN's tick-output-not-delivering issue ALSO had a second root cause unrelated to destinations: the routing context extracted at wake time doesn't refresh when chat-sdk follow-ups arrive. That separate bug + fix is captured in ADR-023.

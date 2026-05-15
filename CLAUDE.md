@@ -50,6 +50,7 @@ I open Claude Code and Guya already knows who I am, what I care about, and gets 
 | 020 | Per-agent docker image tags can drift from `:latest`; bulk SQL cleanup pitfall ([details](docs/adrs/adr-020-image-tag-drift.md)) | Use `docker tag` not `docker commit`; filter `process_after` in bulk UPDATEs |
 | 021 | Empty-string `thread_id` in `messages_in` breaks Discord delivery via `??` semantics ([details](docs/adrs/adr-021-empty-string-thread-id.md)) | JS `??` only catches null/undefined; use `||` or write NULL not `''` |
 | 022 | Raw-XML `messages_in.content` silently rendered as empty Instructions by formatTaskMessage ([details](docs/adrs/adr-022-raw-xml-content-stripped.md)) | Fallback through `content.prompt → content.text`; JSON-wrap at source |
+| 023 | Tick-wake routing inheritance + central `agent_destinations` is the durable seed layer ([details](docs/adrs/adr-023-learn-routing-and-central-destinations.md)) | Routing context must refresh on follow-ups; per-session destinations is a projection cache, not source of truth |
 
 ## Research Foundations
 

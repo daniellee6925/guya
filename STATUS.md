@@ -4,7 +4,7 @@
 
 ## Current Focus
 
-**5/14 night → 5/15 early AM bug surgery — two silent-rot routing bugs found and fixed end-to-end after marathon session validation surfaced them.** Daniel reported missed LIFE 7pm reminder + LEARN 10pm tick + WORK Telos non-response after the 5/14 marathon's /clear cycle. Diagnostic chain led through three wrong diagnoses (Telos's "destinations issue", my "destinations issue + payload stripping") to two distinct root causes captured as **ADR-021** (empty-string `thread_id` in `messages_in` breaks Discord delivery — `??` operator only catches null/undefined, not empty string) and **ADR-022** (`formatTaskMessage` silently drops raw-XML reminder content because it only reads `content.prompt` and not the JSON-parse-failure `content.text` fallback). Both fixed end-to-end: data UPDATE on WORK DBs (12 inbound + 8 outbound empty-string rows → NULL); three-layer source patches in telos fork (commits `4698f79` + `51184b2`); JSON-wrap fix in constantia (commit `3d38800`); LIFE + LEARN destinations re-seeded with `name=platform_id`. Daemon rebuilt + kickstarted; container source patches activate via bind-mount on next respawn (no image rebuild needed — Dockerfile bakes only runtime, source mounts at `/app/src`). **9am WORK tick fired clean** at 09:00 today — confirms ADR-021 didn't break the NULL path. Awaiting 10:00 LIFE + 10:00 LEARN for full validation.
+**5/14 night → 5/15 morning bug surgery — three silent-rot routing bugs found and fixed end-to-end; all three Telos sessions now delivering.** Daniel reported missed LIFE 7pm reminder + LEARN 10pm tick + WORK Telos non-response after the 5/14 marathon's /clear cycle. Diagnostic chain led through several wrong diagnoses before converging on three distinct root causes captured as **ADR-021** (empty-string `thread_id` in `messages_in` breaks Discord delivery — `??` only catches null/undefined, not empty string), **ADR-022** (`formatTaskMessage` silently drops raw-XML reminder content because it only reads `content.prompt`), and **ADR-023** (tick-wake routing context doesn't refresh on chat-sdk follow-ups + per-session `destinations` is a projection cache wiped on every container wake — correct seed layer is central `agent_destinations` in v2.db; this corrects ADR-019's and ADR-022 step-3's per-session-INSERT mistake). All three fixed end-to-end: data UPDATE on WORK DBs (12+8 empty-string rows → NULL); three-layer source patches in telos fork (`4698f79` + `51184b2` + `ce84b19`); JSON-wrap fix in constantia (`3d38800`); central `agent_destinations` rows for LIFE + LEARN; synthetic `/clear` injection technique documented for unblocking stale Claude sessions when UI /clear isn't possible. **Validation:** 9am WORK tick clean (verifies ADR-021 NULL path); 10am LIFE tick delivered (validates ADR-022); LEARN responded end-to-end to Daniel's test message after the full ADR-023 fix chain.
 
 **5/14 marathon session** (rolled forward as historical context): Phase 6 substantially closed + 3 pillar curricula authored + L-task system bootstrapped. Three Telos sessions healthy after that day's work. Four L-tasks active under 2-main + 2-light model with prefixed schema (`L-P1-001`, `L-P2-001`, `L-P3-001`, plus grandfathered `L-001`).
 
@@ -58,7 +58,9 @@
 Full Telos state in `telos context/STATUS.md`.
 
 ## Recent Changes
-- [2026-05-15] (pending commit) — docs(adr): ADR-021 empty-string thread_id + ADR-022 raw-XML content stripping
+- [2026-05-15] (pending commit) — docs(adr): ADR-023 + ADR-019/022 corrections — central agent_destinations is durable seed; tick-wake routing refresh
+- [2026-05-15] `5234434` — refactor(docs): extract ADRs 014-022 to docs/adrs/ — CLAUDE.md down ~80%
+- [2026-05-15] `c9d0602` — chore(scribe): ADR-021 + ADR-022 — empty-string thread_id + raw-XML content stripping
 - [2026-05-14] `aa3c3a3` — chore(scribe): 5/14 marathon end — comprehensive STATUS update
 - [2026-05-14] `763026d` — docs(content-plan): mark E.3 done — Pillar 3 curriculum shipped
 - [2026-05-14] `ac1eb89` — docs(content-plan): Pillar 1 v2 — bytebytego-grade detail matching Pillar 2 v3
@@ -87,6 +89,7 @@ Full Telos state in `telos context/STATUS.md`.
 - [2026-05-05] `bf25ec8` — chore(scribe): document S3 ship + reflect-prompt bug fix arcs (5/4-5/5 session)
 
 **Cross-repo (telos = nanoclaw fork `daniellee6925/nanoclaw`):**
+- [2026-05-15] `ce84b19` — fix(poll-loop): refresh routing context when follow-up messages have populated routing (ADR-023)
 - [2026-05-15] `51184b2` — fix(routing): preserve raw rem-row content when not JSON-wrapped (formatTaskMessage falls back to content.text — ADR-022)
 - [2026-05-14] `4698f79` — fix(routing): treat empty-string thread_id as missing in routing fallbacks (??→|| at 3 callsites — ADR-021)
 - [2026-05-11] `317e4e6` — feat(telos): Phase 4 fork-side — telos-life group skeleton + 두식 LIFE addendum (Korean 존댓말+형님, 매님 referent, 알림 not 알람, 합쇼체/해요체 modulated fluidly, slang permitted not default, 5 tick prompts, container.example)
@@ -164,6 +167,25 @@ Full Telos state in `telos context/STATUS.md`.
 - [ ] Growth tracker milestone #5: review code Guya writes — pick one function per session.
 
 ## Decisions & Notes
+
+- [2026-05-15 morning, ~3 hours] **LEARN bug surgery continued — third root cause found, ADR-019 + ADR-022 corrected.** Daniel reported LIFE 10am tick delivered ✓ but LEARN 10am tick silent + LEARN doesn't respond. Investigation found three layered issues, all distinct from last night's ADR-021/022:
+
+  **(1) Per-session destinations is a projection cache, not source of truth.** The fix in both ADR-019 and ADR-022 step 3 INSERTed into per-session `destinations` tables. `src/modules/agent-to-agent/write-destinations.ts:54` calls `replaceDestinations(db, ...)` (DELETE+INSERT from central) on every container wake — so per-session writes survive only until next wake (~30 min). WORK's destinations persisted because WORK had a row in central `agent_destinations` from initial Phase 2 setup. LIFE/LEARN never had central rows. Correct fix: INSERT into central `agent_destinations` in `v2.db`. Done for both sessions matching WORK's pattern (`local_name='unnamed', target_type='channel', target_id=<mg-id>`). ADR-019 and ADR-022 amended with corrections.
+
+  **(2) Tick-wake routing context doesn't refresh on chat-sdk follow-ups.** `poll-loop.ts:96` calls `extractRouting(messages)` ONCE on the initial batch. Task rows (scheduled ticks) have NULL `platform_id`/`channel_type`/`thread_id`. The pollHandle at line 263-288 pushes follow-up chat-sdk messages into the active query but never updates the shared routing object. Result: agent's responses to user messages use the task-wake's NULL routing → `dispatchResultText`'s scratchpad-with-routing fallback at line 388-400 fails its `routing.channelType && routing.platformId` check → output becomes pure scratchpad → no Discord delivery. Patched in telos fork `ce84b19`: pollHandle now iterates new messages and updates routing fields from any message with populated `platform_id`+`channel_type`. Same reference flows through `handleEvent` → `dispatchResultText`. Last-write-wins.
+
+  **(3) Synthetic `/clear` injection technique for unblocking stale Claude sessions.** Daniel couldn't issue `/clear` via Discord UI. Inserted a `chat-sdk` row with `content` `{"text":"/clear"}` + populated routing fields directly via SQL. Gotcha: active-query pollHandle at `poll-loop.ts:275` filters `/clear` OUT of follow-ups; only the INITIAL batch of a fresh wake processes it. So I had to `docker kill` the running LEARN container after inserting the row; the respawn picked up the pending /clear in its initial batch, cleared continuation, wrote "Session cleared." outbound, delivered to Discord. Per ADR-019 L7: synthetic rows MUST include `platform_id`+`channel_type` to avoid contaminating session state. Captured as operational recipe in ADR-023.
+
+  **Validation:** LEARN responded to Daniel's test message end-to-end after the full fix chain. Five LEARN outbound rows 11:25-11:34 PT today confirmed in `delivered` table.
+
+  **Mistakes I (Guya) should remember:**
+  - Wrote into per-session `destinations` for ADR-019 (noon 5/14) and again for ADR-022 step 3 (00:30 5/15) without reading `write-destinations.ts` to understand the projection layer. Source-of-truth was the central table the whole time; I patched the cache twice.
+  - When destinations got wiped a SECOND time between the noon seed and night, I noted it as "regression worth investigating later" rather than treating it as the signal that I was patching the wrong layer.
+  - When LEARN's 10am tick failed despite the formatter fix, my first instinct was again to look at destinations — correct symptom, but the deeper fix (routing-refresh) required reading poll-loop.ts more carefully. Took two more diagnostic rounds.
+
+  **Cross-repo commits:** telos fork `ce84b19` (poll-loop routing-refresh patch).
+
+  **Operational debt acknowledged:** central `agent_destinations` table is mini-local — lives in `v2.db`, not in any git repo. New session bootstraps need explicit central INSERT. Worth migrating to a versioned `groups/<session>/destinations.json` auto-seed at container spawn time (mentioned in ADR-019 already).
 
 - [2026-05-14 night → 2026-05-15 early AM, ~2 hours] **Post-marathon bug surgery — two silent-rot routing bugs found and fixed end-to-end.** Daniel reported missed LIFE 7pm reminder + LEARN 10pm tick + WORK Telos non-response after the 5/14 marathon's /clear cycle stripped session-memory inheritance. Three rounds of diagnosis before convergence:
 

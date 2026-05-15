@@ -40,3 +40,22 @@ Destinations table is mini-local (lives in session inbound.db, not in any git re
 - Phase 3 + 4 deploy runbooks now have explicit "verify destinations row count > 0" step
 - Consider a daily smoke that grep's nanoclaw's logs for `WARNING: agent output had no <message>` lines — that warning is the canonical fingerprint of this class of bug
 - Extend guya-hook-smoke to flag any new session deploy that doesn't include destinations seeding
+
+## Correction (2026-05-15)
+
+**The original fix was at the wrong layer.** The INSERTs into per-session `destinations` tables get wiped on every container respawn.
+
+`src/modules/agent-to-agent/write-destinations.ts:54` calls `replaceDestinations(db, resolved)`, which is `DELETE FROM destinations` followed by `INSERT` from the central `agent_destinations` table. This runs on every container wake. So manual SQL writes into per-session `destinations` survive only until the next wake — typically 30 minutes (the absolute-ceiling kill cycle).
+
+**Correct fix:** INSERT into the central `agent_destinations` table in `v2.db`. WORK had this row from initial setup (`ag-1777143186174-ykqd40 | unnamed | channel | mg-1777143186175-y1fe2x | ...`), which is why WORK's destinations row always survived. LIFE and LEARN never had central rows — every projection overwrote with empty.
+
+LIFE + LEARN re-seeded correctly on 2026-05-15 with:
+```sql
+INSERT INTO agent_destinations (agent_group_id, local_name, target_type, target_id, created_at)
+VALUES ('ag-1778531816000-life', 'unnamed', 'channel', 'mg-1778531816000-life', datetime('now'));
+
+INSERT INTO agent_destinations (agent_group_id, local_name, target_type, target_id, created_at)
+VALUES ('ag-1778451576000-learn', 'unnamed', 'channel', 'mg-1778451576000-LEARN', datetime('now'));
+```
+
+Full discovery + downstream consequences captured in ADR-023.
