@@ -51,6 +51,7 @@ I open Claude Code and Guya already knows who I am, what I care about, and gets 
 | 021 | Empty-string `thread_id` in `messages_in` breaks Discord delivery via `??` semantics ([details](docs/adrs/adr-021-empty-string-thread-id.md)) | JS `??` only catches null/undefined; use `||` or write NULL not `''` |
 | 022 | Raw-XML `messages_in.content` silently rendered as empty Instructions by formatTaskMessage ([details](docs/adrs/adr-022-raw-xml-content-stripped.md)) | Fallback through `content.prompt → content.text`; JSON-wrap at source |
 | 023 | Tick-wake routing inheritance + central `agent_destinations` is the durable seed layer ([details](docs/adrs/adr-023-learn-routing-and-central-destinations.md)) | Routing context must refresh on follow-ups; per-session destinations is a projection cache, not source of truth |
+| 024 | Docker bind-mount breaks container-side `git rebase`; host-side `constantia-sync` daemon owns push ([details](docs/adrs/adr-024-constantia-sync-daemon.md)) | Container commits via `commitOnly(message, paths)` on bind mount; host daemon polls every 5s and pushes via native APFS git. Heartbeat in `.git/sync-status.json` surfaces silent-rot risk |
 
 ## Research Foundations
 
