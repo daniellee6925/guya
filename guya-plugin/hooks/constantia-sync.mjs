@@ -44,6 +44,57 @@ export function resolveConstantiaPath() {
   }
 }
 
+/**
+ * Read the constantia-sync daemon's status file (ADR-024) and return an alert
+ * string when something is wrong, or null when healthy or daemon not deployed.
+ *
+ * Alerts fire on:
+ *   - heartbeat stale (>SYNC_STALE_THRESHOLD_MS old) → daemon dead or hung
+ *   - last_cycle_outcome == 'conflict' → rebase blocked, manual resolution
+ *   - last_cycle_outcome == 'push-failed' / 'fetch-failed' → network/auth
+ *
+ * Returns null when status file is absent (daemon not deployed on this host —
+ * e.g. laptop session reading a constantia checkout that no daemon writes to).
+ *
+ * Depends on daemon's atomic write contract (tmp + rename) so a concurrent
+ * readFileSync never sees a partial file. ENOENT during the rename window is
+ * caught and reported as a generic read failure, not silently swallowed.
+ *
+ * Cheap (one JSON file read). Safe to call on every session-start.
+ */
+const SYNC_STALE_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
+
+export function readSyncStatus(constantiaPath) {
+  try {
+    const statusPath = join(constantiaPath, '.git', 'sync-status.json');
+    if (!existsSync(statusPath)) return null;
+
+    const status = JSON.parse(readFileSync(statusPath, 'utf-8'));
+    const lastCycleMs = status.last_cycle_ts ? Date.parse(status.last_cycle_ts) : NaN;
+
+    if (!Number.isFinite(lastCycleMs)) {
+      return 'constantia-sync: no heartbeat in status file';
+    }
+
+    const ageMs = Date.now() - lastCycleMs;
+    if (ageMs > SYNC_STALE_THRESHOLD_MS) {
+      const ageMin = Math.floor(ageMs / 60000);
+      return `constantia-sync stale: last heartbeat ${ageMin}m ago (daemon dead or hung?)`;
+    }
+    if (status.last_cycle_outcome === 'conflict') {
+      const filesArr = Array.isArray(status.conflict_files) ? status.conflict_files : [];
+      const files = filesArr.join(', ') || '(no files captured)';
+      return `constantia-sync blocked on rebase conflict: ${files}`;
+    }
+    if (status.last_cycle_outcome === 'push-failed' || status.last_cycle_outcome === 'fetch-failed') {
+      return `constantia-sync last cycle: ${status.last_cycle_outcome} — ${status.last_error || 'no detail'}`;
+    }
+    return null;
+  } catch (e) {
+    return `constantia-sync status read failed: ${e.message}`;
+  }
+}
+
 export function readTaskManifest(constantiaPath) {
   const manifestPath = join(constantiaPath, 'tasks', 'MANIFEST.md');
   const content = existsSync(manifestPath) ? readFileSync(manifestPath, 'utf-8').trim() : null;

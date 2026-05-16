@@ -22,7 +22,7 @@ import { join } from 'path';
 import { homedir } from 'os';
 import { fileURLToPath } from 'url';
 
-import { resolveConstantiaPath, readTaskManifest } from './constantia-sync.mjs';
+import { resolveConstantiaPath, readTaskManifest, readSyncStatus } from './constantia-sync.mjs';
 
 const GLOBAL_DIR = join(homedir(), '.claude', 'guya');
 const TOKEN_BUDGET = 3000;
@@ -269,7 +269,7 @@ function assembleContext(cwd) {
     sections.push({ label: 'session-context', content: sessionCtx, priority: 5 });
   }
 
-  // 8. Constantia active tasks (shared memory — cross-agent truth)
+  // 8. Constantia active tasks (shared memory — cross-agent truth) + sync daemon health
   const constantia = resolveConstantiaPath();
   if (constantia.error) {
     sections.push({ label: 'constantia-alert', content: `⚠️ Constantia unavailable: ${constantia.error}`, priority: -1 });
@@ -277,6 +277,13 @@ function assembleContext(cwd) {
     const taskManifest = readTaskManifest(constantia.path);
     if (taskManifest) {
       sections.push({ label: 'constantia-tasks', content: taskManifest, priority: 0 });
+    }
+    // constantia-sync daemon health (ADR-024). Returns an alert string only
+    // when something's wrong — heartbeat stale, rebase blocked, or push failed.
+    // Returns null when healthy OR when daemon not deployed on this host.
+    const alert = readSyncStatus(constantia.path);
+    if (alert) {
+      sections.push({ label: 'constantia-sync-alert', content: `⚠️ ${alert}`, priority: -1 });
     }
   }
 
