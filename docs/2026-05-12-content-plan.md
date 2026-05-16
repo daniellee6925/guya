@@ -48,7 +48,7 @@ This doc captures: (a) the canonical Day-2 content todo list, organized by gate 
 
 ### Tranche 3 — recurring meta-rhythms (can defer)
 
-- [ ] **I.1 Sunday week-ahead review** — separate tick or fold into existing Sunday LIFE tick.
+- [x] **I.1 Daily + Sunday planning ticks** SHIPPED 2026-05-16. Two new WORK ticks: daily-plan at `0 22 * * 1-6` (Mon-Sat) reading `tick-plan-daily-prompt.md`; weekly-plan at `0 22 * * 0` (Sun) reading `tick-plan-weekly-prompt.md`. Both capture into `goals/today-plan.md` (daily artifact, rewritten each night). Sunday tick also rewrites the "Week overrides" section of `goals/weekly-schedule.md`. 9am morning tick updated to read `today-plan.md` as authoritative for "the one thing today" (heuristic = fallback). 9pm evening tick scoped down to closeout + 1-2-candidate tease (no longer asks for formal plan). First fires: daily Sat 2026-05-16 22:00 PT → Sun 5/17 today-plan; weekly Sun 2026-05-17 22:00 PT → week of 5/18 + Mon plan. Inserted into WORK inbound.db as `task-1778952123000-pland1` + `task-1778952123000-planw1`.
 - [ ] **I.2 Monthly profile synthesis** — Telos synthesizes the month's evidence into profile updates. Cron-driven.
 - [ ] **I.3 Quarterly goals review** — Daniel ↔ Telos pillar progress check.
 
