@@ -1,10 +1,10 @@
-# Constantia — Curriculum
+# Telos — Goal
 
 > The commitment artifact. Once committed to a period, execute. Decisions about swaps or additions happen at review points, not mid-period.
 
-**Commitment state:** Committed through Week 4.
-**Next review:** 2026-05-17 (Sun EOD).
-**Last updated:** 2026-04-17.
+**Commitment state:** Three pillars locked. Pillar 1 project locked 2026-05-14 as Production Serving Cookbook (vLLM + SGLang operator-mode on 7B; curriculum at `tasks/learn/curricula/pillar-1-llm-serving.md` in Constantia).
+**Next review:** 2026-05-24 (Sun EOD) — 2026-05-17 review was missed.
+**Last updated:** 2026-05-19 (catch-up — Pillar 1 project lock + review date refresh).
 
 ## North star
 

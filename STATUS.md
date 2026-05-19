@@ -40,6 +40,8 @@
 3. **WORK channel** in Discord — the next WORK tick should post there, not in DM. If it shows up in DM, the destination re-add or addendum-staleness bug is back.
 
 ## Recent Changes
+- [2026-05-19] `06d784e` — log(reflect): 2026-05-19 manual reflection — ADR-024 daemon arc + 5/19 follow-on
+- [2026-05-19] `d096c2e` — chore(scribe): batch update — ADR-024 daemon ship + Discord chunker + WORK DM removal
 
 - [2026-05-19] (telos fork `5cf11b6`) — fix(discord): set maxTextLength=2000 to re-enable chat-sdk-bridge splitter (closes nanoclaw#1)
 - [2026-05-19] (mini-local data change) — Delete WORK DM destination from central `agent_destinations` (v2.db) + per-session destinations; proactive ticks now channel-only

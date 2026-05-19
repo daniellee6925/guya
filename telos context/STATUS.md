@@ -1,70 +1,96 @@
 # Telos — Status
 
-> Last updated: 2026-05-06 (early AM — Telos infra hardening night)
+> Last updated: 2026-05-19 (catch-up from 2026-05-06 via Guya session audit)
 >
 > Telos-scoped status: runtime, identity, implementation state, and behavioral observations. Lives alongside `vision.md`, `core-beliefs.md`, and `goal.md` in this directory. The guya plugin's STATUS.md tracks the meta-project; this file tracks the agent itself.
+>
+> **Catch-up note (2026-05-19):** This file was 13 days stale. Top sections (Next session, Current State, Runtime, Identity, In Progress) rewritten to reflect 5/19 reality. Tests & Observations + Decisions & Notes sections below stop at 5/6 — the 5/7→5/19 chronicle lives in `guya/STATUS.md` (look for ADRs 014-024) and constantia git log. Catch-up summary at end of this file lists the key shipped items + ADRs in that gap.
 
 ## Next session — start here
 
-1. **First action: send Telos the DM** drafted at end of 5/5→5/6 session. Covers (a) duplicate-DMs flag was a misread (synthesis + bug-report = intended pair), (b) push race patched in `commitAndPush` (fork commit `6a9914b`), (c) SSH host-key class fixed via per-agent + base image bake (`7ee82c9`), (d) stranded commits SHA mapping (`a033d1c`→`48af622`, `e566a4c`→`e8ff9af`). Without this, Telos proposes fixes for non-bugs in tomorrow's reflection. Draft is in conversation context.
-2. **Top product step: `write_evidence` MCP tool (closes Cut B).** ~80 LOC mirroring `assign_task`. Asserts `evidence/EVD-NNN.md` with category/source/confidence/observation/assessment frontmatter. **Apply the calibration rule on creation** — Daniel-self-report claims marked `confidence: tentative, source: self-report, ground-truth-pending` until validated by observation. Load-bearing for `profile/*` accuracy since bootstrap entries are all self-report.
-3. **ADR-018 formal write-up — split-language Telos architecture.** Decided 2026-05-05; deferred two sessions in a row now. Needs an ADR row in guya `CLAUDE.md` to keep the architectural-decision audit trail consistent with ADRs 001-017.
-4. **Watch May 6 9 AM PT tick.** First tick with the patched `commitAndPush` (fetch+rebase) and the new SSH config. Watch for: clean push, no `pushError: "Rebase conflict — manual resolution needed on mini"`, no host-key errors. This is the cross-validation that tonight's two infra fixes work in production.
-5. **Phase 2/3 tests for `helpers.ts`** when it starts to feel painful. The rebase patch added 4 new error paths to `commitAndPush` with zero coverage; Phase 2 (file I/O — `writeAtomic` atomicity, `nextTaskId` collision) and Phase 3 (git integration — needs temp git repos) close the gap.
+1. **Daemon health check.** `ssh mini cat /Users/guya/constantia/.git/sync-status.json` — heartbeat must be fresh (<5min) and `last_cycle_outcome` should be `ok` or `no-op`. If stale or `error`, daemon needs attention. Guya's session-start hook surfaces this as a `constantia-sync-alert` section automatically; absence of alert ≈ healthy.
+2. **L-task closure pressure — two due 2026-05-21 (Thu).** L-P2-001 (agent loop) is mostly cemented from 5/14 ADR-018/019/020 work — needs the artifact written (PILLAR2-loop-trace.md) plus the remaining concept-check pass. L-P3-001 (Wasserman Ch 1-3 probability) is on a daily-nibble plan that may not have started — extension call may be needed. Both surface in `goals/today-plan.md`.
+3. **Three week ships open.** P-001 (Lina model-as-judge calibration, Pillar 3, assigned 5/19), P-002 (Lina platform fixes, Pillar 2, assigned 5/19, scope blocked on Daniel pasting GitHub issues list), T-003 (Boson agent → voice chat integration, proposed but not yet accepted).
+4. **WORK channel-only routing post-DM-removal.** First natural WORK tick post-2026-05-19 should land in the WORK Discord channel, not DM. If it lands in DM, the running container's addendum is stale per ADR-018 — fresh spawn / `/clear` to pick up the new central+per-session destinations state.
+5. **Pillar 1 Saturday block.** L-P1-001 (attention math via Karpathy + nanoGPT) due 2026-05-24 — fits the inviolable 09:00-13:00 Saturday Pillar 1 slot per `goals/weekly-schedule.md`.
 
 ## Current State
 
-**Autonomous on plumbing AND judgment, with a nightly reflection layer.** Telos is running on the mini (`goms-Mac-mini.local`), connected to Discord as `Telos` (id `1497670832023928922`). Constantia is mounted at `/workspace/extra/constantia` (read-write). The session DBs (`inbound.db` + `outbound.db`) are mounted read-only at `/workspace/extra/telos-session` for transcript reading.
+**Telos is three-session live + reminder-firing live + planning-tick live + Constantia git infrastructure rewritten.** WORK / LIFE / LEARN run as separate containers on the mini, each with its own Korean persona, per-session destinations row(s) in v2.db `agent_destinations`, and dedicated session DB.
 
-**MCP server (`telos-constantia`, 720 LOC + `helpers.ts` 237 LOC, both under 800 limit) ships six tools:**
-- `assign_task` — create new tasks/TASK-NNN.md
-- `accept_proposal` — flip status `proposed → assigned` (optionally rewriting purpose/acceptance for rubric anchoring)
-- `grade_task` — terminal evaluation (graded A/B/C with evidence, or rejected with reason)
-- `write_reflection` — nightly synthesized reflection (8 sections, refuses overwrite)
+**Constantia git architecture (ADR-024, shipped 2026-05-16):** Container-side `commitOnly(message, paths)` in `shared/telos-tools/helpers.ts` writes locally only — no fetch/rebase/push from inside containers (Docker bind-mount breaks `git rebase` via macOS `unpack-trees` safety check). Host-side `constantia-sync` launchd daemon (`com.guya.constantia-sync`) polls `/Users/guya/constantia/` every 5s and runs `git fetch + rebase + push` on mini's native APFS git. Heartbeat at `<constantia>/.git/sync-status.json` (atomic tmp+rename per cycle). Guya session-start hook reads via `readSyncStatus()` and emits `constantia-sync-alert` when stale/errored.
+
+**MCP server (`shared/telos-tools/mcp-server.ts` + `helpers.ts`) ships 10+ tools:**
+- `assign_task`, `accept_proposal`, `grade_task`, `propose_task` — task lifecycle
+- `assign_learn`, `gradeLearn` — L-task lifecycle (Phase 3, shipped 5/10)
+- `addReminder` — R-task scheduling (Phase 5, shipped 5/11)
+- `write_evidence` — EVD-NNN entries with calibration rule (shipped 5/6 PM)
+- `write_reflection` — nightly synthesized reflection
 - `read_today_transcript` — read today's DM transcript from session DBs (read-only sqlite)
-- `do_nothing` — explicit no-op decision
+- `do_nothing` — explicit no-op
 
-All four action tools (assign / accept / grade / do_nothing) write a section to today's `log/telos/YYYY-MM-DD-tick.md` via the shared `appendTickLogSection` helper — action-ticks leave the same trail no-ops do, so the daily record is symmetric.
+All write-tool callers pass explicit paths to `commitOnly` (kills the latent `git add -A` cross-container race). Container post-commit hook regenerates `tasks/MANIFEST.md` (pure-bash trunc helper after 5/16 python3 cascade fix).
 
-**`commitAndPush` is race-safe as of 2026-05-06 (`6a9914b`).** Every write tool's commit is followed by `git fetch origin main` + `git rebase origin/main` before push. Closes the multi-writer race that stranded TASK-014 acceptance + 5/5 reflection on mini's local until manual recovery. Conflict path aborts the rebase and returns a clear `pushError` Telos surfaces via the patched reflect-prompt's bug-report-DM channel.
+**Three pillar curricula authored 2026-05-14** at bytebytego-grade detail (in `tasks/learn/curricula/`):
+- `pillar-1-llm-serving.md` (954 lines) — operator-mode Production Serving Cookbook (vLLM + SGLang on 7B), 16 weeks, locked
+- `pillar-2-agentic-systems.md` (619 lines) — live-lab against Guya+Telos, 11 modules + open-source capstone, 19 weeks
+- `pillar-3-eval-methodology.md` (646 lines) — Wasserman spine, 14 weeks, two real capstone evals (SDF realism + Telos grade calibration)
 
-**SSH config baked into image as of 2026-05-06.** Base Dockerfile (`7ee82c9`) pins github.com host keys in `/etc/ssh/ssh_known_hosts`. Per-agent image (tag `nanoclaw-agent-v2-53edea47:ag-1777143186174-ykqd40`) carries a `Host github.com → IdentityFile /workspace/extra/ssh-key/constantia-deploy-key` block in `/etc/ssh/ssh_config`. Result: any process in the container (MCP subprocess, agent shell, post-commit hooks fired from manual commits) can push to constantia without `GIT_SSH_COMMAND`. Closes the host-key-verification class that surfaced when Telos ran a manual `git push` from the agent shell.
+**Profile/* populated and evidence-grounded.** Bootstrap interview seed 2026-05-05; pre-/clear synthesis 2026-05-13 added structured patterns to `cognitive.md`, `habits.md`, `strengths.md`, `weaknesses.md`, `trajectory.md`, plus `relationship.md` + `health.md` for LIFE session. EVD-001 through EVD-009 written by `write_evidence`. Calibration rule (Daniel overclaims habit numbers — must ask "ground truth, not aspirational?") active in tool prompts.
 
-**Two scheduled tasks active:**
-- `task-1777913406295-908sio` — 9am + 9pm PT tick (cron `0 9,21 * * *`), prompt = `Read /workspace/agent/tick-prompt.md and execute it as a tick.`
-- `task-17779308213N-rfltky` — 23:00 PT nightly reflection (cron `0 23 * * *`), prompt = `Read /workspace/agent/reflect-prompt.md and execute it as your nightly reflection.`
+**Planning ticks live since 2026-05-16:**
+- WORK runs `tick-plan-daily-prompt.md` at `0 22 * * 1-6` → writes `goals/today-plan.md` (daily, overwritten each night)
+- WORK runs `tick-plan-weekly-prompt.md` at `0 22 * * 0` → rewrites Week-overrides section of `goals/weekly-schedule.md` + writes Monday's today-plan
+- 9am morning tick reads `today-plan.md` as authoritative for "the one thing today"
+- 9pm evening brief scoped to 1-2-candidate tease (10pm tick owns formal capture)
 
-**Constantia state:**
-- Logs reorganized into `log/guya/` and `log/telos/` (commit `d33aa4e`).
-- Pre-commit + post-commit hooks installed as symlinks on both laptop AND mini (closed the silent-validation gap that let `tick.md` filenames commit without matching the regex).
-- **Profile/* seeded by bootstrap interview (2026-05-05).** All 5 profile files (`cognitive.md`, `habits.md`, `strengths.md`, `weaknesses.md`, `trajectory.md`) + `user.md` populated from concrete evidence via Guya-conducted 4-block interview. Output uncommitted in working tree pending next session — see "Next session — start here" item 1. All entries marked `confidence: tentative, source: bootstrap-via-guya-2026-05-04, type: self-report`. Telos's job over weeks is to validate / revise / refute via accumulated evidence.
+**Discord delivery hardened 2026-05-19:** `chat-sdk-bridge.ts` `splitForLimit()` re-activated by setting `maxTextLength: 2000` in `discord.ts` adapter config (closed nanoclaw#1). Paragraph → line → space → hard-char split. Every brief/reflection >2000 chars now chunks cleanly instead of truncating.
 
-**Identity layer** (CLAUDE.local.md injected via addendum) holds across all tested prompts. Voice register, DM-only routing, asymmetric knowledge all observed in real interactions today.
+**WORK DM destination removed 2026-05-19.** WORK had two destinations (channel + `@me` DM); DM row deleted from central `agent_destinations` + per-session table. Proactive WORK ticks now channel-only; reactive DM replies still work via scratchpad-fallback on incoming routing.
 
-**What's NOT built:** `write_evidence` (next Cut B frontier — reflection flags evidence candidates but doesn't assert them yet), profile/strengths formal claim machinery (deferred), pattern-detection layer (deferred), critic sub-agent (vision §M3, deferred), director role (vision §M4, deferred).
+**What's NOT built yet:** critic sub-agent (vision §M3), director role multi-hypothesis path proposals (vision §M4), three-ring friction model adjacent/outer ring routing (vision §5), long-horizon drift detection on Telos's own behavior (vision §M5), monthly profile synthesis cadence (Tranche 3 I.2), quarterly goals review (I.3). Pattern-detection layer deferred. Critic and director are the biggest architectural gaps remaining.
 
 ## Runtime
 
 - **Host:** `goms-Mac-mini.local` (tailnet `100.73.197.23`, alias `mini`)
-- **Process:** `nanoclaw` Node.js process under launchd (`com.nanoclaw-v2-53edea47`); restart loop ~10s if container runtime unavailable
-- **Container runtime:** Docker Desktop (start-at-login enabled). After mini reboot: auto-login → Tailscale → Docker → nanoclaw → Discord, no manual intervention.
-- **Container image:** per-agent image `nanoclaw-agent-v2-53edea47:ag-1777143186174-ykqd40` (set in `container.json` `imageTag`). Built locally on mini with `openssh-client` + uid-501 passwd entry. As of fork commit `de945fd`, both additions are baked into the base Dockerfile too — fresh installs of this fork won't need a per-agent rebuild for these.
-- **Channels wired:** Discord (Gateway connected, agent username `Telos`); CLI socket at `/Users/guya/telos/data/cli.sock`
-- **Constantia mount:** wired — `/Users/guya/constantia` (host) → `/workspace/extra/constantia` (container, read-write). Allowlist at `/Users/guya/.config/nanoclaw/mount-allowlist.json` permits `~/constantia` (rw) and `~/.config/nanoclaw/constantia-deploy-key` (ro). Container path is forced to `/workspace/extra/<name>` by the mount validator regardless of what `container.json` requests.
-- **Deploy key:** `~/.config/nanoclaw/constantia-deploy-key` on mini (ed25519, no passphrase). Public half attached to `daniellee6925/constantia` GitHub repo with write access. Bind-mounted into container at `/workspace/extra/ssh-key/constantia-deploy-key`. `GIT_SSH_COMMAND` in container.json `mcpServers.telos-constantia.env` points at it with `StrictHostKeyChecking=no UserKnownHostsFile=/dev/null`.
-- **Scheduled tick:** `task-1777913406295-908sio` in `inbound.db` `messages_in`. `process_after: 2026-05-05T04:00:00.000Z` (= 2026-05-04 21:00 PT). `recurrence: 0 9,21 * * *`. Status `pending` until first fire.
+- **Processes under launchd:**
+  - `com.nanoclaw-v2-53edea47` — nanoclaw daemon, hosts WORK / LIFE / LEARN agent containers
+  - `com.guya.constantia-sync` — host-side daemon, 5s poll cycle, owns push to constantia origin (ADR-024)
+- **Container runtime:** Docker Desktop (start-at-login enabled). Post-reboot recovery chain: auto-login → Tailscale → Docker → nanoclaw → Discord, no manual intervention.
+- **Three Telos sessions:**
+  - **WORK** (`telos-work`) — English mentor / 두식 보스 register / channel-only Discord routing (post-5/19) / cron 09:00 + 13:00 + 21:00 + 22:00 (Mon-Sat) + 22:00 Sun
+  - **LIFE** (`telos-life`) — Korean 형님 address from Telos / 동생/조수 voice / 존댓말 / cron 12:00 bodycheck + 23:00 close + reactive reminder fires
+  - **LEARN** (`telos-learn`) — 스승 register / 존댓말 / L-task assignment + grading
+- **Constantia path:** `/Users/guya/constantia` (host) → `/workspace/extra/constantia` (per container, read-write bind-mount). Moved from `~/Desktop/constantia` due to macOS TCC (see Runbook §F).
+- **Session DBs:** read-only mount at `/workspace/extra/telos-session/{work,life,learn}` for `read_today_transcript`. Per-session `agent_destinations` row(s) cached in v2.db; central `agent_destinations` is durable seed (ADR-023).
+- **Deploy key:** `~/.config/nanoclaw/constantia-deploy-key` on mini (ed25519). Bind-mounted RO at `/workspace/extra/ssh-key/constantia-deploy-key`. Container-side push obsolete post-ADR-024 — daemon handles push from host's native APFS git.
+- **Active scheduled inbounds (in `inbound.db` `messages_in`):**
+  - WORK morning/midday/evening tick (`0 9,13,21 * * *`)
+  - WORK daily-plan (`0 22 * * 1-6`)
+  - WORK weekly-plan (`0 22 * * 0`)
+  - LIFE bodycheck (`0 12 * * *`) + close (`0 23 * * *`)
+  - LEARN reactive (no fixed cron; fires from L-task `due` triggers)
+  - Reminder fires from R-NNN rows via Phase 5 launchd-fired infra (`check_reminders.sh`)
 
 ## Identity
 
-- **Source of truth (long-form):** `groups/telos/soul.md` in the nanoclaw fork (`daniellee6925/nanoclaw`, commit `03604e6`).
-- **Operating contract (binding rules):** `groups/telos/CLAUDE.local.md`. As of 2026-05-03 (commit `ae13524`), this file is the binding behavioral contract — voice register, behavioral bans, first-contact protocol, language rule, pushback calibration, asymmetric-knowledge handling, calibration samples, plus a Constantia-awareness section. Injected into the system-prompt addendum at high salience (see ADR-014 in guya CLAUDE.md and Decisions below).
-- **Loading mechanism:** `container/agent-runner/src/destinations.ts` `buildSystemPromptAddendum()` reads `/workspace/agent/CLAUDE.local.md` at every container spawn. When non-empty, its content is the identity block (replacing the auto-generated "Your name is **Telos**" that previously conflicted with dual-name identities). When empty (default for groups without custom identity), the auto block is used — non-breaking for other groups.
-- **Version control:** fork's `.gitignore` overrides nanoclaw's default per-installation pattern via `!groups/telos/soul.md` and `!groups/telos/CLAUDE.local.md`; other files in `groups/telos/` (container.json, .claude-fragments, regenerated CLAUDE.md) remain ignored.
-- **Design docs:** `vision.md`, `core-beliefs.md`, `goal.md` in this directory (committed to guya repo).
+- **Source of truth (long-form):** `groups/telos-{work,life,learn}/soul.md` in the nanoclaw fork (`daniellee6925/nanoclaw`). Three soul files, one per session — preserves per-session voice register.
+- **Operating contract (binding rules):** `groups/telos-{work,life,learn}/CLAUDE.local.md` per session. Each file is the binding behavioral contract for that session (voice register, behavioral bans, first-contact protocol, pushback calibration, asymmetric-knowledge handling, calibration samples, Constantia-awareness section).
+- **Loading mechanism:** `container/agent-runner/src/destinations.ts` `buildSystemPromptAddendum()` reads `/workspace/agent/CLAUDE.local.md` per session at container spawn. Injected at high salience per ADR-014.
+- **Per-session personas (Korean register, all 존댓말):**
+  - **WORK:** 두식 / 보스 register — terse, technical, dry; pillar/task work; default English (Korean for life topics, never appears here)
+  - **LIFE:** 동생/조수 voice → 형님 address to Daniel; 형수님 reference for Audrey; daily-life accountability
+  - **LEARN:** 스승 register; Socratic on curriculum; L-task assignment + grading
+- **Caveat (ADR-018):** Claude SDK `resume` freezes the system prompt; CLAUDE.local.md or destinations.ts edits to a running container do NOT land until container kill + `session_state` row delete (forces fresh spawn without `--resume`). Addendum-via-MCP-tool is the long-term direction to escape this.
+- **Three-identity architecture (ADR-009):** Guya executes, Telos mentors, Constantia holds shared truth. Telos writes evidence/profile/goals/grades. Guya writes log/guya/ + task status. No shared-write files. Ownership boundaries enforced architecturally.
+- **Design docs (this directory):** `vision.md`, `core-beliefs.md`, `goal.md`.
 
 ## Operations Runbook
 
 Every change to identity, behavior, mounts, or addendum-source requires this cycle. Skipping any step leaves the model running with stale state.
+
+> **Post-ADR-024 (2026-05-16) note:** Steps below assuming container-side `git push` are obsolete. The constantia-sync daemon on the host owns push. Container-side `git commit` (via `commitOnly` in helpers.ts) is still correct. Container-side `git rebase` / `git fetch` / `git push` do NOT work through the macOS bind-mount; do not add new tooling that depends on them.
+> **Three-session note:** Where steps below reference `groups/telos/` (singular), the current architecture has `groups/telos-{work,life,learn}/` per session. Repeat the step per session as needed. Per-session container names: `telos-work`, `telos-life`, `telos-learn`.
 
 ### A. Editing CLAUDE.local.md or soul.md
 
@@ -242,6 +268,8 @@ ssh mini "cat ~/.config/nanoclaw/constantia-deploy-key.pub"
 
 ## Tests & Observations
 
+> Entries below stop at 2026-05-06. The 5/7→5/19 chronicle of tests, smoke runs, and behavioral observations lives in `guya/STATUS.md` (Decisions & Notes section) and constantia log entries under `log/telos/` + `log/guya/`. New entries here should resume from 5/19 forward.
+
 ### 2026-05-06 early AM — Reflection cron verifies; push race confirmed + patched; SSH host-key class surfaced + fixed
 
 **The 23:00 PT reflection cron is the verification gate that closed three loops at once.**
@@ -351,52 +379,59 @@ Telos: `I'm Telos. What can I do for you?`
 
 ## In Progress
 
-- [x] **Bootstrap interview Block 3 (Edges)** — `strengths.md` + `weaknesses.md` with pillar-rubric anchoring. SHIPPED 2026-05-05.
-- [x] **Bootstrap interview Block 4 (Arc)** — `trajectory.md`. SHIPPED 2026-05-05.
-- [x] **Commit constantia bootstrap interview output** — DONE 2026-05-05 PM (`c63b383`). 7 files: user.md + profile/{cognitive,habits,strengths,weaknesses,trajectory,bootstrap-interview-wrap}.md. Pushed to constantia origin.
-- [x] **Split mcp-server.ts.** DONE 2026-05-05 PM (`30383c5`). 901→720 LOC main, 237 LOC helpers. Both under 800. Behavior preserved verbatim.
-- [x] **Pre-existing bug fixes from deep-review.** DONE 2026-05-06 AM (`ac92833`). `readTodayTranscript` inbound-DB leak on partial-open + `writeReflection` bare-catch ENOENT discrimination.
-- [x] **`commitAndPush` race fix.** DONE 2026-05-06 AM (`6a9914b`). In-tool fetch + rebase before push closes the multi-writer race.
-- [x] **Constantia recovery** — DONE 2026-05-06 AM. Stranded `a033d1c`/`e566a4c` rebased to `48af622`/`e8ff9af` on origin. Manifest conflict resolved with `--theirs`.
-- [x] **SSH host-key class fix** — DONE 2026-05-06 AM (`7ee82c9` + per-agent rebuild). Base Dockerfile pins github.com host keys; per-agent image carries IdentityFile config.
-- [x] **Phase 1 helpers.ts unit tests** — DONE 2026-05-06 AM (`7d823b3`). 40 tests, ~190 LOC, <20ms via `bun:test`.
-- [ ] **NEXT SESSION FIRST ACTION — Send Telos the DM** drafted at end of 5/5→5/6 session. See `Next session — start here` item 1 above.
-- [ ] **Top product step — `write_evidence` MCP tool (closes Cut B).** ~80 LOC mirroring `assign_task`. **Apply calibration rule on creation** — Daniel-self-report claims marked `confidence: tentative, source: self-report, ground-truth-pending` until validated. Load-bearing for `profile/*` accuracy.
-- [ ] **Korean life-accountability layer** — new `life-prompt.md`, cron entries at 9:30am + 10pm, nudge inventory section in `user.md`. Quiet hours 12am–6am. Per [2026-05-05] split-language architecture decision.
-- [ ] **Telos-as-planner extension** — extend `goals/` layer (long-term + month), add weekly plan artifact, update 9am tick from triage→plan-generation, daily-plan-batch tool in `mcp-server.ts`. Per [2026-05-05] planner-contract decision.
-- [ ] **Apply calibration rule to evidence-writing** — when writing evidence based on Daniel's self-report, mark "self-report, ground-truth-pending" until validated. Critical for `profile/` accuracy.
-- [ ] **Validate jeonghwandaniellee.com/learn URL** as evidence source for `profile/strengths.md` discipline-anchor entry.
-- [ ] **Tier 4 — Socratic testing tool (`quiz_pillar`).** Telos asks rubric-anchored questions on a pillar, evaluates Daniel's explanations. Grading mechanism B per [2026-05-05] three-grading-mechanisms decision.
-- [ ] **Tier 5 — Pillar 1 layered project.** Daniel picks: nanoGPT extended with inference optimizations, or rapGPT2.0 progressive optimization. ~1-2 hrs/week, maintenance-mode.
-- [ ] **Tier 5 — Pillar 3 stats reactivation.** Schedule Wasserman's "All of Statistics" engagement into weekly plan. First weekly plan post-`write_evidence` should embed this.
-- [ ] **Tier 5 — Pillar 1 foundations resumption.** Mathematics for ML book continuation. Resumed under Telos curriculum supply, not self-directed.
-- [ ] **Formal ADR-018 write-up** — split-language Telos architecture in guya `CLAUDE.md` ADR table. Deferred two sessions in a row now.
-- [ ] **Phase 2 + Phase 3 helpers.ts tests.** Phase 2 = file I/O (`writeAtomic` atomicity, `nextTaskId` collision). Phase 3 = git integration (`commitAndPush`'s now-four error paths: fetch fail, rebase clean, rebase conflict, push fail post-rebase). Test debt grew with the rebase logic.
-- [ ] **Per-agent SSH config durability.** `Dockerfile.gh-ssh-config` lives in `/tmp` on mini (ephemeral). Base Dockerfile has host keys; the Telos-specific IdentityFile config lives only in the running per-agent image. Future per-agent rebuild from base would lose it. Cleaner durable options: (a) commit per-agent Dockerfile fragment into `groups/telos/`, (b) extend nanoclaw to read per-group SSH config from agent group dir. Skip until next per-agent rebuild forces the issue.
-- [ ] **Watch for `pushError: "Rebase conflict — manual resolution needed on mini"` in Telos DMs.** New-failure-mode signal post-`6a9914b`. If it fires more than ~once a week, that's the trigger for pre-spawn pull (a wrapper that nanoclaw invokes before `docker run`). Below threshold, the rebase-in-`commitAndPush` is enough.
-- [x] **Cut A — tighter tick-prompt + `accept_proposal` tool.** Done 2026-05-04 PM.
-- [x] **Cut B Lite — nightly reflection layer.** Done 2026-05-04 PM.
-- [x] **Constantia log restructure.** Done 2026-05-04 PM (commit `d33aa4e`).
-- [x] **Commit nanoclaw fork changes.** Done 2026-05-04 PM (`87d2c4a`) and 2026-05-05 AM (`44a54fe`).
-- [x] **Update Guya's `/guya-reflect` skill** to write to `log/guya/` (new subdir). Done 2026-05-04 PM (guya commit `03b297f`).
-- [ ] **Profile maintenance.** After `write_evidence` lands. Telos appends evidence-pointed claims to `profile/strengths.md`, `profile/weaknesses.md`, etc.
-- [x] **Operating rules in `CLAUDE.local.md`.** Done — all bans, voice register, language rule, first-contact protocol, pushback calibration, asymmetric-knowledge handling, calibration samples ported and validated by 14:52 smoke-test. File is the binding identity contract injected via the system-prompt addendum.
-- [x] **Constantia clone on mini.** Done — cloned at `/Users/guya/constantia` (NOT `~/Desktop/constantia` due to macOS TCC; see Runbook §F). guyacode account on mini has clone access. Push access still unverified — see Next Session item 4.
-- [x] **Mount Constantia into Telos container.** Done — `container.json` has `additionalMounts: [{hostPath: "/Users/guya/constantia", containerPath: "constantia", readonly: false}]`; mount allowlist permits `~/constantia` rw. Validated 17:26 PT — Telos read `tasks/MANIFEST.md` and listed 7 open tasks. Container path resolves to `/workspace/extra/constantia`.
-- [x] **First ability: read and assign tasks.** Done (2026-05-04). MCP server at `groups/telos/tools/mcp-server.ts` (~500 LOC, hand-rolled stdio JSON-RPC, no SDK dep) ships three tools: `assign_task`, `grade_task`, `do_nothing`. Each writes file atomically (tmp + rename), commits, pushes via deploy key. Smoke-tested end-to-end in four iterations — see Tests & Observations 2026-05-04 entry.
-- [x] **Scheduled tick.** Done. Self-scheduled via nanoclaw's `schedule_task` MCP tool (id `task-1777913406295-908sio`, recurrence `0 9,21 * * *`, first fire `2026-05-04T21:00 PT`). On each fire, Telos receives `Read /workspace/agent/tick-prompt.md and execute it as a tick.` and runs the protocol in `groups/telos/tick-prompt.md`.
-- [x] **Discord ping handler.** Implicit — every DM to Telos already wakes the agent (engage_mode='pattern' with regex `.`). Manually invoking the tick mid-day = DM Telos with the tick-prompt content directly, or trigger schedule_task for a one-shot run.
-- [x] **Bake openssh-client + uid-501 passwd entry into base Dockerfile.** Done 2026-05-04, fork commit `de945fd`.
+> Stale items from the 5/4-5/6 era removed during 2026-05-19 catch-up. Items below are genuinely open as of 2026-05-19. See Catch-up Summary below for what shipped between 5/6 and 5/19.
+
+**Telos-side product work:**
+- [ ] **Critic sub-agent (vision §M3).** Required for core-ring decisions per core-belief #1. Biggest remaining architectural gap. Anti-sycophancy is currently single-actor + prompt-level; the durable form is actor-critic separation. No timeline; not gated on anything except deciding to start.
+- [ ] **Director role (vision §M4).** Multi-hypothesis path proposals with falsifiability. Currently the planning ticks (10pm daily / Sunday weekly) cover the tactical horizon; director would cover the strategic horizon (path-level recommendations, not weekly priorities). Deferred behind critic.
+- [ ] **Three-ring friction model (vision §5).** Adjacent + outer ring routing. Today LIFE session handles adjacent (sleep/health/Audrey); WORK handles core (pillar/project). Outer ring (everything else) explicitly not in scope, no agent for it. Wait until LIFE-as-adjacent has 6+ weeks of running data.
+- [ ] **Long-horizon drift detection on Telos's own behavior (vision §M5).** Mentor-health report; "has the agent gotten too soft?" check. Closest current proxy is the disagreement-budget audit, which isn't built. Defer until 3+ months of evidence history exists to measure against.
+- [ ] **Monthly profile synthesis** (Tranche 3 I.2 from `docs/2026-05-12-content-plan.md`). Telos synthesizes the month's evidence into profile updates. Cron-driven, would supplement the pre-/clear synthesis pattern.
+- [ ] **Quarterly goals review** (Tranche 3 I.3). Daniel ↔ Telos pillar progress check.
+
+**Test debt (Phase 2 + 3 helpers.ts):**
+- [ ] Phase 2 = file I/O (`writeAtomic` atomicity, `nextTaskId` collision). Phase 3 = git integration including ADR-024 daemon-handoff. Test debt has grown further since 5/16 `commitOnly` refactor + daemon ship (zero new unit tests). Phase 1 (40 pure-function tests) shipped 2026-05-06 (`7d823b3`).
+- [ ] Unit tests for `readSyncStatus` in `guya-plugin/hooks/constantia-sync.mjs` (flagged in 5/16 deep-review).
+
+**Infra anti-rot:**
+- [ ] **Constantia issue #1 — `check_reminders.sh` launchd silence root cause.** Script hasn't fired since 2026-05-14 22:01:32. Refactored 5/16 to commit-only (daemon owns push), but underlying "launchd not invoking the script" question still open. Deferred until reminder scheduling activity resumes.
+- [ ] **Laptop-side sync-status visibility.** Status file lives at `<constantia>/.git/sync-status.json` on mini only. Laptop sessions return null silently from `readSyncStatus`. Options: ssh-read at session start (latency), daemon-pushes-throttled-status-file via git (churn), HTTPS health endpoint. Decide later.
+- [ ] **guya-hook-smoke needs synthetic-rebase test.** Pre-push check should add a synthetic rebase that asserts the constantia post-commit hook guard fires correctly. Without it, a future hook edit could re-introduce the silent-rot regression that ADR-024 surfaced.
+- [ ] **Validator-extraction follow-up.** Inline validation logic across `assignTask`, `gradeTask`, `acceptProposal`, `proposeTask`, `assignLearn`, `addReminder`, `gradeLearn`, `writeEvidence`, `writeReflection` — each does its own enum/length/conditional checks. Time to extract to `validators.ts`.
+- [ ] **ADR for plist-env Docker discovery + check other LaunchAgents.** Audit other launchctl plists on mini for the PATH gap; consider `DOCKER_HOST` env var as belt-and-suspenders.
+- [ ] **Investigate TCC permission stability for Desktop** (laptop side; mini moved to `~/constantia` already).
+- [ ] **Per-agent SSH config durability.** `Dockerfile.gh-ssh-config` lives in `/tmp` on mini (ephemeral); next per-agent rebuild from base would lose it. Skip until forced.
+
+**Watches:**
+- [ ] **Anti-rot watch (Phase 6+):** spot-check that Telos's `accept_proposal` calls vary `priority` (numeric 1/2/3) across accepts. If everything defaults to 2, field is decoration.
+- [ ] **Tier 4 — Socratic testing tool (`quiz_pillar`).** Was in old plan; may be folded into `gradeLearn` knowledge-check now. Decide whether still distinct.
+
+## Catch-up Summary: 2026-05-06 → 2026-05-19
+
+What shipped during the period where this STATUS.md was stale. Full chronicle lives in `guya/STATUS.md` (ADRs 014-024 + Decisions & Notes section) and constantia git log. Per-item TL;DR:
+
+- **2026-05-06 PM** — `write_evidence` MCP tool shipped (calibration rule baked in at tool layer). Morning + evening tick split into two prompts. Evolve now reads from Constantia (primary), project-local as fallback.
+- **2026-05-07 PM** — First artifact-based `write_evidence` exercise; Telos's calibration was tighter than Daniel's. EVD-002 = `a00b2f3`. Two Constantia hook silent-rot bugs patched. Telos closed auto-promotion loop autonomously.
+- **2026-05-08** — Telos reorg full design + Phases 0-2c shipped in a single session. Discovery: nanoclaw spawns MCP server via Bun reading `.ts` directly — no compile step. ADR-017 superseded by ADR-018 (post-reorg schema). 8 review findings caught + auto-fixed across Phase 2.
+- **2026-05-10** — Phase 3 (LEARN session bootstrap) shipped end-to-end. Five unplanned silent-rot patterns hit and fixed. Three-Telos architecture now partially live (WORK + LEARN).
+- **2026-05-11** — Phase 4 (LIFE session bootstrap) shipped end-to-end. Two new silent-rot patterns surfaced (L6, L7). Phase 5 (reminder firing infra) shipped end-to-end on mini in ~3 hours.
+- **2026-05-13** — Pre-/clear synthesis on Telos session populated `profile/*` files with structured patterns.
+- **2026-05-14 marathon (~12+ hrs)** — Phase 6 substantially closed + 3 pillar curricula authored at bytebytego-grade depth + L-task system bootstrapped (L-001, L-P1-001, L-P2-001, L-P3-001 all assigned). ADRs 018/019/020 written.
+- **2026-05-14→15 (night surgery)** — Two silent-rot routing bugs found and fixed: ADR-021 (empty-string `thread_id` in messages_in breaks Discord delivery via `??` semantics), ADR-022 (raw-XML `messages_in.content` silently rendered as empty Instructions by `formatTaskMessage`).
+- **2026-05-15** — LEARN bug surgery continued — third root cause found, ADR-019 + ADR-022 corrected. ADR-023 (tick-wake routing inheritance + central `agent_destinations` durable seed) written.
+- **2026-05-16 — ADR-024 daemon ship.** Diagnosed Docker bind-mount as silent rebase-failure cause via 4-hypothesis chain (refuted concurrent-race, mid-flight dirt, git-version-too-old; confirmed bind-mount via overlay-FS cross-test). Architecture split: container-side `commitOnly(message, paths)` (no fetch/rebase/push), host-side `constantia-sync` launchd daemon owns push. Cascade fixes: post-commit hook trunc → pure-bash; auto-push dropped; check_reminders.sh inline push dropped; 21-commit backlog bootstrap-pushed. 10pm daily + Sunday weekly planning ticks added (closed content-plan Tranche 3 I.1).
+- **2026-05-19** — Discord 2000-char truncation fixed by setting `maxTextLength: 2000` in `discord.ts` adapter (re-activated pre-existing `splitForLimit` chunker; closes nanoclaw#1). WORK DM destination removed from central + per-session `agent_destinations`; WORK proactive ticks now channel-only.
+
+ADRs introduced during this window (all in `guya/CLAUDE.md`): 014 (Telos identity addendum), 015 (nightly reflection layer), 016 (log layout by author), 017 (task priority namespaces — superseded by 018), 018 (SDK resume freezes prompt), 019 (destinations explicit seeding), 020 (image tag drift), 021 (empty-string thread_id), 022 (raw-XML content stripped), 023 (tick-wake routing + central agent_destinations), 024 (constantia-sync daemon).
 
 ## Deferred / Future
 
-- Pattern detection layer (separate process that produces "patterns currently active" file; main tick reads it). Discussed in the asymmetric-knowledge architecture conversation. Real engineering work; not next.
-- Critic sub-agent (vision §M3 / Belief #1). Required for core-ring decisions. After basic tick + evidence loop is working.
-- Director role with multi-hypothesis path proposals (vision §M4 / Belief #6). Far out.
-- Three-ring friction model (vision §5). Adjacent + outer ring routing comes after core-ring is reliable.
-- Long-horizon observability (vision §M5). Drift detection on Telos's own behavior; mentor-health report.
+(See In Progress > "Telos-side product work" above — items consolidated there during 5/19 catch-up. The original critic / director / three-ring / long-horizon-observability list moved into In Progress because they're now the active backlog rather than vague future state.)
 
 ## Decisions & Notes
+
+> Entries below stop at 2026-05-06. Decisions made between 5/7 and 5/19 (including the 11 ADRs 014-024) live in `guya/STATUS.md`. The Catch-up Summary section above lists them in TL;DR form. New entries here should resume from 5/19 forward.
+> **Important superseded notes:** The `commitAndPush` race-fix (5/6 entry below) was superseded by ADR-024 on 2026-05-16 — container-side rebase is now known broken under macOS bind-mount, and push is owned by the host-side `constantia-sync` daemon. The 5/3 `containerPath` must-be-relative note still holds. The 5/3 CLAUDE.local.md addendum-injection note evolved into ADR-014 + ADR-018 (resume freezes prompt). Treat 5/6-and-earlier entries as historical, not current operating doctrine.
 
 - [2026-05-06 early AM] **Multi-writer push race patched at the right layer — `commitAndPush` does fetch+rebase before push.** Three constantia clones (laptop, mini, origin) all push happily but none auto-pulls. Every laptop push silently set up a non-fast-forward failure for the next mini commit, stranding it on local. The fix is in the MCP server's tool layer (Telos fork `6a9914b`) — `git fetch origin main` + `git rebase origin/main` between commit and push. Conflict path aborts the rebase and returns `pushError: "Rebase conflict — manual resolution needed on mini"`. **Not a periodic pull-cron** — that has a footgun (pulling under a live container could corrupt bind-mount state) and would need "is container running" detection. The in-tool fetch+rebase is enough until conflicts become frequent (>~1/week), at which point the right escalation is pre-spawn pull (a wrapper nanoclaw invokes before `docker run` so no container is in-flight). Recovery: stranded `a033d1c`/`e566a4c` rebased onto origin and pushed as `48af622`/`e8ff9af`; manifest conflict resolved with `--theirs` since the post-commit hook regenerates it.
 
