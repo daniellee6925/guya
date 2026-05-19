@@ -20,6 +20,7 @@ Skills are reusable workflow templates that can be invoked via `/guya-skill-name
 | `guya-evolve/SKILL.md` | guya-evolve | Trigger manual guideline consolidation |
 | `guya-reflect/SKILL.md` | guya-reflect | Trigger a manual reflection cycle |
 | `guya-scribe/SKILL.md` | guya-scribe | Update or create STATUS.md with current project state |
+| `guya-telos-scribe/SKILL.md` | guya-telos-scribe | Guya-project-only sibling of scribe — updates Telos design docs (`telos context/`) + Constantia static decision docs (pillars/milestones/open-questions). Three independent passes (A infra, B commitments, C decisions), skip-silently when no signal. |
 
 ## Workflow Skills
 

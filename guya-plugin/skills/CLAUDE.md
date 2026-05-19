@@ -20,6 +20,7 @@ Skills are invoked via `/guya-skill-name` or by matching trigger phrases listed 
 | `guya-evolve/` | guya-evolve | Trigger manual guideline consolidation — merge duplicates, promote validated tactics, prune stale ones. |
 | `guya-reflect/` | guya-reflect | Manual reflection cycle — surfaces what Daniel should take away and what Guya should learn from a session. |
 | `guya-scribe/` | guya-scribe | Update `STATUS.md`, `ARCHITECTURE.md`, and relevant `CLAUDE.md` files with current project state. |
+| `guya-telos-scribe/` | guya-telos-scribe | Guya-project-only sibling of scribe — updates Telos design docs (`telos context/`) + Constantia static decision docs (pillars/milestones/open-questions). Three independent passes (A infra, B commitments, C decisions), skip-silently when no signal. Constantia push owned by daemon per ADR-024. |
 | `guya-skill-creator/` | guya-skill-creator | Create new skills, improve existing skills, and measure skill performance. |
 
 ### Workflow
