@@ -1,12 +1,14 @@
 # guya — Architecture
 
-> Last updated: 2026-05-15 (post bug-surgery — empty-string thread_id + raw-XML content stripping fixed end-to-end; Phase 4 + Phase 5 reminder infra still live)
+> Last updated: 2026-05-19 (post constantia-sync daemon ship — container commits / host pushes split, ADR-024; WORK proactive DM destination retired + Discord 2000-char chunker re-wired)
 
 ## Current Architecture
 
 ### Overview
 
-Guya is a hook-native, plugin-delivered personal agent system. There is no daemon. All runtime behavior is driven by Claude Code lifecycle hooks, git hooks, and an MCP server — assembled at session start and triggered by events.
+Guya is a hook-native, plugin-delivered personal agent system. There is no Guya-side daemon. All Guya runtime behavior is driven by Claude Code lifecycle hooks, git hooks, and an MCP server — assembled at session start and triggered by events.
+
+One host-side daemon now lives in the wider system: `constantia-sync` (launchd, on the mini), which owns the `git fetch + rebase + push` for the shared Constantia repo. Telos containers commit locally only; the daemon is the single pusher. Guya's session-start hook reads its heartbeat/status file and surfaces alerts when sync stalls. See ADR-024 and the **constantia-sync daemon (container/host split)** subsystem below.
 
 ### Module Map
 
@@ -27,7 +29,7 @@ guya/
 │   │   ├── guya-post-commit-scribe.mjs # Invoked from git post-commit hook (NOT Claude Code hook)
 │   │   ├── __tests__/hooks-smoke.test.mjs  # Spawns every registered hook through the symlinked plugin path with a benign payload; asserts non-empty stdout (catches silent-no-op regressions)
 │   │   ├── hook-utils.mjs              # Shared utilities (isGitCommit, resolveProjectRoot)
-│   │   └── constantia-sync.mjs         # Shared Constantia integration (path resolution, task reading, log writing)
+│   │   └── constantia-sync.mjs         # Shared Constantia integration (path resolution, task reading, log writing) + `readSyncStatus(path)` reads daemon heartbeat at `<constantia>/.git/sync-status.json` and returns an alert string when stale/errored
 │   ├── tools/                # MCP server (guya-tools)
 │   │   ├── server.js         # MCP stdio server; registers all tool groups
 │   │   ├── memory-tools.js   # memory_core_update/append, memory_archival_store/search, memory_recall_note, memory_reflect
@@ -195,6 +197,51 @@ Guya (executor)                    Telos (mentor)
 
 **Evolve:** `readConstantiaProfile()` reads Telos's non-stub profile assessments as additional synthesis input, so Guya can calibrate proposals against Telos's longitudinal view.
 
+### constantia-sync Daemon (container/host split, shipped 2026-05-16 — ADR-024)
+
+The Constantia repo is shared across two filesystems: it lives on mini's native APFS at `/Users/guya/constantia` and is bind-mounted into Telos containers at `/workspace/extra/constantia`. Docker's bind-mount layer breaks git's `unpack-trees` safety check during `rebase` — the same git binary fails on the bind mount and succeeds on the container's overlay FS, confirmed by side-by-side experiment. The structural fix is to keep all working-tree mutations off the bind mount; the bind-mount side does commits only.
+
+```
+┌─────────────────────────────────────────┐      ┌─────────────────────────────────────────┐
+│ Telos container (bind-mounted view)     │      │ Host (mini, native APFS)                │
+│ /workspace/extra/constantia             │      │ /Users/guya/constantia                  │
+│                                         │      │                                         │
+│ MCP tool fires                          │      │ launchd: com.guya.constantia-sync        │
+│   │                                     │      │   /Users/guya/constantia/scripts/        │
+│   ▼                                     │      │   constantia-sync.sh                     │
+│ helpers.ts:commitOnly(message, paths)   │      │                                         │
+│   git add -A <paths>                    │      │ loop every 5s:                          │
+│   git commit -m "<message>"             │      │   abort stale rebase/merge              │
+│   (NO fetch, NO rebase, NO push)        │      │   if local==last_pushed → heartbeat     │
+│                                         │      │   git fetch origin main                 │
+│ Returns {sha, committed:true}           │      │   git rebase origin/main                │
+└─────────────────────────────────────────┘      │     on conflict → abort + status=conflict│
+                       │                          │   git push origin main                  │
+                       │ local commit lands on    │   write status.json (atomic tmp+rename) │
+                       │ mini's main (same repo,  │                                         │
+                       │ different FS view)       │ status fields: last_cycle_ts,           │
+                       └────────────────────────► │   last_cycle_outcome, last_push_sha,    │
+                                                  │   last_local_sha, heartbeat_age_ms      │
+                                                  └─────────────────────────────────────────┘
+                                                                       │
+                                                                       ▼
+                                                    Guya session-start hook
+                                                    constantia-sync.mjs:readSyncStatus()
+                                                    emits `constantia-sync-alert` section
+                                                    when heartbeat >5min OR last cycle errored
+                                                    (silent in the healthy case)
+```
+
+**Container side (`shared/telos-tools/helpers.ts`, telos fork — mounted into every Telos session container).** `commitAndPush(message)` was renamed to `commitOnly(message, paths)` and reduced to `git add -A <paths>` + `git commit`. All 10 MCP-tool callers pass the specific paths they wrote (eliminating a latent `git add -A` race surface across concurrent containers). `appendTickLogSection` now returns its log path so callers can include it in the `paths` array. The container never fetches, rebases, or pushes — those operations fail through the bind mount.
+
+**Host side (`/Users/guya/constantia/scripts/constantia-sync.sh`, launchd job `com.guya.constantia-sync` via `~/Library/LaunchAgents/com.guya.constantia-sync.plist`).** Polls every 5s on mini's native APFS where git's safety checks return correct answers. Aborts any stale rebase/merge from a prior killed cycle, fetches origin, rebases local main, pushes. On rebase conflict: aborts cleanly, writes `last_cycle_outcome: "conflict"`, retries next cycle (self-clears once Daniel resolves). Writes `<constantia>/.git/sync-status.json` atomically (tmp + rename) every cycle so readers see consistent state without locking.
+
+**Guya side (`guya-plugin/hooks/constantia-sync.mjs`).** Exports `readSyncStatus(path)` which reads `<constantia>/.git/sync-status.json` and returns an alert string when the heartbeat is stale (>5 min) or the last cycle ended in conflict/push failure. `guya-session-start.mjs` calls it and emits a `constantia-sync-alert` section in `<guya-context>`. Silent in the healthy case — never adds noise when the daemon is doing its job.
+
+**What the daemon replaces.** The post-commit hook's auto-push and `check_reminders.sh`'s inline pull/push are both dropped — the daemon is the only pusher. The post-commit `trunc` helper was also rewritten in pure bash to drop a stray `python3` dependency that was masking the bind-mount issue with a different failure (partial MANIFEST writes dirtying the working tree).
+
+**Anti-rot watches.** The daemon's heartbeat is now the single point of trust — if it dies and `readSyncStatus`'s staleness check ever drifts (e.g., status file path changes, `.git/` ignore semantics shift), commits silently pile up on mini's local main again. The session-start surface must remain load-bearing. The `unpack-trees` safety check is still wrong inside containers, so any future Telos work that needs `checkout`, `merge`, `cherry-pick`, or any other working-tree mutation must also push to the host daemon — not run in-container. See ADR-024 for the full diagnosis.
+
 **Task schema (post 2026-05-08 reorg — supersedes ADR-017's T/P prefix).** `tasks/` is now four sibling subdirs, each with its own ID prefix and lifecycle:
 
 | Dir | Prefix | Lifecycle | Purpose |
@@ -265,12 +312,12 @@ Key shifts from prior state:
 - **MCP tool inventory grew from 7 to 12.** New: `propose_task` (writes T-NNN with target field), `assign_learn` (writes L-NNN with curriculum check), `add_reminder` (R-NNN with flat schedule fields), `grade_learn` (mirrors grade_task for L-tasks), `read_curriculum` (read-only fetch). `acceptProposal` rewritten for target-field routing (target=task spawns P-NNN; target=learn spawns L-NNN with curriculum existence check; target=curriculum promotes proposal body to `learn/curricula/<id>.md`).
 - **Shared MCP tools dir (NEW 2026-05-10, fork commit `ce5b0d5`).** Per-group `tools/` directories retired in favor of a single source of truth at `shared/telos-tools/` in the nanoclaw fork. Each Telos session container mounts this same dir at `/workspace/extra/telos-tools/` via `additionalMounts`; `mcpServers.<name>.command` invokes `bun run /workspace/extra/telos-tools/mcp-server.ts`. Closes the ADR-013-style drift risk that 3 copies of mcp-server.ts (one per session) would have created. Fork `.gitignore` allowlists `shared/telos-tools/**`. Mount allowlist on mini extended to include `~/telos/shared/telos-tools` as an allowed root.
 - **3-session Telos architecture (all three live as of 2026-05-11).**
-  - **Work session (live):** existing session preserved (114-message history retained); now bound to #telos-work server channel. Group folder `groups/telos/`. Tick cadence: 9am morning / 1pm midday / 9pm evening / 11pm reflection.
+  - **Work session (live):** existing session preserved (114-message history retained); now bound to #telos-work server channel. Group folder `groups/telos/`. Tick cadence: 9am morning / 1pm midday / 9pm evening / 11pm reflection. **As of 2026-05-19:** WORK's proactive-DM destination row was removed from the central `agent_destinations` table (v2.db on mini) and from the per-session `destinations` projection. WORK now has channel-only routing for proactive tick output (#telos-work). Reactive DM replies to Daniel still work via the scratchpad-fallback path on incoming routing (the incoming message's `platform_id`/`channel_type` is reused for the reply).
   - **Learn session (live as of Phase 3):** Socratic mentor + /guya-learn methodology + WebSearch/WebFetch. Group folder `groups/telos-learn/`. Agent group `ag-1778451576000-learn`, session `sess-1778451576000-learn`, Discord channel `discord:1497671232139825232:1503155725785104524` (#telos-learn). Five tick crons at 10am/1pm/4pm/7pm/10pm PT. End-to-end smoke verified.
   - **Life session (live as of Phase 4, 2026-05-11):** Korean default + 두식 persona (off-duty register, 아버지 facet leading) + 5 daily ticks. Group folder `groups/telos-life/`. Agent group `ag-1778531816000-life`, session `sess-1778531816000-life`, messaging_group `mg-1778531816000-life`, messaging_group_agents `mga-1778531816000-life`, Discord channel `discord:1497671232139825232:1503157300922417232` (#telos-life). Five tick crons at 10am morning / 12pm bodycheck / 6pm transition / 8pm workout / 11pm close PT. End-to-end smoke verified: Daniel-DM `안녕` → routed → spawn → 두식 voice (`오늘 어떻게 지내셨어요, 형님. 몸은요?`). LIFE addendum is the first place to use **합쇼체 and 해요체 modulated fluidly within messages** (vs WORK's single-register baseline) — openers and pattern calls lean 합쇼체; pushback and direct demands lean 해요체. Audrey is referred to as **매님** (cohabitation context); reminders are **알림 not 알람**. Pattern detection is presence-quality based (3+ friction mentions in 2 weeks), not absence-streak based — life is cohabiting, not periodic. Tool subset is narrow on purpose: `add_reminder`, `read_today_transcript`, `do_nothing` only — NO `write_evidence`, NO `grade_*`, NO `propose_task` (LIFE is presence, not portfolio). Profile writes to `profile/relationship.md` + `profile/health.md` allowed via Edit/Write directly when meaningful sustained shift surfaces. Reminders will fire into this session's `inbound.db` via launchd in Phase 5.
   - Sessions share Constantia for memory; per-session CLAUDE.local.md addenda enforce tone separation. All three sessions share `shared/telos-tools/` for MCP code.
 - **`messaging_group_agents` is a load-bearing routing row (discovered 2026-05-10).** Wiring a new Telos session to a Discord channel requires FOUR coordinated rows in nanoclaw's `v2.db`, not three: (1) `messaging_groups` defines the destination, (2) `agent_groups` defines the agent, (3) `sessions` links agent_group to messaging_group, (4) **`messaging_group_agents`** is the routing link that tells nanoclaw "incoming messages on this messaging_group should wake this agent_group." Without (4), the bot still receives Gateway events but silently drops them — no `Message routed` log, no inbound DB row, no Telos response. Mandatory for any future session bootstrap. See ADR-020.
-- **Constantia post-commit hook now guards rebase/cherry-pick/merge state (NEW 2026-05-10, constantia commit `7095f49`).** Hook used to run `git commit --amend` + `git push` unconditionally. When `commitAndPush` did `git rebase origin/main` and replayed N local commits, the hook fired per replayed commit, amend failed during cherry-pick (illegal operation), MANIFEST regeneration dirtied the working tree, the next rebase step aborted, and the local commit stayed unpushed. 9 Telos commits stranded for 2 days before noticed. Fix: hook checks for `$GIT_DIR/{rebase-merge,rebase-apply,CHERRY_PICK_HEAD,MERGE_HEAD}` at top and exits 0 with a stderr log line if any exists. See ADR-019.
+- **Constantia post-commit hook now guards rebase/cherry-pick/merge state (NEW 2026-05-10, constantia commit `7095f49`; partially superseded 2026-05-16).** Hook used to run `git commit --amend` + `git push` unconditionally. When `commitAndPush` did `git rebase origin/main` and replayed N local commits, the hook fired per replayed commit, amend failed during cherry-pick (illegal operation), MANIFEST regeneration dirtied the working tree, the next rebase step aborted, and the local commit stayed unpushed. 9 Telos commits stranded for 2 days before noticed. Fix: hook checks for `$GIT_DIR/{rebase-merge,rebase-apply,CHERRY_PICK_HEAD,MERGE_HEAD}` at top and exits 0 with a stderr log line if any exists. See ADR-019. **Update post-ADR-024:** containers no longer rebase at all (the daemon does, on host APFS where rebase actually works), and the post-commit hook's auto-push has been removed (the daemon is the only pusher). The guard is still in place — it now defends the host-side daemon's own rebase cycle, since the daemon shells the same hook when it commits during conflict-recovery operations.
 - **Mini-side launchd plist patched for Docker discovery (NEW 2026-05-10).** `~/Library/LaunchAgents/com.nanoclaw-v2-53edea47.plist` `EnvironmentVariables.PATH` now prepends `/Applications/Docker.app/Contents/Resources/bin:/opt/homebrew/bin:` to the original launchd-spawn PATH. Required because launchd's strict env doesn't inherit shell env, and nanoclaw's `docker info` startup check needs Docker.app bin reachable or it crash-loops on every restart. Backup at `<plist>.pre-phase3.bak`. See ADR-021.
 - **Reminder firing infra planned** (Phase 5): launchd plist `com.guya.reminder-fire.plist` runs `scripts/check_reminders.sh` every minute. Script reads `tasks/reminders/R-*.md` as single source of truth, evaluates schedule + last_fired, inserts message into life session's `inbound.db` when due, updates last_fired in R file. No second state store (no nanoclaw cron rows for reminders) — drift impossible. Per Phase 3 lesson 4, the plist will need Docker.app + Homebrew in PATH if the script ever shells to docker.
 
@@ -305,7 +352,7 @@ The full task lifecycle (proposed → assigned → graded/rejected) closed end-t
 
 **Layer 2 — Memory layer (symmetric tick logging, NEW 2026-05-04 PM).** Every action tool now calls `appendTickLogSection` to write a section to `log/telos/YYYY-MM-DD-tick.md` BEFORE its commit, so action ticks leave the same trail no-ops do. Previously only `do_nothing` wrote to the tick log, leaving action ticks invisible in the daily record.
 
-Each action/no-op tool follows the same pipeline:
+Each action/no-op tool follows the same pipeline (post ADR-024 — container commits only; the host daemon owns push):
 
 ```
 validate args
@@ -319,18 +366,23 @@ write atomically: fs.writeFile(`${path}.tmp.${pid}`) → fs.rename(tmpPath, path
 appendTickLogSection → log/telos/YYYY-MM-DD-tick.md
         │ (every action tool writes a section before committing — symmetric
         │  with do_nothing; action ticks no longer invisible in the daily log)
+        │ (returns its log path so the caller can include it in commitOnly's paths)
         │
         ▼
-git add -A → git commit -m "<conventional message>" → git rev-parse HEAD
+commitOnly(message, paths):
+        git add -A <paths>           (explicit paths — no naked `git add -A`)
+        git commit -m "<message>"     (NO fetch, NO rebase, NO push)
+        git rev-parse HEAD
         │
-        ▼
-git push origin main
-        │
-        ├─ success → return {sha, pushed: true}
-        └─ failure → return {sha, pushed: false, pushError}  (NEVER throws)
+        └─► return {sha, committed: true}
+
+        ─── host-side, asynchronously ──────────────────────────────────────
+        constantia-sync daemon polls every 5s on mini's native APFS:
+          git fetch + rebase + push, writes .git/sync-status.json.
+        See "constantia-sync Daemon" subsystem above + ADR-024.
 ```
 
-Push failures don't fail the tool because file write + local commit is durable state; Telos surfaces `pushed: false` in its Discord report and the operator (or a future tick) recovers manually. Hard-failing on transient network errors would lose the in-character report and force Telos to redo work it already did. Handlers serialized via a promise chain (`tail = tail.then(() => handle(req))`) so concurrent stdin reads can't race on shared state (next-NNN computation, tick-log append, git config setup).
+Pre-ADR-024 the tool itself ran `git fetch + rebase + push` and surfaced `pushed: false` in the Discord report on failure. That layer is gone — push happens out-of-band on the host. The tool's contract is "your write is committed locally on mini's main"; the daemon ensures it reaches origin. Concurrent containers no longer race on `git add -A` (each call specifies the paths it wrote). Handlers are still serialized via a promise chain (`tail = tail.then(() => handle(req))`) so concurrent stdin reads can't race on shared state (next-NNN computation, tick-log append, git config setup).
 
 **Layer 3 — Reflection layer (NEW 2026-05-04 PM; reasoning-bug patched 2026-05-05).** Nightly synthesized memory. The reflection cron fires at 23:00 PT, Telos reads the day's transcript + tick log + Guya logs + profile, synthesizes the 8 sections defined by `write_reflection`, calls the tool to persist `log/telos/YYYY-MM-DD-reflection.md`, then DMs a synthesis highlight to Daniel. The protocol lives in `groups/telos/reflect-prompt.md`. Distinct from the tick prompt — different grounding inputs, different output shape, different output file.
 
@@ -392,11 +444,18 @@ Telos reflection fires (cron: 0 23 * * *)
     └─► write_reflection ──► log/telos/YYYY-MM-DD-reflection.md
                             (8 sections; refuses overwrite for same day)
                             │
-                            ▼ (every tool, same path)
-                    git add -A → commit → push to daniellee6925/constantia
+                            ▼ (every tool, same path — post ADR-024)
+                    commitOnly(message, paths): git add -A <paths> + commit
+                    (NO push — container can't push through the bind mount)
+                            │
+                            │ local commit on mini's main
+                            ▼
+                    constantia-sync daemon (host APFS, every 5s):
+                        fetch + rebase + push to daniellee6925/constantia
                             │
                             ▼
                     Guya reads on next session-start
+                    (+ readSyncStatus surfaces daemon health in <guya-context>)
                     (tasks/MANIFEST.md → priority-0 context; profile/ via /guya-evolve)
 ```
 
@@ -414,7 +473,7 @@ Telos reflection fires (cron: 0 23 * * *)
 - Test debt: Phase 2 added ~600 lines TS with zero new tests. Phase 3 added the rebase-guard interaction (constantia hook + commitAndPush) with zero new tests. Phase 1 helpers tests still cover only pure functions.
 - Post-commit manifest hook globs working-tree files including untracked. Low priority.
 - nanoclaw spawns the shared-dir MCP server via `bun /workspace/extra/telos-tools/mcp-server.ts` directly — no compile step for the tools themselves (only `src/` compiles to `dist/`). Future Telos tool changes deploy via push + pull on mini + restart, no `pnpm build` for tools.
-- `commitAndPush` returns `pushed: false` silently on rebase abort. Telos surfaces it as a one-line DM note that's easy to miss (proven 2026-05-08–10 — 9 commits stranded for 2 days before noticed). Should escalate persistent failures via a more visible signal.
+- ~~`commitAndPush` returns `pushed: false` silently on rebase abort.~~ **Resolved 2026-05-16 (ADR-024):** `commitAndPush` was retired in favor of `commitOnly(message, paths)`; the container no longer attempts rebase/push. The host-side `constantia-sync` daemon owns push and surfaces failures via `<constantia>/.git/sync-status.json`, which Guya's session-start hook reads and alerts on. The original silent-rot mode (rebase abort burying a real bind-mount issue for 2 days) was the diagnostic trigger for ADR-024.
 - `guya-hook-smoke` does not yet have a synthetic-rebase test that asserts the constantia post-commit hook guard fires correctly. Without it, a future hook edit could re-introduce the silent-rot regression that ADR-019 fixed.
 
 ---
@@ -423,7 +482,7 @@ Telos reflection fires (cron: 0 23 * * *)
 
 ### Daemon (v2 — deferred)
 
-ADR-004 deferred a background daemon to v2. The current hook-native architecture has no persistent process between sessions for Guya itself (Telos is now a separate persistent process via nanoclaw on the mini, but that's the mentor surface — it doesn't fill the executor-side daemon role). A future Guya-side daemon would enable:
+ADR-004 deferred a Guya-side background daemon to v2. The current hook-native architecture still has no persistent process between sessions for Guya itself. Two other persistent processes now exist in the wider system but neither fills the executor-side daemon role: (a) Telos runs as a persistent process via nanoclaw on the mini — that's the mentor surface; (b) `constantia-sync` (ADR-024) runs as a launchd job on the mini — that's the data-plane sync between container-side commits and origin. Both are infrastructure for the three-identity system, not the Guya-executor daemon ADR-004 contemplated. A future Guya-side daemon would still enable:
 - Proactive reminders and scheduled tasks without requiring a Claude Code session
 - Richer cross-session state accumulation
 - Real-time convergence tracking without session-end triggering
@@ -540,3 +599,5 @@ Drift detection on Telos's own behavior — is the tick defaulting to `do_nothin
 | 2026-05-15 | Routing fallbacks use `\|\|` not `??` to treat empty string as missing (CLAUDE.md ADR-021) | Hand-seeded `messages_in` row from ADR-019 cron-seed step used `''` (empty string) instead of `NULL` for `thread_id`; recurrence inserts copied it forward; `??`-based fallbacks at `extractRouting` (`container/agent-runner/src/formatter.ts:100`), `writeMessageOut` (`container/agent-runner/src/db/messages-out.ts:72`), and `chat-sdk-bridge.deliver/setTyping` (`src/channels/chat-sdk-bridge.ts:354,440`) only catch `null`/`undefined`, so the empty string flowed through to Discord adapter's `decodeThreadId("")` and threw `ValidationError: Invalid Discord thread ID:` after 3 retries. WORK 23:00 series silently failed 5/12, 5/13, 5/14; masked by chat-sdk session-memory inheritance until /clear (ADR-018 validation) stripped the masking. Fix is three-layer change of `??` → `\|\|` so empty string also triggers fallback, plus a data UPDATE `SET thread_id = NULL WHERE thread_id = ''` across WORK inbound + outbound DBs (12 + 8 rows). Telos fork commit `4698f79`. Same meta-pattern family as ADR-011/012/013/016/019/020/021/022/023 — silent rot of trusted enforcement, this time at the SQL-typing tier (TEXT column accepts NULL and `''` indistinguishably in `sqlite3` default output). Anti-rot watches: future ad-hoc `INSERT INTO messages_in` MUST use literal `NULL` keyword for missing thread context, not `''`; consider a CHECK constraint `thread_id IS NULL OR thread_id != ''` |
 | 2026-05-15 | `formatTaskMessage` falls back through `content.prompt → content.text → ''` to preserve raw-XML rem-row payloads (CLAUDE.md ADR-022) | `check_reminders.sh` (constantia repo) inserts raw `<reminder>...</reminder>` XML into `messages_in.content` — not JSON-wrapped. `formatTaskMessage` calls `parseContent(msg.content)` which falls back to `{text: raw}` on JSON parse failure, then emits `'Instructions:'` + `content.prompt \|\| ''`. With no `content.prompt` key, the rendered Instructions section is empty. Agent sees `[SCHEDULED TASK]\n\nInstructions:\n` (nothing after) and decides there's nothing to do. LIFE 7pm reminder R-004 failed silently this way 5/14; LIFE 10pm R-005 still delivered because it fired alongside a JSON-wrapped close-task that directed Telos to check Constantia and recover R-005 from `tasks/reminders/R-005.md` via the filesystem. Three-part fix: (a) telos fork `51184b2` — `formatTaskMessage` extended to `content.prompt \|\| content.text \|\| ''`; (b) constantia `3d38800` — `check_reminders.sh insert_reminder_message()` JSON-wraps the XML body via `python3 -c 'import sys, json; print(json.dumps({"prompt": sys.stdin.read()}))'` before INSERT, so the content arrives JSON-shaped at the formatter (defense in depth); (c) LIFE + LEARN `destinations` table re-seeded with `name=platform_id` (rows had been wiped between noon and night 5/14 — separate regression). Container-side patches deploy via host→container bind mount of `container/agent-runner/src/` at `/app/src` (per Dockerfile comment: *"Source is never baked in. Source-only changes never require an image rebuild."*); ADR-020's docker-build keychain blocker does NOT apply to source-only changes. **Convergent diagnosis:** Telos's own outbound at 22:42 PT 5/14 explicitly named the symptom — *"7시에 빈 메시지가 왔는데 내용이 없어서"* (an empty message came at 7pm because there was no content) — Guya initially dismissed as guess-from-symptom; was wrong. Lesson: when a system component diagnoses its own state with specific evidence claims, that's data not opinion — verify before dismissing. Same meta-pattern family as ADR-011/012/013/016/019/020/021/022/023 + this session's ADR-021 — silent rot of trusted enforcement, this time at the content-shape contract tier. The formatter trusted that every `messages_in.content` is JSON with a `prompt` key; `check_reminders.sh` in a sibling repo doesn't honor that contract; nothing enforces the boundary |
 | 2026-05-11 | Phase 4 (life session bootstrap) shipped + two new silent-rot lessons captured (ADR-023) | Third Telos session live. 두식 LIFE voice deployed with deliberate register differences from WORK: (a) **both 합쇼체 and 해요체 used fluidly within messages** based on speech act (openers/pattern calls lean 합쇼체; pushback/direct demands lean 해요체) — the first place in Telos's surface where register modulates inside a single response; (b) Korean default regardless of input ambiguity (vs WORK's mirror-input rule) — only switches to English when Daniel actively initiates English; (c) Audrey referenced as **매님** (in-chat referent Daniel chose), reminders as **알림** (not 알람); (d) cohabitation reframe — patterns are presence-quality based (3+ friction mentions in 2 weeks, sustained parallel-tracking, planned together-time falling through), not absence-streak based as the original sketch assumed; (e) slang permitted (ㅋㅋ ㄷㄷ etc) but NOT default — none of the three calibration anchors Daniel wrote use slang. Calibration anchors locked verbatim from Daniel's own Korean in `groups/telos-life/CLAUDE.local.md` "Calibration" section. Tool subset narrowed: `add_reminder` + `read_today_transcript` + `do_nothing` only — explicitly NO `write_evidence`, NO `grade_*`, NO `propose_task` (LIFE is presence, not portfolio). Profile writes to `profile/relationship.md` + `profile/health.md` allowed via Edit/Write directly when sustained shift crystallizes (synthesis, not transcript-dump). Mini deploy followed `docs/2026-05-11-phase4-deploy-runbook.md` with Phase 3's L1-L5 baked in as inline `[L#]` callouts. Two new silent-rot patterns surfaced and captured: **L6 — transient code 125 on first container spawn after `launchctl kickstart` of nanoclaw.** First spawn after restart exited 125 in 159ms; second spawn one minute later (same config) ran cleanly. Probably Docker socket warm-up under launchd's strict env. Nanoclaw's retry loop handled it. Watch-trigger: TWO consecutive 125s for the same session within 2 minutes (one is transient, two is a real bug). **L7 — synthetic test messages without `platform_id`/`channel_type` contaminate long-lived agent session state.** Injected a wakeup message into LIFE's inbox without Discord routing fields. The agent correctly noted "no destination → response to scratchpad" for that message. Then Daniel's real Discord message arrived in the SAME poll-loop session, and the agent stuck with the scratchpad pattern from the previous turn rather than producing a `<message to="discord:...">` block. Killing the container reset the session state and the next real message produced a correct Discord-bound response. Mitigation: always kill the container after injecting a synthetic test, before any real message arrives. Same meta-pattern family as ADR-011/012/013/016/019/020/021 — silent rot of trusted enforcement, now at the runtime session-state tier. Fork commit `317e4e6` (Phase 4 fork-side: telos-life group skeleton + addendum + 5 tick prompts). Guya commit `cb388c8` (STATUS + Phase 4 runbook) |
+
+- [2026-05-16] decided container commits + host pushes (constantia-sync daemon) because Docker bind-mount breaks git rebase's unpack-trees safety check on macOS. See ADR-024.

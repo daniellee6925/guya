@@ -36,7 +36,7 @@ Cost: ~2× Node cold-start per Bash tool invocation (~150 ms total in practice).
 ## Hook Scripts
 
 ### guya-session-start.mjs
-Reads identity files from `~/.claude/guya/` (global) and core memory from `.guya/memory/core/` (project-local), plus strategic and tactical guidelines. Assembles everything into a `<guya-context>` block injected as a system-reminder. Enforces a ~2000-token budget. Creates `.guya/` directory structure on first run (lazy init). No LLM calls — pure file I/O under 5 seconds.
+Reads identity files from `~/.claude/guya/` (global) and core memory from `.guya/memory/core/` (project-local), plus strategic and tactical guidelines. Assembles everything into a `<guya-context>` block injected as a system-reminder. Enforces a ~2000-token budget. Creates `.guya/` directory structure on first run (lazy init). No LLM calls — pure file I/O under 5 seconds. Also reads sync-daemon status via `constantia-sync.mjs:readSyncStatus()` and emits a `constantia-sync-alert` section in the assembled `<guya-context>` block when an alert fires; silent in the healthy case and when the daemon isn't deployed (see ADR-024).
 
 ### guya-correction-detect.mjs
 Runs on every user prompt. Detects correction signals (phrases like "no", "wrong", "that's not right") using fast regex heuristics. When a correction is detected, appends a trace entry tagged `correction` to the daily JSONL file. No LLM calls.
@@ -78,6 +78,13 @@ Exports:
 - `readGuidelines(strategicDir)` and `validateIdentityProposals(result, minSources)` — also exported for the synthesizer pipeline and unit tests.
 
 Synthesis runs against ONE source per call to avoid duplicates. The anti-oscillation guardrail (identityProposals require ≥2 source reflections) lives here, not in the caller.
+
+### constantia-sync.mjs
+Shared module (not a hook script) for Constantia integration. Resolves the Constantia repo path via `~/.claude/guya/constantia.json` and provides reflection-write helpers used by `/guya-reflect`. Also exports `readSyncStatus(constantiaPath)` which reads the host-side sync daemon's status JSON at `<constantia>/.git/sync-status.json` and returns an alert string (or `null` when healthy/missing). The function surfaces three failure states — heartbeat-stale (daemon not ticking), rebase-conflict (last cycle aborted), and push/fetch-failed (network or remote error). Caveat: the status file lives under `.git/` on the host that runs the daemon (mini) and is not synced via git, so laptop sessions return `null` silently. See ADR-024 for the daemon's role (container-side commits commit-only; host daemon owns push); this module is Guya's surface for daemon health.
+
+Exports:
+- `readSyncStatus(constantiaPath)` — daemon health check; returns alert string or `null`.
+- (plus the existing reflection-write helpers consumed by `/guya-reflect`)
 
 ### review-evidence.mjs
 Shared utility (not a hook script). Reads and writes `.guya/evolution/review-evidence.jsonl`. Used by `guya-pre-commit-review.mjs` to check for evidence and by the review skills to record it.
