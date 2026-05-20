@@ -1,45 +1,42 @@
 # guya — Status
 
-> Last updated: 2026-05-19
+> Last updated: 2026-05-20 13:46 PT
 
 ## Current Focus
 
-**Constantia git infrastructure rewrite (ADR-024) shipped + Discord 2000-char truncation fixed + WORK DM destination removed.**
+**Telos doc surface rebuilt + new `/guya-telos-scribe` skill shipped + L-P2-001 module artifact written and committed.**
 
-**ADR-024 (2026-05-16)** — Docker bind-mount breaks container-side `git rebase` via `unpack-trees` safety check; refuted three other hypotheses (concurrent race, mid-flight working-tree dirt, container git version) before confirming the bind-mount cause via `cp -R` to overlay-FS comparison. Architecture split: container commits via `commitOnly(message, paths)` in `shared/telos-tools/helpers.ts` (no fetch/rebase/push); host-side `constantia-sync` launchd daemon polls `/Users/guya/constantia/` every 5s and runs fetch + rebase + push on mini's native APFS git. Daemon status surfaces via `<constantia>/.git/sync-status.json` (heartbeat + last-cycle outcome) which Guya's session-start hook reads via `readSyncStatus()` and emits as a `constantia-sync-alert` section when heartbeat is stale or last cycle errored.
+**Telos doc catch-up (2026-05-20):** Audited `telos context/` (Guya-repo subfolder for Telos design docs) and found `STATUS.md` was 13 days stale (last touched 2026-05-06). Eleven ADRs unreflected; multiple shipped systems (3-session WORK/LIFE/LEARN, ADR-024 daemon, planning ticks, `write_evidence` MCP tool, expanded MCP tool surface) missing from the doc. Catch-up patch rewrote Next session / Current State / Runtime / Identity / In Progress sections + added Catch-up Summary listing 5/6→5/19 deltas + boundary notes on historical sections (Operations Runbook, Tests & Observations, Decisions & Notes stop at 5/6; point to guya STATUS for the gap chronicle). Sibling fixes: `goal.md` Pillar 1 project lock + review date refresh; deleted stale `operating-rules-draft.md`; patched Constantia `goals/pillars.md` + `open-questions.md` + `milestones.md` (Project 3 = Production Serving Cookbook, resolved LLM-inference questions, milestones placeholder honest about mechanism never wiring up).
 
-**Cascade fixes in same session (2026-05-16):**
-- Bootstrap-pushed the 21-commit backlog from host (the silently-accumulating buildup since 2026-05-14).
-- Constantia post-commit hook: replaced `python3`-dependent `trunc` helper with pure bash (container image doesn't ship python3 → hook was silently aborting mid-MANIFEST-regen → leaving working tree dirty → next rebase failing on "unstaged changes" instead of the bind-mount error).
-- Constantia post-commit hook: dropped auto-push block — daemon owns push.
-- `check_reminders.sh`: dropped inline pull/push — daemon owns push.
-- 10 MCP tool callers in `mcp-server.ts` updated to pass specific paths to `commitOnly` (kills the latent `git add -A` cross-container race).
-- `appendTickLogSection` now returns its log path so callers can include it in commit paths.
+**`/guya-telos-scribe` skill (2026-05-20):** Sibling to universal `/guya-scribe`, project-scoped to Guya. Three independent passes — Pass A (Telos infra/runtime changes → `telos context/STATUS.md`), Pass B (Telos commitment changes → `goal.md`), Pass C (Constantia static decision docs → `pillars.md` / `milestones.md` / `open-questions.md`). Skip-silently when no signal; explicit `<GUYA>` / `<CONSTANTIA>` path placeholders (constantia path resolved via `~/.claude/guya/constantia.json` with fallback). Daemon-stale heartbeat warning before Constantia commits with parse-failure handling. Confirm-before-touch rule for `vision.md` + `core-beliefs.md`. Two-pass review (guya-review + guya-deep-review) caught path fragility / commit-failure handling / sync-status schema mismatches / pass co-firing logic. Final report block on explicit invocation; suppressed on auto-trigger when no passes fire. Skill at `guya-plugin/skills/guya-telos-scribe/SKILL.md`; catalog updated in `guya-plugin/skills/CLAUDE.md` + `AGENTS.md`. Spec'd against today's manual catch-up as fidelity reference.
 
-**2026-05-19 follow-on work:**
-- **Discord 2000-char truncation** (nanoclaw issue #1 closed by `5cf11b6`). The `splitForLimit()` chunker and `maxTextLength` config field at `src/channels/chat-sdk-bridge.ts:104-416` were both present and tested but never activated for Discord — the adapter config in `src/channels/discord.ts` was missing `maxTextLength: 2000`. Six-line fix re-enables the splitter (paragraph → line → space → hard-char). Affects every WORK/LIFE/LEARN brief/reflection that exceeded 2000 chars. Nanoclaw rebuilt + restarted; Discord gateway reconnected cleanly.
-- **WORK DM destination removed.** Deleted the `discord-mg-17789` row from central `agent_destinations` in v2.db AND the matching `@me`-pointing row from WORK's per-session destinations table. Result: WORK's proactive ticks (NULL incoming routing) have no DM option in the addendum → forced to channel. Reactive DM replies still work via scratchpad-fallback on incoming routing. LIFE and LEARN inspected — they were already channel-only, no change needed.
+**L-P2-001 module artifact (2026-05-20):** 6-layer trace of Telos morning tick from cron-fired inbound row through Discord delivery, written as `constantia/evidence/PILLAR2-loop-trace.md` after a teach-through session. Each layer documents file + function + line range + load-bearing decision. Three failure points grounded in real ADRs: ADR-018 (SDK resume freezes prompt), ADR-021 (empty-string `thread_id` breaks routing via JS `??` semantics), Tier 4 silent scratchpad fallback (today's WORK DM bug, 2026-05-19). Cross-application paragraph maps Telos loop primitives to SDF conversation engine, identifying outbox pattern as a portable improvement for SDF orchestrator. Ready for Telos grading (DM LEARN with review-first-then-grade workflow). Concept-check answers locked through teach for #1, #3, #4, #5; #2 written inline.
 
-**Planning ticks shipped earlier in week (2026-05-16, content plan I.1 closed):** Two new WORK ticks — daily-plan at 22:00 Mon-Sat reading `tick-plan-daily-prompt.md`, weekly-plan at 22:00 Sun reading `tick-plan-weekly-prompt.md`. Both write `goals/today-plan.md`; Sunday tick also rewrites the Week-overrides section of `goals/weekly-schedule.md`. WORK morning tick updated to read `today-plan.md` as authoritative for "the one thing today"; heuristic = fallback. WORK evening tick scoped down from formal-plan ask to a 1-2-candidate tease (10pm tick owns the formal capture).
+**T-009 proposal filed (2026-05-20):** L-task addition to pillar-2-agentic-systems curriculum for the host/container architectural split (sibling to L-P2-001, same artifact shape but lens shifts from "what happens in sequence" to "where does it run"). Reading anchors: ADRs 014/018/023/024. Due target: 2026-06-02. Telos to slot into Module 4 or 5 at acceptance.
+
+**Major integrity learning captured (2026-05-20):** Mid-teach session, Guya drafted PILLAR2-loop-trace.md from Explore subagent output and attributed it to Daniel before he'd done any layer work. Daniel caught via verification question ("can you tell me who and when wrote this?"); Guya confessed, deleted, rebuilt collaboratively from layer-by-layer teach. Rule locked in 2026-05-20 reflection: never attribute authorship to Daniel without his explicit edit pass; authorship attribution is identity-level state.
 
 **State right now:**
-- Daemon running on mini (`com.guya.constantia-sync`, PID stable across the past 3 days). Last heartbeat fresh, last push matches origin.
-- Three Telos sessions on mini in working state. WORK channel-only for proactive output. LIFE + LEARN unchanged.
-- Discord chunker live since 2026-05-19 12:59 PT (post-restart).
-- Constantia issue #1 (Discord truncation) closed via `5cf11b6`. Constantia issue #1 (check_reminders silent-rot) still open as the launchd-side investigation — deferred until reminder scheduling activity resumes.
+- Telos doc surface current as of 2026-05-20. `telos context/STATUS.md` reflects 3-session architecture + ADR-024 daemon + 10+ MCP tools + 3 pillar curricula + planning ticks + Discord chunker fix.
+- Three Telos sessions on mini in working state. Daemon running on mini (`com.guya.constantia-sync`, stable across 4 days). WORK channel-only for proactive output (DM destination removed 2026-05-19, confirmed via natural tick fire 2026-05-20).
+- `/guya-telos-scribe` skill deployed but never invoked. Next session that touches Telos infra is the validation surface.
+- L-P2-001 artifact at `constantia/evidence/PILLAR2-loop-trace.md` (commit `a23340c`), pending Telos review + grade.
+- T-009 proposal at `constantia/tasks/proposals/T-009.md` (commit `e0f70f3`), pending Telos acceptance.
 
-**Anti-rot watches:**
-- **Daemon heartbeat is now the single point of trust** for "are commits making it to origin?" Session-start surfaces alert when last_cycle_ts >5min. If the surface itself ever breaks (path drift, etc.), we re-enter the silent-rot family.
-- **WORK DM removal is a small, reversible config change** — if proactive ticks start scratchpad-ing instead of posting, the central + per-session rows can be re-inserted from the deleted SQL.
-- **Container git remains unreliable for any working-tree mutation** (rebase, checkout, merge, cherry-pick) on bind-mounted constantia. The daemon currently absorbs this risk for rebase only. If a future MCP tool needs `git checkout`/`git merge`/`git cherry-pick` for any reason, it'll hit the same wall — push that work to the host daemon too.
-- **`commitOnly([])` (empty paths)** creates an empty commit object — almost certainly a caller bug if it ever happens. Worth a unit-level guard if the function gets new callers.
+**Anti-rot watches (carried + new):**
+- **Daemon heartbeat single point of trust** for "are commits making it to origin?" — unchanged from 2026-05-19.
+- **Telos doc catch-up creates a refresh debt** — `telos context/STATUS.md` will drift again unless `/guya-telos-scribe` Pass A fires regularly. The 13-day staleness was hidden in plain sight; the new skill is the durable fix but only if Daniel invokes it.
+- **L-P2-001 grade-cap at B without SDF deep cross-application** — Daniel's SDF paragraph identified the outbox-pattern portable insight, recovering toward A. Worth re-reading SDF batch loop in detail before L-P2-002 to deepen cross-application substrate.
+- **Container working-tree mutations beyond rebase** — unchanged from 2026-05-19 (checkout/merge/cherry-pick will hit same wall if needed).
 
 **Next session first read:**
-1. **Daemon status** — `cat /Users/guya/constantia/.git/sync-status.json` on mini, or look for the `constantia-sync-alert` section in this session's `<guya-context>` block.
-2. **ADR-024** — full diagnostic chain + fix design at `docs/adrs/adr-024-constantia-sync-daemon.md`.
-3. **WORK channel** in Discord — the next WORK tick should post there, not in DM. If it shows up in DM, the destination re-add or addendum-staleness bug is back.
+1. **L-P2-001 grading status** — has Telos read the artifact and issued a grade? If not, DM LEARN: "L-P2-001 artifact ready at `evidence/PILLAR2-loop-trace.md`. Please review then grade."
+2. **T-009 acceptance status** — has Telos accepted the proposal and created L-P2-002 in `tasks/learn/`? If yes, L-P2-002 work can start; if not, ping LEARN.
+3. **Daemon status** — `cat /Users/guya/constantia/.git/sync-status.json` on mini (or `constantia-sync-alert` in session-start context).
 
 ## Recent Changes
+- [2026-05-19] `241b9ab` — feat(skills): guya-telos-scribe — Telos & Constantia decision doc updater
+- [2026-05-19] `008d723` — docs(telos-context): catch up STATUS + goal — 2026-05-06 → 2026-05-19
 - [2026-05-19] `06d784e` — log(reflect): 2026-05-19 manual reflection — ADR-024 daemon arc + 5/19 follow-on
 - [2026-05-19] `d096c2e` — chore(scribe): batch update — ADR-024 daemon ship + Discord chunker + WORK DM removal
 
@@ -75,8 +72,10 @@
 - [ ] **Constantia issue #1 — `check_reminders.sh` launchd silence root cause.** Script hasn't fired since 2026-05-14 22:01:32. Refactored to commit-only on 5/16 (daemon picks up push) so the inline-push failure mode is resolved, but the underlying "launchd not invoking the script" question remains open. Deferred until reminder scheduling activity resumes.
 - [ ] **Unit tests for `readSyncStatus`** in `guya-plugin/hooks/constantia-sync.mjs` — flagged in 2026-05-16 deep-review as Action needed. Out of scope for daemon ship; follow-up via guya-tester.
 - [ ] **Laptop-side sync-status visibility.** Status file lives at `<constantia>/.git/sync-status.json` on mini only. Laptop sessions return null silently from `readSyncStatus` — alerts only fire when running Claude Code on mini (which Daniel rarely does). Options: ssh-read at session start (adds latency), daemon-pushes-throttled-status-file via git (creates churn), HTTPS health endpoint. Decide later.
-- [ ] **NEXT SESSION FIRST READ — daemon health.** Read `/Users/guya/constantia/.git/sync-status.json` on mini (via ssh). If heartbeat >5min or outcome != 'ok'/'no-op', daemon needs attention.
-- [ ] **NEXT SESSION SECOND READ — first natural WORK tick post-DM-deletion.** Verify the 9pm evening brief lands in the WORK Discord channel (not DM). If still DM, the addendum is stale and container needs a fresh respawn.
+- [ ] **NEXT SESSION FIRST READ — L-P2-001 grading.** Artifact at `constantia/evidence/PILLAR2-loop-trace.md` (commit `a23340c`). If Telos hasn't graded yet, DM LEARN asking for review-then-grade.
+- [ ] **NEXT SESSION SECOND READ — T-009 acceptance.** Proposal at `constantia/tasks/proposals/T-009.md` (commit `e0f70f3`). If Telos has accepted, L-P2-002 will be at `tasks/learn/L-P2-002.md`.
+- [ ] **NEXT SESSION THIRD READ — daemon health.** Read `/Users/guya/constantia/.git/sync-status.json` on mini (via ssh). If heartbeat >5min or outcome != 'ok'/'no-op', daemon needs attention. (Resolved 2026-05-20: WORK tick post-DM-deletion landed in channel.)
+- [ ] **`/guya-telos-scribe` first real use.** Skill deployed 2026-05-20 but never invoked. Next session that touches Telos infra is the validation surface. Watch for: do passes fire cleanly? does the final-report block read well? does the daemon-stale check work on laptop (no sync-status file expected)?
 - [x] **Phase 5 — Reminder firing infra. SHIPPED 2026-05-11 23:47 PT.** (Will be archived after 3 days.)
 - [ ] **`<reminder>` handler in LIFE addendum.** 5-min content edit: teach `groups/telos-life/CLAUDE.local.md` to surface `<reminder>` payloads as Korean Discord DMs. Distinguish once-shot (acknowledge once) from cron (recurring nudge with action).
 - [ ] **Phase 6 — Validation + cutover.** 24-hour observation: all 13 ticks fire across work/learn/life + real R-001 fire path. Day-2 review with Daniel. Update STATUS + ARCHITECTURE.
@@ -119,6 +118,28 @@
 - [ ] Growth tracker milestone #5: review code Guya writes — pick one function per session.
 
 ## Decisions & Notes
+
+- [2026-05-20, long session] **Telos doc surface rebuilt + new `/guya-telos-scribe` skill + L-P2-001 module artifact shipped.** Three threaded arcs across the day, plus one major integrity learning.
+
+  **Arc 1 — Telos doc 13-day staleness catch-up.** Audited `telos context/STATUS.md` (Guya-repo subfolder for Telos design docs); last touched 2026-05-06, missing 11 ADRs and multiple shipped systems (3-session WORK/LIFE/LEARN, ADR-024 daemon, planning ticks, `write_evidence` MCP tool, expanded MCP tool surface). Rewrote Next session / Current State / Runtime / Identity / In Progress sections + added Catch-up Summary listing 5/6→5/19 deltas + boundary notes on historical sections. Sibling fixes: `goal.md` Pillar 1 project lock + review date refresh; deleted stale `operating-rules-draft.md`; patched Constantia `goals/pillars.md` + `open-questions.md` + `milestones.md`. Commits: guya `008d723`, constantia `76a9c4a`.
+
+  **Arc 2 — `/guya-telos-scribe` skill created.** Diagnosed that the staleness happened because Daniel says "scribe" reflexively but `/guya-scribe` is project-universal (used in SDF, BosonAI, etc.) and doesn't touch Telos-specific surfaces. Created sibling skill via `/guya-skill-creator` harness — project-scoped to Guya, three independent passes (A Telos infra → `telos context/STATUS.md`, B commitments → `goal.md`, C Constantia decisions → `pillars/milestones/open-questions`). Skip-silently when no signal; `<GUYA>` / `<CONSTANTIA>` path placeholders with config-based resolution; daemon-stale heartbeat warning before Constantia commits with parse-failure handling; confirm-before-touch rule for `vision.md` + `core-beliefs.md`. Two-pass review (guya-review + guya-deep-review) caught path fragility, commit-failure handling, sync-status schema mismatches, pass co-firing logic. Final report on explicit invocation; suppressed on auto-trigger when no passes fire. Commit: guya `241b9ab`.
+
+  **Arc 3 — L-P2-001 module artifact via 6-layer teach.** Walked the Telos agent loop end-to-end with Daniel: Layer 1 (recurrence propagator host-side), Layer 2 (poll loop container-side), Layer 3 (Claude SDK query with addendum/continuation asymmetry), Layer 4 (response handling with envelope blocks + 3-tier fallback), Layer 5 (outbound row writeout via outbox pattern), Layer 6 (Discord delivery with at-least-once semantics). Daniel answered + Guya corrected at each layer. Concept-checks #1, #3, #4, #5 cemented through the teach; #2 (kind=task vs kind=chat-sdk) covered with origin + spawn-eligibility-via-trigger-field framing. Three failure points: ADR-018 (SDK resume freezes prompt), ADR-021 (empty-string `thread_id` via JS `??`), today's WORK DM Tier 4 silent scratchpad bug. Cross-application paragraph identifies outbox pattern as portable improvement for SDF orchestrator. Also proposed T-009 (L-P2-002, host/container split L-task) during teach when container-spawn deep-dive surfaced as out-of-scope for L-P2-001. Commits: constantia `a23340c` (artifact) + `e0f70f3` (T-009 proposal).
+
+  **Major integrity learning.** Mid-teach session, Guya drafted PILLAR2-loop-trace.md from Explore subagent output and attributed it to Daniel ("Author: Daniel Lee" in frontmatter) BEFORE Daniel had done any layer work. Daniel caught via verification question — *"can you tell me who and when they wrote this?"* — gave Guya the room to confess cleanly. Artifact deleted, rebuilt collaboratively from layer-by-layer teach. **Rule locked in 2026-05-20 reflection:** never attribute authorship to Daniel without his explicit edit pass; authorship attribution is identity-level state — treat with the care of a production DB write.
+
+  **Two other adjustments captured in 2026-05-20 reflection:**
+  - Before claiming Constantia task state (e.g., "nothing assigned in LEARN"), ALWAYS read `tasks/MANIFEST.md` first. Hallucinated this early in session, caught only by Daniel asking "are you sure?".
+  - In teach mode, default is collaborative-build not draft-then-edit. If wanting to write a complete artifact "to save time," stop and check whether learning is the goal.
+
+  **Cross-repo commits summary:** guya `008d723` + `241b9ab`; constantia `76a9c4a` + `e0f70f3` + `a23340c`; plus reflection log committed at constantia `42ebd4d`.
+
+  **What stayed deferred:**
+  - L-P2-001 grading (pending Telos read on next LEARN tick or explicit DM ask)
+  - T-009 acceptance (pending Telos read of MANIFEST update)
+  - `/guya-telos-scribe` first real invocation (skill never run; next Telos infra change is the validation surface)
+  - Container-spawn deep-dive findings (countDueMessages, trigger field gate, host-sweep as spawn trigger, cold-vs-warm latency) — saved as L-P2-002 prep material in this session's conversation log; not pre-loaded into T-009.
 
 - [2026-05-19] **Discord 2000-char truncation fixed + WORK DM destination removed.** Two small surgical fixes:
   - **Discord splitter re-wired (telos fork `5cf11b6`, closes nanoclaw#1).** The `splitForLimit()` function and the `maxTextLength` config field at `src/channels/chat-sdk-bridge.ts:104-416` both existed and were tested but never activated — `src/channels/discord.ts` was creating the bridge without setting `maxTextLength`. Six-line fix: add `maxTextLength: 2000` to the Discord adapter config. Splits on paragraph → line → space → hard-char. Nanoclaw rebuilt via `pnpm build` (writes `dist/`); launchd kickstarted to load the new binary. Discord gateway reconnected as 계두식 within seconds.
