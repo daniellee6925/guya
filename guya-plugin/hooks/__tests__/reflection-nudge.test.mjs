@@ -25,7 +25,7 @@ import { mkdtempSync, writeFileSync, utimesSync, rmSync, mkdirSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 
-import { computeReflectionNudge } from '../guya-session-start.mjs';
+import { computeReflectionNudge, formatNudgeDirective } from '../guya-session-start.mjs';
 
 function makeFixture() {
   const root = mkdtempSync(join(tmpdir(), 'guya-nudge-'));
@@ -123,5 +123,31 @@ describe('computeReflectionNudge', () => {
 
     const out = computeReflectionNudge(fx.projectDir, { globalDir: fx.globalDir, now: () => NOW });
     assert.match(out, /no prior \/guya-evolve runs recorded/);
+  });
+});
+
+// The nudge is invisible to Daniel unless Guya relays it — `additionalContext`
+// is model-only (issue guya#3). formatNudgeDirective is the load-bearing fix:
+// it turns the passive status line into an instruction Guya acts on. These
+// tests pin that contract so a future "tidy-up" can't quietly strip the
+// directive back to a status line and re-bury the signal.
+describe('formatNudgeDirective', () => {
+  const NUDGE = '📝 3 reflections accumulated (6 days since last evolve). Run /guya-evolve to process them.';
+
+  it('preserves the bare nudge verbatim on its own line', () => {
+    const out = formatNudgeDirective(NUDGE);
+    assert.ok(out.split('\n').includes(NUDGE), 'bare nudge must survive intact for relay + systemMessage');
+  });
+
+  it('carries an explicit instruction to surface it to Daniel first', () => {
+    const out = formatNudgeDirective(NUDGE);
+    assert.match(out, /SHOW DANIEL FIRST/);
+    assert.match(out, /cannot see this/i);
+    assert.match(out, /first reply/i);
+  });
+
+  it('directive precedes the bare nudge (instruction read before payload)', () => {
+    const out = formatNudgeDirective(NUDGE);
+    assert.ok(out.indexOf('SHOW DANIEL FIRST') < out.indexOf(NUDGE));
   });
 });

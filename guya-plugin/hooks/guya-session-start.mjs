@@ -184,6 +184,26 @@ export function computeReflectionNudge(cwd, opts = {}) {
   return `📝 ${backlog} reflection${backlog === 1 ? '' : 's'} accumulated (${daysClause}). Run /guya-evolve to process them.`;
 }
 
+/**
+ * Wrap the bare nudge in an imperative so Guya relays it to Daniel in its first
+ * reply. The nudge ships inside `additionalContext`, which Claude Code injects
+ * into Guya's context window only — it is never rendered in the chat UI, so a
+ * passive status line dies silently in-context (issue guya#3). This directive
+ * is the load-bearing fix: it's the one channel guaranteed to reach Daniel's
+ * eyes (Guya's own output). The bare nudge is preserved verbatim on its own
+ * line so the signal survives intact for both Guya and any systemMessage relay.
+ *
+ * Pure string transform — unit-tested alongside computeReflectionNudge.
+ */
+export function formatNudgeDirective(nudge) {
+  return [
+    '🔔 SHOW DANIEL FIRST — he cannot see this <guya-context> block.',
+    'Open your first reply by relaying the line below, then offer to run it:',
+    '',
+    nudge,
+  ].join('\n');
+}
+
 // --- Context Assembly ---
 
 function assembleContext(cwd) {
@@ -293,7 +313,7 @@ function assembleContext(cwd) {
   // null otherwise to avoid noisy "all clear" messages every session).
   const nudge = computeReflectionNudge(cwd);
   if (nudge) {
-    sections.push({ label: 'reflection-nudge', content: nudge, priority: -1 });
+    sections.push({ label: 'reflection-nudge', content: formatNudgeDirective(nudge), priority: -1 });
   }
 
   // Sort by priority (lower = higher priority, included first)
@@ -315,7 +335,10 @@ function assembleContext(cwd) {
     totalChars += sectionChars;
   }
 
-  return parts.join('\n\n---\n\n');
+  // Surface `nudge` separately so main() can also set it as a best-effort
+  // systemMessage. The bare line (not the directive-wrapped section) is the
+  // right payload for systemMessage — it's the human-facing sentence.
+  return { context: parts.join('\n\n---\n\n'), nudge };
 }
 
 // --- Main ---
@@ -345,16 +368,24 @@ async function main() {
     ensureProjectLocal(cwd);
 
     // Assemble context
-    const context = assembleContext(cwd);
+    const { context, nudge } = assembleContext(cwd);
 
     if (context.length > 0) {
-      console.log(JSON.stringify({
+      const output = {
         continue: true,
         hookSpecificOutput: {
           hookEventName: 'SessionStart',
           additionalContext: `<guya-context>\n\n${context}\n\n</guya-context>`
         }
-      }));
+      };
+      // Best-effort native surfacing of the backlog nudge. systemMessage is the
+      // only documented user-facing hook field, but it's unreliable for
+      // plugin-sourced SessionStart hooks (silently dropped in some Claude Code
+      // versions) — so it's insurance, not the load-bearing path. The directive
+      // baked into the nudge section (relayed by Guya in its first reply) is what
+      // actually guarantees Daniel sees it. See formatNudgeDirective + guya#3.
+      if (nudge) output.systemMessage = nudge;
+      console.log(JSON.stringify(output));
     } else {
       console.log(JSON.stringify({ continue: true, suppressOutput: true }));
     }
