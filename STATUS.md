@@ -1,41 +1,43 @@
 # guya — Status
 
-> Last updated: 2026-05-21
+> Last updated: 2026-05-21 14:00 PT
 
 ## Current Focus
 
-**Telos doc surface rebuilt + new `/guya-telos-scribe` skill shipped + L-005 module artifact written and committed.**
+**T/P prefix swap migrated + deployed (2026-05-21).** `T-`=Task, `P-`=Proposal. The letters were backwards (`T-` lived in `tasks/proposals/`, `P-` in `tasks/tasks/`); swapped across all three repos and live on the Mini. This was Constantia task `T-005` (née `P-005`, accepted from proposal `P-007` née `T-007`) — now marked complete.
 
-**Telos doc catch-up (2026-05-20):** Audited `telos context/` (Guya-repo subfolder for Telos design docs) and found `STATUS.md` was 13 days stale (last touched 2026-05-06). Eleven ADRs unreflected; multiple shipped systems (3-session WORK/LIFE/LEARN, ADR-024 daemon, planning ticks, `write_evidence` MCP tool, expanded MCP tool surface) missing from the doc. Catch-up patch rewrote Next session / Current State / Runtime / Identity / In Progress sections + added Catch-up Summary listing 5/6→5/19 deltas + boundary notes on historical sections (Operations Runbook, Tests & Observations, Decisions & Notes stop at 5/6; point to guya STATUS for the gap chronicle). Sibling fixes: `goal.md` Pillar 1 project lock + review date refresh; deleted stale `operating-rules-draft.md`; patched Constantia `goals/pillars.md` + `open-questions.md` + `milestones.md` (Project 3 = Production Serving Cookbook, resolved LLM-inference questions, milestones placeholder honest about mechanism never wiring up).
+**What shipped:** tool code + validators + all tick prompts (nanoclaw `2eba7ef`); 16 file renames + every cross-ref + both Constantia hooks + a dated swap *legend* in `CLAUDE.md` (constantia `59775be`); ADR-025 + ARCHITECTURE schema table + full migration plan (`docs/2026-05-21-tp-swap-migration.md`) in guya. Cut-over was **freeze Mini (nanoclaw + sync daemon) → push → pull → resume** — no container rebuild needed because `shared/telos-tools/` is bind-mounted live into session containers and `groups/` prompts are read by the host per-tick.
 
-**`/guya-telos-scribe` skill (2026-05-20):** Sibling to universal `/guya-scribe`, project-scoped to Guya. Three independent passes — Pass A (Telos infra/runtime changes → `telos context/STATUS.md`), Pass B (Telos commitment changes → `goal.md`), Pass C (Constantia static decision docs → `pillars.md` / `milestones.md` / `open-questions.md`). Skip-silently when no signal; explicit `<GUYA>` / `<CONSTANTIA>` path placeholders (constantia path resolved via `~/.claude/guya/constantia.json` with fallback). Daemon-stale heartbeat warning before Constantia commits with parse-failure handling. Confirm-before-touch rule for `vision.md` + `core-beliefs.md`. Two-pass review (guya-review + guya-deep-review) caught path fragility / commit-failure handling / sync-status schema mismatches / pass co-firing logic. Final report block on explicit invocation; suppressed on auto-trigger when no passes fire. Skill at `guya-plugin/skills/guya-telos-scribe/SKILL.md`; catalog updated in `guya-plugin/skills/CLAUDE.md` + `AGENTS.md`. Spec'd against today's manual catch-up as fidelity reference.
+**Immutable-history decision (Daniel):** dated logs / `evidence/` / `tasks/archive/` were NOT rewritten — IDs there keep their pre-swap meaning, recorded in the CLAUDE.md legend. Only live state migrated. Matches the append-only preference from the 2026-05-21 learn-ID migration earlier the same day.
 
-**L-005 module artifact (2026-05-20):** 6-layer trace of Telos morning tick from cron-fired inbound row through Discord delivery, written as `constantia/evidence/PILLAR2-loop-trace.md` after a teach-through session. Each layer documents file + function + line range + load-bearing decision. Three failure points grounded in real ADRs: ADR-018 (SDK resume freezes prompt), ADR-021 (empty-string `thread_id` breaks routing via JS `??` semantics), Tier 4 silent scratchpad fallback (today's WORK DM bug, 2026-05-19). Cross-application paragraph maps Telos loop primitives to SDF conversation engine, identifying outbox pattern as a portable improvement for SDF orchestrator. Ready for Telos grading (DM LEARN with review-first-then-grade workflow). Concept-check answers locked through teach for #1, #3, #4, #5; #2 written inline.
-
-**T-009 proposal filed (2026-05-20):** L-task addition to pillar-2-agentic-systems curriculum for the host/container architectural split (sibling to L-005, same artifact shape but lens shifts from "what happens in sequence" to "where does it run"). Reading anchors: ADRs 014/018/023/024. Due target: 2026-06-02. Telos to slot into Module 4 or 5 at acceptance.
-
-**Major integrity learning captured (2026-05-20):** Mid-teach session, Guya drafted PILLAR2-loop-trace.md from Explore subagent output and attributed it to Daniel before he'd done any layer work. Daniel caught via verification question ("can you tell me who and when wrote this?"); Guya confessed, deleted, rebuilt collaboratively from layer-by-layer teach. Rule locked in 2026-05-20 reflection: never attribute authorship to Daniel without his explicit edit pass; authorship attribution is identity-level state.
+**Gotchas hit + recorded:**
+- **Local clones were stale** — telos was 6 commits behind origin (daemon/planning-tick work). The migration had to be rebuilt on current code, incl. two new planning-tick prompts the stale base lacked. (Always `git fetch` + check ahead/behind before a multi-repo migration.)
+- **Mini had uncommitted prompt refinements** (always-report rule, 기억나무 anchor, midday closing questions) that nearly got lost on pull — recovered + carried onto the new scheme (`2eba7ef`).
+- **Blanket ID-swap corrupts convention-*describing* prose** — the migration's own task/proposal files (`T-005`, `P-007`) had their explanatory text letter-flipped into nonsense; restored by hand. (Saved as a memory.)
+- **`constantia-sync` daemon doesn't pull on idle** — its cycle exits before `fetch` when `local_sha == last_pushed_sha`. After pushing constantia from the dev box, the Mini stays behind until its next tick; manual `git merge --ff-only origin/main` to sync now.
+- **Mini `git commit` over SSH needs `/opt/homebrew/bin` on PATH** or husky's `pnpm` pre-commit hook fails (exit 127).
 
 **State right now:**
-- Telos doc surface current as of 2026-05-20. `telos context/STATUS.md` reflects 3-session architecture + ADR-024 daemon + 10+ MCP tools + 3 pillar curricula + planning ticks + Discord chunker fix.
-- Three Telos sessions on mini in working state. Daemon running on mini (`com.guya.constantia-sync`, stable across 4 days). WORK channel-only for proactive output (DM destination removed 2026-05-19, confirmed via natural tick fire 2026-05-20).
-- `/guya-telos-scribe` skill deployed but never invoked. Next session that touches Telos infra is the validation surface.
-- L-005 artifact at `constantia/evidence/PILLAR2-loop-trace.md` (commit `a23340c`), pending Telos review + grade.
-- T-009 proposal at `constantia/tasks/proposals/T-009.md` (commit `e0f70f3`), pending Telos acceptance.
+- All three repos consistent across dev box + origin + Mini (telos `2eba7ef`, constantia `59775be`, guya pushed). Mini daemons (nanoclaw + constantia-sync) running. The 1pm tick fired clean on the new code (no-op).
+- **Last green light pending:** the next tick that actually *mints* an ID — next `propose_task` → `P-012`, next `assign_task` → `T-006`. Confirm by checking the newest file in `constantia/tasks/{proposals,tasks}/` or the next tick log.
+- **`nanoclaw#2` filed:** `ASSISTANT_NAME` defaults to upstream stock "Andy" (skin-deep; the bot's Discord identity is 계두식, and the Telos addendum is intact). Fix = `setup/register.ts --assistant-name Telos` + patch plist default; needs a Mini `.env` check.
 
 **Anti-rot watches (carried + new):**
 - **Daemon heartbeat single point of trust** for "are commits making it to origin?" — unchanged from 2026-05-19.
-- **Mini on WiFi destabilizes the Discord gateway → "Telos is slow / not responding."** If all three channels go slow + respond in bursts (not one channel dead, but all sluggish), suspect mini's network link, NOT a container or code problem. One nanoclaw process holds one shared Discord WebSocket; WiFi jitter (latency spikes past the gateway heartbeat-ACK timeout) makes it repeatedly declare itself zombied and reconnect (`GATEWAY_RESUMED` in `nanoclaw.log`), stalling all channels at once. Diagnosis: `ping -c 15 8.8.8.8` from mini — high stddev/max jitter (not necessarily packet loss) is the tell. Fix: wired ethernet. Recurs any time mini goes back to WiFi. See 2026-05-20 incident below.
-- **Telos doc catch-up creates a refresh debt** — `telos context/STATUS.md` will drift again unless `/guya-telos-scribe` Pass A fires regularly. The 13-day staleness was hidden in plain sight; the new skill is the durable fix but only if Daniel invokes it.
-- **L-005 grade-cap at B without SDF deep cross-application** — Daniel's SDF paragraph identified the outbox-pattern portable insight, recovering toward A. Worth re-reading SDF batch loop in detail before L-007 to deepen cross-application substrate.
-- **Container working-tree mutations beyond rebase** — unchanged from 2026-05-19 (checkout/merge/cherry-pick will hit same wall if needed).
+- **`constantia-sync` doesn't pull on idle (new 2026-05-21).** Pushing constantia from anywhere other than the Mini won't reach the Mini until it next commits locally. If the Mini needs the change now, `ssh mini` + `git -C ~/constantia merge --ff-only origin/main`.
+- **Mini on WiFi destabilizes the Discord gateway → "Telos is slow / not responding."** If all three channels go slow + respond in bursts, suspect mini's network link, NOT a container or code problem. One nanoclaw process holds one shared Discord WebSocket; WiFi jitter (latency spikes past the gateway heartbeat-ACK timeout) makes it repeatedly declare itself zombied and reconnect (`GATEWAY_RESUMED` in `nanoclaw.log`). Diagnosis: `ping -c 15 8.8.8.8` from mini — high stddev/max jitter is the tell. Fix: wired ethernet. See 2026-05-20 incident below.
+- **Telos doc refresh debt** — `telos context/STATUS.md` drifts unless `/guya-telos-scribe` Pass A fires regularly.
+- **Container working-tree mutations beyond rebase** — unchanged from 2026-05-19 (checkout/merge/cherry-pick hit the bind-mount wall).
 
 **Next session first read:**
-1. **L-005 grading status** — has Telos read the artifact and issued a grade? If not, DM LEARN: "L-005 artifact ready at `evidence/PILLAR2-loop-trace.md`. Please review then grade."
-2. **T-009 acceptance status** — has Telos accepted the proposal and created L-007 in `tasks/learn/`? If yes, L-007 work can start; if not, ping LEARN.
+1. **T/P swap live confirmation** — has a tick minted a new-scheme ID yet? Newest file in `constantia/tasks/proposals/` should be `P-012`+ and `tasks/tasks/` `T-006`+ once Telos creates work. If a tick *errored* on an ID, that's the regression signal.
+2. **L-005 grading status** — has Telos graded the artifact at `evidence/PILLAR2-loop-trace.md`? (T-009 was accepted → spawned `L-007`; that thread is resolved.)
 3. **Daemon status** — `cat /Users/guya/constantia/.git/sync-status.json` on mini (or `constantia-sync-alert` in session-start context).
 
 ## Recent Changes
+- [2026-05-21] `4ef2d48` — docs(migration): mark T/P swap DEPLOYED + record plan corrections
+- [2026-05-21] `3fab2cb` — docs(schema): T/P prefix swap — ADR-025 + ARCHITECTURE schema + migration plan (T-005)
+- [2026-05-21] `50589ac` — docs(status): record learn-ID flat-L-NNN migration + update live pointers
 - [2026-05-21] `14df182` — chore(scribe): note 2026-05-20 WiFi/gateway incident + anti-rot watch
 - [2026-05-20] `8afb10d` — chore(scribe): 2026-05-20 — Telos doc catch-up + telos-scribe skill + L-P2-001 artifact
 - [2026-05-19] `241b9ab` — feat(skills): guya-telos-scribe — Telos & Constantia decision doc updater
@@ -55,6 +57,8 @@
 - [2026-05-14] `aa3c3a3` — chore(scribe): 5/14 marathon end — comprehensive STATUS update
 
 **Cross-repo (telos = nanoclaw fork `daniellee6925/nanoclaw`):**
+- [2026-05-21] `2eba7ef` — chore(prompts): recover mini-local prompt refinements (post T/P swap)
+- [2026-05-21] `f8a31c0` — refactor(schema): swap T/P prefix — T=task, P=proposal (validators, minters, all tick prompts incl. 2 new planning-tick prompts)
 - [2026-05-19] `5cf11b6` — fix(discord): maxTextLength=2000 re-enables splitter (closes #1)
 - [2026-05-16] `184a7d5` — refactor(telos-tools): helpers.ts commitAndPush → commitOnly(message, paths); all 10 MCP callers updated; E1 instrumentation removed
 - [2026-05-16] `d67fc13` — feat(work): add 10pm daily + Sunday weekly planning ticks
@@ -63,6 +67,7 @@
 - [2026-05-14] `4698f79` — fix(routing): treat empty-string thread_id as missing in routing fallbacks (ADR-021)
 
 **Cross-repo (constantia `daniellee6925/constantia`):**
+- [2026-05-21] `59775be`/`82ee54a` — refactor(schema): T/P swap — 16 file renames + cross-refs + pre/post-commit hooks + CLAUDE.md legend; T-005 marked complete; lina_platform reflection log committed
 - [2026-05-21] `d53f096` — chore(tasks): migrate learn IDs to flat L-NNN + pre-commit gate (L-P1-001→L-004, L-P2-001→L-005, L-P3-001→L-006; L-003→L-007 superseded append-only)
 - [2026-05-16] `37ff5b4` — refactor(reminders): drop pull/push from check_reminders.sh (daemon owns push)
 - [2026-05-16] `1930445` — refactor(hooks): drop post-commit auto-push (daemon owns push)
@@ -122,6 +127,8 @@
 - [ ] Growth tracker milestone #5: review code Guya writes — pick one function per session.
 
 ## Decisions & Notes
+
+- [2026-05-21, later same day] **T/P prefix swap executed + deployed (Constantia task `T-005`, née `P-005`).** The naming was backwards: `T-NNN` lived in `tasks/proposals/` (a proposal) and `P-NNN` in `tasks/tasks/` (a task). Swapped so `T`=Task, `P`=Proposal. **Spans three repos, so atomicity is per-repo, not one commit** (the acceptance text said "single commit" — impossible across repos): nanoclaw `f8a31c0`+`2eba7ef` (validators/minters/all tick prompts), constantia `59775be`+`82ee54a` (16 renames + cross-refs + both hooks + dated CLAUDE.md legend + T-005 complete), guya `3fab2cb`+`4ef2d48` (ADR-025 + ARCHITECTURE schema + plan doc). **Cut-over on the live Mini:** freeze (`launchctl unload` nanoclaw + constantia-sync) → push all 3 → `git pull` on Mini → reload daemons → verify. **No container rebuild** — `shared/telos-tools/` is bind-mounted RO into session containers and `groups/` prompts are read live; a pull deploys. **Immutable history (Daniel's call):** dated logs/evidence/archive NOT rewritten — pre-swap IDs keep old meaning per the CLAUDE.md legend; only live state migrated. **Five gotchas, all worth remembering:** (1) local clones were stale — telos was 6 commits behind origin, so the migration was rebuilt on current code incl. 2 new planning-tick prompts the stale base never had; *always fetch + check ahead/behind before a multi-repo migration*. (2) the Mini had uncommitted prompt refinements (always-report rule, 기억나무 anchor, midday questions) that nearly got lost on pull — recovered + reswapped. (3) a blanket ID-swap corrupts convention-*describing* prose — the migration's own `T-005`/`P-007` purpose/acceptance got letter-flipped into nonsense; restore the meta-files by hand (saved as memory `feedback-migration-convention-prose`). (4) `constantia-sync` exits before fetch when `local == last_pushed` → doesn't pull on idle; manual ff needed after pushing from the dev box. (5) Mini `git commit` over SSH needs `/opt/homebrew/bin` on PATH or husky's pnpm hook 127s. Live confirmation still pending: the next ID-minting tick (`P-012`/`T-006`). Full plan: `docs/2026-05-21-tp-swap-migration.md`. Filed `nanoclaw#2` (ASSISTANT_NAME=Andy leftover, cosmetic) along the way.
 
 - [2026-05-21] **Learn-task ID migration — flat `L-NNN` is now canonical + enforced.** Daniel flagged Telos's learn tasks as having confusing labels. Root cause: Constantia `CLAUDE.md`'s ID-conventions section was stale (documented the pre-2026-05-08 `TASK-NNN` scheme, said nothing about learn IDs) and the pre-commit hook validated ID *uniqueness* but never *format* — so Telos minted flat `L-NNN` while a 2026-05-14 Guya session invented a pillar-prefixed `L-Pn-NNN` scheme; both passed validation and coexisted (`L-003` and `L-P2-001` were sibling Pillar-2 tasks with unrelated-looking IDs). Telos was actually the *consistent* one — flat matches `P-`/`T-`/`R-`/`EVD-`; Guya was the deviation. Fix (constantia `d53f096`): rewrote the ID-conventions spec, added an `^L-[0-9]{3}$` gate to `validate_learn` (gate-proven both ways before migrating), and migrated **append-only** — `L-P1-001→L-004`, `L-P2-001→L-005`, `L-P3-001→L-006`, and `L-003→L-007` (superseded: old L-003 archived as a frozen tombstone, recreated as L-007 so the follow-up sorts after its parent L-005). Chose append over chronological renumber: reusing numbers would make old logs ambiguous; append keeps a clean bijection (every old ID maps to exactly one new ID, no reuse). Dated logs/evidence/reflections left as history; mapping recorded in constantia `log/guya/2026-05-21-guya-6ef35ae8.md`. One-shot supervised crossing into Telos-owned `evidence/`+`goals/` (Daniel-authorized; not a precedent for ongoing co-writing). This guya-repo `STATUS.md` + `telos context/STATUS.md` had their *live* pointers updated to flat IDs; dated changelog entries left as history. **Note surfaced:** the remote commit we rebased onto was Telos accepting `T-007` → task `P-005` (the T-/P- naming swap) — accepted but not yet executed.
 
