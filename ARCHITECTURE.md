@@ -246,8 +246,8 @@ The Constantia repo is shared across two filesystems: it lives on mini's native 
 
 | Dir | Prefix | Lifecycle | Purpose |
 |-----|--------|-----------|---------|
-| `tasks/proposals/` | `T-NNN` | `proposed → accepted \| rejected` | Recommendations awaiting accept/reject. Carry `target: task\|learn\|curriculum` field. |
-| `tasks/tasks/` | `P-NNN` | `assigned → in-progress → complete → graded` (+ `blocked`, `abandoned`) | Committed P-task work. |
+| `tasks/proposals/` | `P-NNN` | `proposed → accepted \| rejected` | Recommendations awaiting accept/reject. Carry `target: task\|learn\|curriculum` field. |
+| `tasks/tasks/` | `T-NNN` | `assigned → in-progress → complete → graded` (+ `blocked`, `abandoned`) | Committed T-task work. |
 | `tasks/learn/` | `L-NNN` | same as tasks | Curriculum-paced learning, references curriculum + module. |
 | `tasks/learn/curricula/` | `<slug>.md` | n/a (free-form) | Durable structured plans (e.g., `bytebytego-systems.md`). |
 | `tasks/reminders/` | `R-NNN` | `pending→fired→archived` (one-shot) or `active→paused\|retired` (cron) | Scheduled fires with flat `schedule_type` + `schedule_at`/`schedule_expr`. |
@@ -261,11 +261,11 @@ The Constantia repo is shared across two filesystems: it lives on mini's native 
 - `schedule_type: once` requires `schedule_at: <ISO-timestamp>`. Status: pending→fired→archived.
 - `schedule_type: cron` requires `schedule_expr: <5-field cron>`. Status: active→paused→retired.
 
-**MANIFEST is one file with 4 sections** (`tasks/MANIFEST.md`): Tasks (P-tasks), Learn (L-tasks), Proposals (T-proposals), Reminders (R-tasks). Post-commit hook walks all four dirs and rewrites sections. Session-start reads this single file at priority 0.
+**MANIFEST is one file with 4 sections** (`tasks/MANIFEST.md`): Tasks (T-tasks), Learn (L-tasks), Proposals (P-proposals), Reminders (R-tasks). Post-commit hook walks all four dirs and rewrites sections. Session-start reads this single file at priority 0.
 
 **Curriculum reference flow.** L-tasks carry `curriculum: <slug>` + `module: <num|name>` + `success: <criterion>` + `by: <due-YYYY-MM-DD>`. Curriculum file at `tasks/learn/curricula/<slug>.md` must exist (validator + tool-runtime both check). At 10pm learn tick, `grade_learn` evaluates Daniel's writeup against the L-task's `success` criterion via knowledge-check Q (live Q&A, not async-only) and writes evidence with `{strength|habit|tentative}` calibration.
 
-**Backlog ownership (still: Constantia is single source of truth).** Surfaced ideas flow: Telos `propose_task` (target=task|learn|curriculum) → T-proposal in `tasks/proposals/` → Daniel/Telos triages via `accept_proposal` → spawns the right artifact in the right dir.
+**Backlog ownership (still: Constantia is single source of truth).** Surfaced ideas flow: Telos `propose_task` (target=task|learn|curriculum) → P-proposal in `tasks/proposals/` → Daniel/Telos triages via `accept_proposal` → spawns the right artifact in the right dir.
 
 ### Context Assembly (session-start)
 
