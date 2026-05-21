@@ -1,10 +1,17 @@
 # T/P Prefix Swap Migration Plan (P-005 → now T-005)
 
-> Status: **EXECUTED LOCALLY (2026-05-21) — push + Mini cut-over pending Daniel.**
-> Local commits: nanoclaw `c3757d5`, constantia `ed912ba`, guya (this commit). None pushed.
-> Remaining: freeze Mini ticks + sync daemon → push all 3 repos → rebuild Mini container → resume (§7 steps 2, 6).
+> Status: **DEPLOYED & VERIFIED (2026-05-21).** Live on the Mini; all three repos pushed.
+> Shipped commits: nanoclaw `2eba7ef`, constantia `82ee54a`, guya `3fab2cb`.
 > Author: Guya · Date: 2026-05-21 · Source task: Constantia `T-005` (was `P-005`, accepted from `P-007` née `T-007`)
 > Precedent: `docs/2026-05-08-telos-reorg.md`
+>
+> **What actually happened vs the plan (corrections worth recording):**
+> - **Local clones were stale.** telos was 6 commits behind origin (daemon/planning-tick work) — the migration had to be rebuilt on current code, including two new planning-tick prompts the stale base never had. constantia was 1 tick behind (clean rebase).
+> - **No container rebuild needed.** `shared/telos-tools/` is bind-mounted read-only into session containers and `groups/` prompts are read live by the host — a `git pull` on the Mini suffices. Plan §7 step 4's "rebuild container" was wrong for this architecture.
+> - **Mini had uncommitted prompt refinements** (`always report after work`, 기억나무 anchor, midday closing questions) that nearly got lost on pull — recovered, swapped onto the new scheme, committed (`2eba7ef`).
+> - **Swap bug caught:** the blanket letter-swap corrupted the convention-*describing* prose in the two meta-files (T-005, P-007) — restored.
+> - **sync daemon doesn't pull on idle** (exits before fetch when `local == last_pushed`) → had to manually `merge --ff-only` the Mini's constantia after pushing T-005's completion.
+> - **Cut-over sequence used:** freeze Mini (`launchctl unload` nanoclaw + constantia-sync) → reset/rebuild telos on origin → rebase constantia → push all 3 → pull on Mini → reload daemons → verify (heartbeat clean, nanoclaw running).
 
 ## 1. What this migration does
 
