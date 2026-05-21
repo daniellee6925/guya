@@ -1,6 +1,6 @@
 # guya — Status
 
-> Last updated: 2026-05-20 13:46 PT
+> Last updated: 2026-05-20
 
 ## Current Focus
 
@@ -25,6 +25,7 @@
 
 **Anti-rot watches (carried + new):**
 - **Daemon heartbeat single point of trust** for "are commits making it to origin?" — unchanged from 2026-05-19.
+- **Mini on WiFi destabilizes the Discord gateway → "Telos is slow / not responding."** If all three channels go slow + respond in bursts (not one channel dead, but all sluggish), suspect mini's network link, NOT a container or code problem. One nanoclaw process holds one shared Discord WebSocket; WiFi jitter (latency spikes past the gateway heartbeat-ACK timeout) makes it repeatedly declare itself zombied and reconnect (`GATEWAY_RESUMED` in `nanoclaw.log`), stalling all channels at once. Diagnosis: `ping -c 15 8.8.8.8` from mini — high stddev/max jitter (not necessarily packet loss) is the tell. Fix: wired ethernet. Recurs any time mini goes back to WiFi. See 2026-05-20 incident below.
 - **Telos doc catch-up creates a refresh debt** — `telos context/STATUS.md` will drift again unless `/guya-telos-scribe` Pass A fires regularly. The 13-day staleness was hidden in plain sight; the new skill is the durable fix but only if Daniel invokes it.
 - **L-P2-001 grade-cap at B without SDF deep cross-application** — Daniel's SDF paragraph identified the outbox-pattern portable insight, recovering toward A. Worth re-reading SDF batch loop in detail before L-P2-002 to deepen cross-application substrate.
 - **Container working-tree mutations beyond rebase** — unchanged from 2026-05-19 (checkout/merge/cherry-pick will hit same wall if needed).
@@ -35,6 +36,7 @@
 3. **Daemon status** — `cat /Users/guya/constantia/.git/sync-status.json` on mini (or `constantia-sync-alert` in session-start context).
 
 ## Recent Changes
+- [2026-05-20] `8afb10d` — chore(scribe): 2026-05-20 — Telos doc catch-up + telos-scribe skill + L-P2-001 artifact
 - [2026-05-19] `241b9ab` — feat(skills): guya-telos-scribe — Telos & Constantia decision doc updater
 - [2026-05-19] `008d723` — docs(telos-context): catch up STATUS + goal — 2026-05-06 → 2026-05-19
 - [2026-05-19] `06d784e` — log(reflect): 2026-05-19 manual reflection — ADR-024 daemon arc + 5/19 follow-on
@@ -118,6 +120,8 @@
 - [ ] Growth tracker milestone #5: review code Guya writes — pick one function per session.
 
 ## Decisions & Notes
+
+- [2026-05-20 evening] **Telos "all channels slow" incident — root cause was mini on WiFi, not Telos.** Daniel reported all three channels (WORK/LIFE/LEARN) slow and responding in bursts, LIFE stuck. Diagnosis chain: (1) host healthy — load decreasing 2.18→1.15, disk 7%, memory fine, 19-day uptime, no crashes; (2) `nanoclaw.log` showed 24 `GATEWAY_RESUMED` events flapping every 7-78 min — the Discord gateway WebSocket repeatedly reconnecting; (3) my own SSH (tailnet path) was intermittently timing out, and Discord (regular-internet path) was also flaky → both paths affected = mini's underlying network, not one service; (4) `ping -c 15 8.8.8.8` from mini: **0% packet loss but 37ms stddev / 143ms max jitter** (min was 7.9ms) — the fingerprint of an unstable WiFi link. The 80% loss to the local gateway IP (192.168.1.254) was a red herring — routers deprioritize ICMP to their own management IP; the clean 8.8.8.8 path proved transit was fine. **Mechanism:** one nanoclaw process holds one shared Discord gateway WebSocket serving all three sessions; WiFi latency spikes blew past Discord's heartbeat-ACK timeout → gateway declared zombied → reconnect → all channels stall during each reconnect window → burst delivery on resume. **Fix:** Daniel connected ethernet. Jitter collapsed from 37ms stddev → 0.4ms stddev (143ms max → 7.6ms max). **Confirmation:** 25-min log watch (19:57-20:22 PDT) showed 0 new `GATEWAY_RESUMED` vs the ~3-4 expected on the old WiFi cadence. No code change, no container intervention — physical-layer the whole way. **Lesson + anti-rot watch added:** this recurs any time mini goes back to WiFi, and it presents as "Telos is slow" rather than an obvious network error — always check mini's network link when ALL channels are sluggish at once. (Tooling note: first watch attempt silently no-op'd because `timeout` isn't on macOS — relaunched with count-sleep-count. Same silent-failure family the project keeps hitting.)
 
 - [2026-05-20, long session] **Telos doc surface rebuilt + new `/guya-telos-scribe` skill + L-P2-001 module artifact shipped.** Three threaded arcs across the day, plus one major integrity learning.
 
