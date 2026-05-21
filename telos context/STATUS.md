@@ -9,10 +9,10 @@
 ## Next session — start here
 
 1. **Daemon health check.** `ssh mini cat /Users/guya/constantia/.git/sync-status.json` — heartbeat must be fresh (<5min) and `last_cycle_outcome` should be `ok` or `no-op`. If stale or `error`, daemon needs attention. Guya's session-start hook surfaces this as a `constantia-sync-alert` section automatically; absence of alert ≈ healthy.
-2. **L-task closure pressure — two due 2026-05-21 (Thu).** L-P2-001 (agent loop) is mostly cemented from 5/14 ADR-018/019/020 work — needs the artifact written (PILLAR2-loop-trace.md) plus the remaining concept-check pass. L-P3-001 (Wasserman Ch 1-3 probability) is on a daily-nibble plan that may not have started — extension call may be needed. Both surface in `goals/today-plan.md`.
+2. **L-task closure pressure — two due 2026-05-21 (Thu).** L-005 (agent loop) is mostly cemented from 5/14 ADR-018/019/020 work — needs the artifact written (PILLAR2-loop-trace.md) plus the remaining concept-check pass. L-006 (Wasserman Ch 1-3 probability) is on a daily-nibble plan that may not have started — extension call may be needed. Both surface in `goals/today-plan.md`.
 3. **Three week ships open.** P-001 (Lina model-as-judge calibration, Pillar 3, assigned 5/19), P-002 (Lina platform fixes, Pillar 2, assigned 5/19, scope blocked on Daniel pasting GitHub issues list), T-003 (Boson agent → voice chat integration, proposed but not yet accepted).
 4. **WORK channel-only routing post-DM-removal.** First natural WORK tick post-2026-05-19 should land in the WORK Discord channel, not DM. If it lands in DM, the running container's addendum is stale per ADR-018 — fresh spawn / `/clear` to pick up the new central+per-session destinations state.
-5. **Pillar 1 Saturday block.** L-P1-001 (attention math via Karpathy + nanoGPT) due 2026-05-24 — fits the inviolable 09:00-13:00 Saturday Pillar 1 slot per `goals/weekly-schedule.md`.
+5. **Pillar 1 Saturday block.** L-004 (attention math via Karpathy + nanoGPT) due 2026-05-24 — fits the inviolable 09:00-13:00 Saturday Pillar 1 slot per `goals/weekly-schedule.md`.
 
 ## Current State
 
