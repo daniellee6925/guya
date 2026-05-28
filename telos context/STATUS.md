@@ -1,6 +1,6 @@
 # Telos — Status
 
-> Last updated: 2026-05-21 (T/P prefix swap deployed — see Decisions & Notes) — prior catch-up 2026-05-19 from 2026-05-06
+> Last updated: 2026-05-27 (nanoclaw#3 Discord masked-link transform deployed 2026-05-21 — see Tests & Observations) — T/P prefix swap 2026-05-21, prior catch-up 2026-05-19 from 2026-05-06
 >
 > Telos-scoped status: runtime, identity, implementation state, and behavioral observations. Lives alongside `vision.md`, `core-beliefs.md`, and `goal.md` in this directory. The guya plugin's STATUS.md tracks the meta-project; this file tracks the agent itself.
 >
@@ -44,7 +44,7 @@ All write-tool callers pass explicit paths to `commitOnly` (kills the latent `gi
 - 9am morning tick reads `today-plan.md` as authoritative for "the one thing today"
 - 9pm evening brief scoped to 1-2-candidate tease (10pm tick owns formal capture)
 
-**Discord delivery hardened 2026-05-19:** `chat-sdk-bridge.ts` `splitForLimit()` re-activated by setting `maxTextLength: 2000` in `discord.ts` adapter config (closed nanoclaw#1). Paragraph → line → space → hard-char split. Every brief/reflection >2000 chars now chunks cleanly instead of truncating.
+**Discord delivery hardened 2026-05-19 + 2026-05-21:** (a) `chat-sdk-bridge.ts` `splitForLimit()` re-activated by setting `maxTextLength: 2000` in `discord.ts` adapter config (closed nanoclaw#1). Paragraph → line → space → hard-char split. Every brief/reflection >2000 chars now chunks cleanly instead of truncating. (b) New `src/channels/format-links.ts` exports `bareDiscordLinks()` — wired as Discord's `transformOutboundText` so the bridge applies it to all outbound text/markdown before delivery. Rewrites Markdown masked links `[text](url)` → `text: url` (or bare `url` when label empty/equals url) so Discord auto-links them; inline + fenced code spans untouched; non-http targets ignored. Closed nanoclaw#3 (pending Daniel's visual confirm). Discord-specific transform — Slack uses `<url\|text>`, Telegram renders Markdown natively.
 
 **WORK DM destination removed 2026-05-19.** WORK had two destinations (channel + `@me` DM); DM row deleted from central `agent_destinations` + per-session table. Proactive WORK ticks now channel-only; reactive DM replies still work via scratchpad-fallback on incoming routing.
 
@@ -269,6 +269,10 @@ ssh mini "cat ~/.config/nanoclaw/constantia-deploy-key.pub"
 ## Tests & Observations
 
 > Entries below stop at 2026-05-06. The 5/7→5/19 chronicle of tests, smoke runs, and behavioral observations lives in `guya/STATUS.md` (Decisions & Notes section) and constantia log entries under `log/telos/` + `log/guya/`. New entries here should resume from 5/19 forward.
+
+### 2026-05-21 — nanoclaw#3 Discord masked-link transform deployed live
+
+**`bareDiscordLinks()` shipped + verified end-to-end on the Mini.** Telos's briefs/replies had been emitting Markdown masked links `[text](url)` that Discord doesn't render in normal bot messages (only inside embeds) — they showed as dead literal text and Daniel was copy-pasting URLs by hand daily. New `src/channels/format-links.ts` exports a pure transform that rewrites masked links to bare/labelled URLs Discord auto-links, leaves inline + fenced code untouched, and ignores non-http targets. Wired as Discord's `transformOutboundText` so the chat-sdk bridge applies it to both the normal-message path and the edit path; ask-question card embeds untouched (those render masked links fine). Discord-specific by design — Slack uses `<url|text>` and Telegram renders Markdown natively. 13 unit tests cover labels, images, multi-link, code-span exclusion, idempotence. Telos fork commit `3479f1d`; pushed; deployed via Mini pull → `npm run build` → `launchctl kickstart -k com.nanoclaw-v2-53edea47` (PID 12231 → 10994). Discord Gateway reconnected cleanly as 계두식 within seconds. Deployed `dist/channels/format-links.js` runtime-verified against the Mini's own node — `[the PR](https://…)` → `the PR: https://…`, inline code preserved, bare URLs untouched. **Known limitation (punted per issue):** URLs containing balanced parens (e.g. Wikipedia `..._(disambiguation)` links) lose the trailing `)` — standard regex-Markdown tradeoff, rare in Telos's output. **Visual confirm still outstanding** — the issue stays open until Daniel eyeballs one real Telos Discord message and sees a clickable link.
 
 ### 2026-05-06 early AM — Reflection cron verifies; push race confirmed + patched; SSH host-key class surfaced + fixed
 
