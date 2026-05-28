@@ -1,84 +1,65 @@
 # guya — Status
 
-> Last updated: 2026-05-21 14:00 PT
+> Last updated: 2026-05-27
 
 ## Current Focus
 
-**T/P prefix swap migrated + deployed (2026-05-21).** `T-`=Task, `P-`=Proposal. The letters were backwards (`T-` lived in `tasks/proposals/`, `P-` in `tasks/tasks/`); swapped across all three repos and live on the Mini. This was Constantia task `T-005` (née `P-005`, accepted from proposal `P-007` née `T-007`) — now marked complete.
+**Issue sweep + Constantia laptop sync (2026-05-21 → 2026-05-27).** Closed two GitHub issues with deployed fixes; one Telos visual-confirm still outstanding; the laptop's stranded Guya logs reconciled with origin.
 
-**What shipped:** tool code + validators + all tick prompts (nanoclaw `2eba7ef`); 16 file renames + every cross-ref + both Constantia hooks + a dated swap *legend* in `CLAUDE.md` (constantia `59775be`); ADR-025 + ARCHITECTURE schema table + full migration plan (`docs/2026-05-21-tp-swap-migration.md`) in guya. Cut-over was **freeze Mini (nanoclaw + sync daemon) → push → pull → resume** — no container rebuild needed because `shared/telos-tools/` is bind-mounted live into session containers and `groups/` prompts are read by the host per-tick.
+**What shipped:**
+- **guya#3 — evolve nudge visibility (`8e5ae79`).** `formatNudgeDirective()` wraps the backlog nudge in a "🔔 SHOW DANIEL FIRST — he cannot see this block" imperative inside `additionalContext`, so Guya relays it in its first reply. That's the load-bearing path: `additionalContext` is model-only on plugin SessionStart hooks, and `systemMessage` is unreliable for plugin sources (silently dropped in some CC versions). Best-effort `systemMessage` set as native-CLI insurance. 19/19 nudge tests + smoke green; 241/241 hook tests green; both review passes clean. **Closed.**
+- **nanoclaw#3 — Discord masked links not clickable (telos `3479f1d`, deployed).** `bareDiscordLinks()` in new `src/channels/format-links.ts` rewrites `[text](url)` → `text: url` (bare `url` when label empty or equals url), leaves inline + fenced code untouched, ignores non-http targets. Wired Discord-only via `transformOutboundText` (Slack uses `<url\|text>`, Telegram renders Markdown natively). 13 unit tests + tsc clean. Pushed; Mini pulled + `npm run build` + kickstart of `com.nanoclaw-v2-53edea47` (PID 12231→10994); Discord Gateway reconnected as 계두식; deployed `dist/channels/format-links.js` runtime-verified on the Mini's own node. **Still open** pending Daniel's 30-second eyeball on a real Telos Discord message.
+- **constantia#1 — `check_reminders.sh` "silent for 2+ days" — closed working-as-intended.** Daniel confirmed the script fires correctly; the frozen log/sidecar mtime was the *expected idle behavior* (script only writes when it actually fires a reminder, and no reminders were scheduled after 5/14 ~11pm PT). Noted on the issue as enhancement opportunity: a per-tick heartbeat would distinguish "idle" from "dead" without changing the script's actual work.
+- **Constantia laptop sync (2026-05-27).** Laptop was `ahead 1, behind 12` plus an orphaned 5/26 voice-chat log. Rebased onto origin (one `log/MANIFEST.md` regen-noise conflict, resolved `--ours`), committed the orphan log, post-commit hook regenerated all three MANIFESTs canonically + amended them in, pushed `b6c9a0b..dba413c`. **Operational discovery:** the laptop checkout has **no auto-push** — ADR-024 removed the hook-side push, the `constantia-sync` daemon owns push but only on the Mini's checkout. So Guya logs written on the laptop strand locally until manually rebased + pushed. Saved as project memory.
 
-**Immutable-history decision (Daniel):** dated logs / `evidence/` / `tasks/archive/` were NOT rewritten — IDs there keep their pre-swap meaning, recorded in the CLAUDE.md legend. Only live state migrated. Matches the append-only preference from the 2026-05-21 learn-ID migration earlier the same day.
-
-**Gotchas hit + recorded:**
-- **Local clones were stale** — telos was 6 commits behind origin (daemon/planning-tick work). The migration had to be rebuilt on current code, incl. two new planning-tick prompts the stale base lacked. (Always `git fetch` + check ahead/behind before a multi-repo migration.)
-- **Mini had uncommitted prompt refinements** (always-report rule, 기억나무 anchor, midday closing questions) that nearly got lost on pull — recovered + carried onto the new scheme (`2eba7ef`).
-- **Blanket ID-swap corrupts convention-*describing* prose** — the migration's own task/proposal files (`T-005`, `P-007`) had their explanatory text letter-flipped into nonsense; restored by hand. (Saved as a memory.)
-- **`constantia-sync` daemon doesn't pull on idle** — its cycle exits before `fetch` when `local_sha == last_pushed_sha`. After pushing constantia from the dev box, the Mini stays behind until its next tick; manual `git merge --ff-only origin/main` to sync now.
-- **Mini `git commit` over SSH needs `/opt/homebrew/bin` on PATH** or husky's `pnpm` pre-commit hook fails (exit 127).
-
-**State right now:**
-- All three repos consistent across dev box + origin + Mini (telos `2eba7ef`, constantia `59775be`, guya pushed). Mini daemons (nanoclaw + constantia-sync) running. The 1pm tick fired clean on the new code (no-op).
-- **Last green light pending:** the next tick that actually *mints* an ID — next `propose_task` → `P-012`, next `assign_task` → `T-006`. Confirm by checking the newest file in `constantia/tasks/{proposals,tasks}/` or the next tick log.
-- **`nanoclaw#2` filed:** `ASSISTANT_NAME` defaults to upstream stock "Andy" (skin-deep; the bot's Discord identity is 계두식, and the Telos addendum is intact). Fix = `setup/register.ts --assistant-name Telos` + patch plist default; needs a Mini `.env` check.
+**Outstanding (carried to next session):**
+- **nanoclaw#3 visual confirm.** DM Telos something with a link in it (e.g. *"send me the link to the nanoclaw repo"*) and check the link is clickable in Discord (not dead `[text](url)` text). Then close the issue. Reopen only if a real message still shows a dead link.
+- **nanoclaw#2 — `@Andy` re-skin.** Cosmetic (the bot's Discord identity is 계두식 and the Telos addendum is intact); the `ASSISTANT_NAME=Andy` default lives in `launchd/com.nanoclaw.plist` and drives the @-mention trigger. Mini deploy pipeline is warm if batched soon.
+- **Mini unreachable since 2026-05-27 afternoon.** Almost certainly the company VPN / Tailscale toggle conflict — the daemon will self-catch-up once the VPN is toggled back (different-files rebase, should be clean).
+- **`telos/.guya/` untracked-litter on the laptop.** Created during the nanoclaw#3 commit to satisfy the cross-repo pre-commit gate (which fires globally even on non-guya repos). Decide: `rm -rf` (gate will nag the next telos commit through Claude Code) vs `guya setup` telos intentionally.
 
 **Anti-rot watches (carried + new):**
 - **Daemon heartbeat single point of trust** for "are commits making it to origin?" — unchanged from 2026-05-19.
-- **`constantia-sync` doesn't pull on idle (new 2026-05-21).** Pushing constantia from anywhere other than the Mini won't reach the Mini until it next commits locally. If the Mini needs the change now, `ssh mini` + `git -C ~/constantia merge --ff-only origin/main`.
-- **Mini on WiFi destabilizes the Discord gateway → "Telos is slow / not responding."** If all three channels go slow + respond in bursts, suspect mini's network link, NOT a container or code problem. One nanoclaw process holds one shared Discord WebSocket; WiFi jitter (latency spikes past the gateway heartbeat-ACK timeout) makes it repeatedly declare itself zombied and reconnect (`GATEWAY_RESUMED` in `nanoclaw.log`). Diagnosis: `ping -c 15 8.8.8.8` from mini — high stddev/max jitter is the tell. Fix: wired ethernet. See 2026-05-20 incident below.
+- **`constantia-sync` doesn't pull on idle.** Pushing constantia from anywhere other than the Mini won't reach the Mini until it next commits locally. If the Mini needs the change now, `ssh mini` + `git -C ~/constantia merge --ff-only origin/main`.
+- **Mini on WiFi destabilizes the Discord gateway → "Telos is slow / not responding."** If all three channels go slow + respond in bursts, suspect mini's network link, NOT a container or code problem. Diagnosis: `ping -c 15 8.8.8.8` from mini — high stddev/max jitter is the tell. Fix: wired ethernet. See 2026-05-20 incident below.
 - **Telos doc refresh debt** — `telos context/STATUS.md` drifts unless `/guya-telos-scribe` Pass A fires regularly.
 - **Container working-tree mutations beyond rebase** — unchanged from 2026-05-19 (checkout/merge/cherry-pick hit the bind-mount wall).
+- **Mini `git commit` over SSH needs `/opt/homebrew/bin` on PATH** or husky's `pnpm` pre-commit hook fails (exit 127).
+- **(NEW 2026-05-27) Laptop constantia has no auto-push.** Guya logs strand locally; rebase+push manually. Detect via `git status -sb` showing `ahead N` in `~/Desktop/constantia`. Recovery pattern documented in project memory `project_constantia_laptop_sync`.
+- **(NEW 2026-05-27) `systemMessage` is unreliable for plugin-sourced SessionStart hooks.** When a hook needs to reach the user (not just the model), bake the imperative into `additionalContext` so the agent relays it; treat `systemMessage` as best-effort insurance, not the primary path. The visibility-fix pattern (guya#3).
 
 **Next session first read:**
-1. **T/P swap live confirmation** — has a tick minted a new-scheme ID yet? Newest file in `constantia/tasks/proposals/` should be `P-012`+ and `tasks/tasks/` `T-006`+ once Telos creates work. If a tick *errored* on an ID, that's the regression signal.
-2. **L-005 grading status** — has Telos graded the artifact at `evidence/PILLAR2-loop-trace.md`? (T-009 was accepted → spawned `L-007`; that thread is resolved.)
-3. **Daemon status** — `cat /Users/guya/constantia/.git/sync-status.json` on mini (or `constantia-sync-alert` in session-start context).
+1. **Mini reachability + daemon catch-up.** `ssh mini 'cat /Users/guya/constantia/.git/sync-status.json'` — confirm the Mini pulled the 2 new Guya log commits (laptop pushed `dba413c`) and the daemon is healthy. If still unreachable, toggle VPN before assuming anything is broken on the Mini side.
+2. **nanoclaw#3 visual confirm + close.** Did any Telos Discord message render a link clickably? If yes, close the issue.
+3. **nanoclaw#2 — take it or leave it.** Warm pipeline if taken now; cold restart of build+deploy if deferred.
+4. **T/P swap live confirmation** (still pending from 2026-05-21) — has a tick minted a new-scheme ID yet? Newest file in `constantia/tasks/proposals/` should be `P-012`+ and `tasks/tasks/` `T-006`+ once Telos creates work.
 
 ## Recent Changes
+- [2026-05-21] `8e5ae79` — fix(session-start): surface evolve nudge to Daniel, not just to context (guya#3)
+- [2026-05-21] `2103dcf` — chore(telos-scribe): A — T/P swap deploy + week-ships pointer to new scheme
+- [2026-05-21] `db6bf3a` — chore(scribe): record T/P swap deploy — STATUS focus + decision log
 - [2026-05-21] `4ef2d48` — docs(migration): mark T/P swap DEPLOYED + record plan corrections
 - [2026-05-21] `3fab2cb` — docs(schema): T/P prefix swap — ADR-025 + ARCHITECTURE schema + migration plan (T-005)
 - [2026-05-21] `50589ac` — docs(status): record learn-ID flat-L-NNN migration + update live pointers
 - [2026-05-21] `14df182` — chore(scribe): note 2026-05-20 WiFi/gateway incident + anti-rot watch
 - [2026-05-20] `8afb10d` — chore(scribe): 2026-05-20 — Telos doc catch-up + telos-scribe skill + L-P2-001 artifact
-- [2026-05-19] `241b9ab` — feat(skills): guya-telos-scribe — Telos & Constantia decision doc updater
-- [2026-05-19] `008d723` — docs(telos-context): catch up STATUS + goal — 2026-05-06 → 2026-05-19
-- [2026-05-19] `06d784e` — log(reflect): 2026-05-19 manual reflection — ADR-024 daemon arc + 5/19 follow-on
-- [2026-05-19] `d096c2e` — chore(scribe): batch update — ADR-024 daemon ship + Discord chunker + WORK DM removal
 
-- [2026-05-19] (telos fork `5cf11b6`) — fix(discord): set maxTextLength=2000 to re-enable chat-sdk-bridge splitter (closes nanoclaw#1)
-- [2026-05-19] (mini-local data change) — Delete WORK DM destination from central `agent_destinations` (v2.db) + per-session destinations; proactive ticks now channel-only
-- [2026-05-16] `80b2fb0` — docs(adr): ADR-024 — constantia-sync daemon (container commits, host pushes)
-- [2026-05-16] `bf46252` — feat(session-start): surface constantia-sync daemon health
-- [2026-05-16] `0649d4d` — docs(content-plan): close Tranche 3 I.1 — daily + Sunday planning ticks shipped
-- [2026-05-15] `a940bf9` — chore(reflections): add 9 manual reflections from 2026-05-05 to 2026-05-15
-- [2026-05-15] `b14858e` — chore(scribe): ADR-023 + ADR-019/022 corrections — central agent_destinations is durable seed; tick-wake routing refresh
-- [2026-05-15] `5234434` — refactor(docs): extract ADRs 014-022 to docs/adrs/ — CLAUDE.md down ~80%
-- [2026-05-15] `c9d0602` — chore(scribe): ADR-021 + ADR-022 — empty-string thread_id + raw-XML content stripping
-- [2026-05-14] `aa3c3a3` — chore(scribe): 5/14 marathon end — comprehensive STATUS update
+(Entries older than 7 days moved to `context/archive.md`.)
 
 **Cross-repo (telos = nanoclaw fork `daniellee6925/nanoclaw`):**
+- [2026-05-21] `3479f1d` — fix(discord): rewrite Markdown masked links `[text](url)` → bare URLs Discord auto-links (closes #3 pending visual confirm). Deployed.
 - [2026-05-21] `2eba7ef` — chore(prompts): recover mini-local prompt refinements (post T/P swap)
 - [2026-05-21] `f8a31c0` — refactor(schema): swap T/P prefix — T=task, P=proposal (validators, minters, all tick prompts incl. 2 new planning-tick prompts)
-- [2026-05-19] `5cf11b6` — fix(discord): maxTextLength=2000 re-enables splitter (closes #1)
-- [2026-05-16] `184a7d5` — refactor(telos-tools): helpers.ts commitAndPush → commitOnly(message, paths); all 10 MCP callers updated; E1 instrumentation removed
-- [2026-05-16] `d67fc13` — feat(work): add 10pm daily + Sunday weekly planning ticks
-- [2026-05-15] `ce84b19` — fix(poll-loop): refresh routing context when follow-up messages have populated routing (ADR-023)
-- [2026-05-15] `51184b2` — fix(routing): preserve raw rem-row content when not JSON-wrapped (ADR-022)
-- [2026-05-14] `4698f79` — fix(routing): treat empty-string thread_id as missing in routing fallbacks (ADR-021)
 
 **Cross-repo (constantia `daniellee6925/constantia`):**
+- [2026-05-27] `dba413c` — log(guya): voice-chat 2026-05-26 — T-003 P0/P1/WL wired + oracle-validated, risk-first (session 62a49380, orphan-log sync; MANIFEST regen amended)
+- [2026-05-27] `5a328c1` — log(guya): voice-chat T-003 — P2 wiring + turn_counter + Check protocol + LEARN.md (2026-05-27, rebased onto origin/main after 12 incoming Telos commits)
 - [2026-05-21] `59775be`/`82ee54a` — refactor(schema): T/P swap — 16 file renames + cross-refs + pre/post-commit hooks + CLAUDE.md legend; T-005 marked complete; lina_platform reflection log committed
 - [2026-05-21] `d53f096` — chore(tasks): migrate learn IDs to flat L-NNN + pre-commit gate (L-P1-001→L-004, L-P2-001→L-005, L-P3-001→L-006; L-003→L-007 superseded append-only)
-- [2026-05-16] `37ff5b4` — refactor(reminders): drop pull/push from check_reminders.sh (daemon owns push)
-- [2026-05-16] `1930445` — refactor(hooks): drop post-commit auto-push (daemon owns push)
-- [2026-05-16] `deeb32c` — fix(hooks+daemon): post-commit trunc pure-bash; daemon jq conflict-extraction safe
-- [2026-05-16] `7f2d61a` — feat(goals): weekly-schedule.md describes 10pm daily + Sunday weekly plan ticks
-- [2026-05-16] `0257c57` — Bootstrap rebase: pushed the 21-commit backlog from host
-- [2026-05-15] `3d38800` — fix(check_reminders): JSON-wrap reminder content (ADR-022)
 
 ## In Progress
 
-- [ ] **Constantia issue #1 — `check_reminders.sh` launchd silence root cause.** Script hasn't fired since 2026-05-14 22:01:32. Refactored to commit-only on 5/16 (daemon picks up push) so the inline-push failure mode is resolved, but the underlying "launchd not invoking the script" question remains open. Deferred until reminder scheduling activity resumes.
+- [x] **Constantia issue #1 — `check_reminders.sh` launchd silence root cause.** Closed 2026-05-21 as working-as-intended: Daniel confirmed the script fires correctly when reminders exist; the frozen mtime was idle behavior (script only writes on actual fires). Enhancement opportunity (separate from the bug): a per-tick heartbeat would distinguish idle from dead. (Will be archived after 3 days.)
 - [ ] **Unit tests for `readSyncStatus`** in `guya-plugin/hooks/constantia-sync.mjs` — flagged in 2026-05-16 deep-review as Action needed. Out of scope for daemon ship; follow-up via guya-tester.
 - [ ] **Laptop-side sync-status visibility.** Status file lives at `<constantia>/.git/sync-status.json` on mini only. Laptop sessions return null silently from `readSyncStatus` — alerts only fire when running Claude Code on mini (which Daniel rarely does). Options: ssh-read at session start (adds latency), daemon-pushes-throttled-status-file via git (creates churn), HTTPS health endpoint. Decide later.
 - [ ] **NEXT SESSION FIRST READ — L-005 grading.** Artifact at `constantia/evidence/PILLAR2-loop-trace.md` (commit `a23340c`). If Telos hasn't graded yet, DM LEARN asking for review-then-grade.
@@ -127,6 +108,18 @@
 - [ ] Growth tracker milestone #5: review code Guya writes — pick one function per session.
 
 ## Decisions & Notes
+
+- [2026-05-27] **Constantia laptop sync — the laptop has no auto-push (operational discovery).** Laptop drifted to `ahead 1, behind 12` plus an orphaned 5/26 voice-chat log because Guya's `/guya-reflect` commits had no mechanism to reach origin. Root cause: ADR-024 removed the post-commit auto-push when the `constantia-sync` daemon took over, but the daemon only manages the Mini's checkout (`/Users/guya/constantia`), not the laptop's (`~/Desktop/constantia`). So laptop commits sit locally until manually rebased + pushed. **Sync pattern (works cleanly):** (1) `git fetch` + `git rebase origin/main` — the post-commit hook self-skips during rebase via `$GIT_DIR/{rebase-merge,…}` guards, so MANIFEST regeneration doesn't dirty the working tree mid-rebase (the lesson from ADR-019). (2) Conflicts on the generated MANIFESTs (`tasks/MANIFEST.md`, `log/MANIFEST.md`) are usually truncation-width regen noise — resolve `--ours` (origin's base in rebase terms); a later real commit's regen fixes them canonically. (3) Commit any orphan logs **after** the rebase — the post-commit hook then regenerates all three MANIFESTs from the merged directory state and `--amend`s them in. (4) `git push` (pre-push hook validates with `wip` + `guya-hook-smoke`). Mini unreachable during sync is fine — VPN/Tailscale toggle, not an outage; daemon self-catches-up on reconnect (Telos ticks vs Guya logs touch different files → clean rebase). Saved as `project_constantia_laptop_sync` memory. **Append-only discipline still applies** — never force-push shared truth.
+
+- [2026-05-21] **Issue sweep — three GitHub issues resolved across two repos, two closed + one deployed pending visual confirm.**
+
+  **guya#3 — evolve nudge invisibility (`8e5ae79`, closed).** The `<guya-context>` block included a backlog nudge ("📝 N reflections accumulated, days since last evolve") but the user never saw it — the hook was writing it into `hookSpecificOutput.additionalContext`, which Claude Code injects into Guya's context window only, not the chat UI. Verified the obvious fix (`systemMessage` top-level field) is unreliable for plugin-sourced SessionStart hooks in the 2.1.x range (silently dropped). So the only channel guaranteed to reach Daniel is **Guya's own first reply**. New `formatNudgeDirective()` wraps the bare nudge in a "🔔 SHOW DANIEL FIRST — he cannot see this block" imperative inside `additionalContext`, so the relay instruction travels with the nudge to every project with zero CLAUDE.md dependency. `systemMessage` also set as best-effort native-CLI insurance. The pattern is self-detecting (if nudges stop appearing, Daniel notices), unlike the silent-rot cases the repo guards against. 3 new tests pin the directive contract so a future cleanup can't revert it. **Visibility-fix pattern added to ARCHITECTURE Decision Log.**
+
+  **nanoclaw#3 — Discord masked links not clickable (telos `3479f1d`, deployed, open pending visual confirm).** Telos's briefs emitted Markdown `[text](url)` masked links, but Discord doesn't render those in normal bot messages (only in embeds) — they showed as dead literal text and Daniel was copy-pasting URLs by hand daily. New `src/channels/format-links.ts` exports `bareDiscordLinks()`: a pure transform that rewrites `[text](url)` → `text: url` (or bare `url` when label empty/equals url), leaves inline + fenced code untouched, ignores non-http targets (anchors, relative, numeric), strips the leading `!` of image links. Wired Discord-only via the bridge's existing `transformOutboundText` extension point — Slack uses `<url|text>` and Telegram renders Markdown natively, so neither needs this. Ask-question card embeds also untouched (Discord renders masked links inside embeds). 13 unit tests cover labels, images, multi-link, code-span exclusion, idempotence. Length-impact analysis: rewrite is strictly **shorter** than original (`[t](u)` = t+u+4 chars; `t: u` = t+u+2), so no new truncation risk in front of `splitForLimit`. tsc clean. Mini deploy: pull → `npm run build` → `launchctl kickstart -k com.nanoclaw-v2-53edea47` (PID 12231→10994); Discord Gateway reconnected as 계두식; ran the deployed `dist/channels/format-links.js` on the Mini's own node and confirmed `[the PR](https://…)` → `the PR: https://…`, inline code preserved, bare URLs untouched. **Known limitation (punted per issue):** URLs with balanced parens (e.g. Wikipedia `..._(disambiguation)`) lose the trailing `)` — standard regex-Markdown tradeoff, rare in Telos's actual output. Open until Daniel eyeballs a real Discord message.
+
+  **constantia#1 — `check_reminders.sh` "silent for 2+ days" (closed working-as-intended).** Original report: launchd job loaded but no logs/sidecar updates for 46 hours. After Daniel confirmed reminders fire correctly when scheduled, the diagnosis flipped: the script's log + sidecar are only written when it actually *does* something, and `StartInterval=60` with no eligible reminders produces no observable signal. The frozen mtime aligned with the last scheduled reminder (5/14 ~11pm PT). Not a bug. Noted on the issue as an enhancement opportunity: a positive per-tick heartbeat (write a tiny status line every fire whether or not a reminder triggers) would distinguish "idle" from "dead" — the same silent-rot gap as ADR-011/012/013, this time at the cron-script tier. Filed as future consideration, not a defect.
+
+  **Cross-cutting: `telos/.guya/` litter on the laptop.** When committing the nanoclaw#3 fix in `~/Desktop/telos`, the global guya pre-commit gate (Claude Code `PreToolUse:Bash` dispatcher) fired against a non-guya repo and demanded review evidence. The `/guya-review` skills couldn't supply it cleanly because their auto-evidence records against the session cwd (guya), not the commit's repo (telos). Resolved by running both review passes inline (Karpathy + deep), then deterministically recording evidence via `appendStep` targeting telos directly — creating an untracked `.guya/evolution/review-evidence.jsonl` in telos. Untracked, local-only, not in the telos commit, but litter on the fork. Open question carried forward: clean it up vs `guya setup` telos intentionally so the gate works there with proper config. The deeper issue worth thinking about: the global gate should probably honor `.guya/`-absence as "this isn't a guya-managed repo, skip" rather than firing everywhere.
 
 - [2026-05-21, later same day] **T/P prefix swap executed + deployed (Constantia task `T-005`, née `P-005`).** The naming was backwards: `T-NNN` lived in `tasks/proposals/` (a proposal) and `P-NNN` in `tasks/tasks/` (a task). Swapped so `T`=Task, `P`=Proposal. **Spans three repos, so atomicity is per-repo, not one commit** (the acceptance text said "single commit" — impossible across repos): nanoclaw `f8a31c0`+`2eba7ef` (validators/minters/all tick prompts), constantia `59775be`+`82ee54a` (16 renames + cross-refs + both hooks + dated CLAUDE.md legend + T-005 complete), guya `3fab2cb`+`4ef2d48` (ADR-025 + ARCHITECTURE schema + plan doc). **Cut-over on the live Mini:** freeze (`launchctl unload` nanoclaw + constantia-sync) → push all 3 → `git pull` on Mini → reload daemons → verify. **No container rebuild** — `shared/telos-tools/` is bind-mounted RO into session containers and `groups/` prompts are read live; a pull deploys. **Immutable history (Daniel's call):** dated logs/evidence/archive NOT rewritten — pre-swap IDs keep old meaning per the CLAUDE.md legend; only live state migrated. **Five gotchas, all worth remembering:** (1) local clones were stale — telos was 6 commits behind origin, so the migration was rebuilt on current code incl. 2 new planning-tick prompts the stale base never had; *always fetch + check ahead/behind before a multi-repo migration*. (2) the Mini had uncommitted prompt refinements (always-report rule, 기억나무 anchor, midday questions) that nearly got lost on pull — recovered + reswapped. (3) a blanket ID-swap corrupts convention-*describing* prose — the migration's own `T-005`/`P-007` purpose/acceptance got letter-flipped into nonsense; restore the meta-files by hand (saved as memory `feedback-migration-convention-prose`). (4) `constantia-sync` exits before fetch when `local == last_pushed` → doesn't pull on idle; manual ff needed after pushing from the dev box. (5) Mini `git commit` over SSH needs `/opt/homebrew/bin` on PATH or husky's pnpm hook 127s. Live confirmation still pending: the next ID-minting tick (`P-012`/`T-006`). Full plan: `docs/2026-05-21-tp-swap-migration.md`. Filed `nanoclaw#2` (ASSISTANT_NAME=Andy leftover, cosmetic) along the way.
 
