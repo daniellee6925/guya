@@ -138,7 +138,17 @@ After writing, verify the log entry before committing:
 3. If appending, confirm the original content is still intact (not overwritten)
 4. Read back the file and count the number of `## Summary` sections — must equal the number of reflect calls for this file
 
-Then `git add` the log entry (and any proposed task files), `git commit` and `git push` to the Constantia remote. If the commit or push fails, warn Daniel but don't block the reflection.
+Then commit and push **from inside the Constantia repo**, staging only the log entry (and any proposed task files) by explicit path — never `git add .`:
+
+```
+cd {constantia} && git add {log path} {proposed task paths…} && git commit -m "log: guya session {date} in {project}" && git push
+```
+
+Two reasons this must run with Constantia as the working directory and stage only the Markdown files:
+- The cross-project quality gate keys off the *session's* working directory. If you commit from the project you were working in, the gate inspects that project's repo and can pull in its staged code, then falsely demand `/guya-review` on a plain reflection log. Running from `{constantia}` points the gate at Constantia, where Markdown logs are review-exempt.
+- Explicit `.md`-only staging keeps the staged set fully exempt and avoids sweeping in unrelated changes.
+
+If the commit or push fails, warn Daniel but don't block the reflection. (The deeper fix — making the gate resolve the repo the commit actually targets rather than the session cwd — is tracked as a separate guya issue.)
 
 ## Rules
 
