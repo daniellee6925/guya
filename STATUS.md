@@ -4,19 +4,21 @@
 
 ## Current Focus
 
-**Issue sweep + Constantia laptop sync (2026-05-21 → 2026-05-27).** Closed two GitHub issues with deployed fixes; one Telos visual-confirm still outstanding; the laptop's stranded Guya logs reconciled with origin.
+**Telos planning-tick hardening + Constantia sync repair (2026-06-08).** Shipped two assigned tasks (T-006, T-007), fixed a tool bug Telos itself surfaced via the new tool (guya#5), and repaired + hardened the Constantia sync daemon after the first-ever task-file merge conflict. All deployed to the Mini and verified live.
 
 **What shipped:**
-- **guya#3 — evolve nudge visibility (`8e5ae79`).** `formatNudgeDirective()` wraps the backlog nudge in a "🔔 SHOW DANIEL FIRST — he cannot see this block" imperative inside `additionalContext`, so Guya relays it in its first reply. That's the load-bearing path: `additionalContext` is model-only on plugin SessionStart hooks, and `systemMessage` is unreliable for plugin sources (silently dropped in some CC versions). Best-effort `systemMessage` set as native-CLI insurance. 19/19 nudge tests + smoke green; 241/241 hook tests green; both review passes clean. **Closed.**
-- **nanoclaw#3 — Discord masked links not clickable (telos `3479f1d`, deployed).** `bareDiscordLinks()` in new `src/channels/format-links.ts` rewrites `[text](url)` → `text: url` (bare `url` when label empty or equals url), leaves inline + fenced code untouched, ignores non-http targets. Wired Discord-only via `transformOutboundText` (Slack uses `<url\|text>`, Telegram renders Markdown natively). 13 unit tests + tsc clean. Pushed; Mini pulled + `npm run build` + kickstart of `com.nanoclaw-v2-53edea47` (PID 12231→10994); Discord Gateway reconnected as 계두식; deployed `dist/channels/format-links.js` runtime-verified on the Mini's own node. **Still open** pending Daniel's 30-second eyeball on a real Telos Discord message.
-- **constantia#1 — `check_reminders.sh` "silent for 2+ days" — closed working-as-intended.** Daniel confirmed the script fires correctly; the frozen log/sidecar mtime was the *expected idle behavior* (script only writes when it actually fires a reminder, and no reminders were scheduled after 5/14 ~11pm PT). Noted on the issue as enhancement opportunity: a per-tick heartbeat would distinguish "idle" from "dead" without changing the script's actual work.
-- **Constantia laptop sync (2026-05-27).** Laptop was `ahead 1, behind 12` plus an orphaned 5/26 voice-chat log. Rebased onto origin (one `log/MANIFEST.md` regen-noise conflict, resolved `--ours`), committed the orphan log, post-commit hook regenerated all three MANIFESTs canonically + amended them in, pushed `b6c9a0b..dba413c`. **Operational discovery:** the laptop checkout has **no auto-push** — ADR-024 removed the hook-side push, the `constantia-sync` daemon owns push but only on the Mini's checkout. So Guya logs written on the laptop strand locally until manually rebased + pushed. Saved as project memory.
+- **T-006 — planning-tick state/comms audit (graded A by Telos).** Fixed 3 gaps in the 10pm daily-plan + 9am morning ticks: (1) the 10pm tick ran in-container `git push` (ADR-024 violation) → commit-only; (2) state-(c)/(b) told the tick to "wait for Daniel's reply," impossible in a single-turn cron tick → reordered to write→commit→DM + added a "late reply to the daily-plan DM" handler to the operating contract; (3) morning tick's "dated for today" was ambiguous → pinned to the `For:` field. Deployed to Mini; forced a fresh Telos session and confirmed the late-reply behavior live. nanoclaw `51c7b5e`.
+- **T-007 — `create_github_issue` MCP tool (complete).** Create-only GitHub-issue tool: REST + global `fetch` (no deps), deploy-scoped `GITHUB_TOKEN` PAT pinned via container.json env, 15s timeout, both review passes. Verified by driving the deployed tool to file a real issue; Telos then used it itself to file **guya#5**. nanoclaw `7c160b2`.
+- **guya#5 — `assignTask` pillar/priority broken (fixed).** Validation used a no-op `as number` cast, so MCP's string args (`"2"`) were always rejected — `assign_task` was broken for all pillar work (T-020 had been hand-written as the workaround). Coerced with `Number()` at all 10 sites, extracted a tested `isUnit123` helper, and **wired `bun test shared/telos-tools` into the telos pre-push hook** — the suite ran nowhere, so stale `formatResult` tests had silently failed for ~3 weeks. nanoclaw `082d6c3` → `bfec462` → `f1350dc`.
+- **Constantia sync repair + ADR-024 amendment.** Resolved the first-ever task-file merge conflict (Telos's T-006 grade vs the laptop's completion edit collided on the `status` line) via pause→rebase→merge-keeping-both→regen MANIFEST→push→restart. Then shipped two daemon fixes (constantia `eec5382`): **idle-pull** (throttled `fetch + ff-only` so an idle Mini tracks laptop pushes ~60s — the structural prevention for this conflict class) and **deploy-key pin** (was silently using the host `guyacode` identity). Both verified live; docs propagated across ADR-024/ARCHITECTURE/CLAUDE/STATUS (`b7384bd`, `60f60f5`).
 
 **Outstanding (carried to next session):**
 - **nanoclaw#3 visual confirm.** DM Telos something with a link in it (e.g. *"send me the link to the nanoclaw repo"*) and check the link is clickable in Discord (not dead `[text](url)` text). Then close the issue. Reopen only if a real message still shows a dead link.
 - **nanoclaw#2 — `@Andy` re-skin.** Cosmetic (the bot's Discord identity is 계두식 and the Telos addendum is intact); the `ASSISTANT_NAME=Andy` default lives in `launchd/com.nanoclaw.plist` and drives the @-mention trigger. Mini deploy pipeline is warm if batched soon.
-- **Mini unreachable since 2026-05-27 afternoon.** Almost certainly the company VPN / Tailscale toggle conflict — the daemon will self-catch-up once the VPN is toggled back (different-files rebase, should be clean).
+- ~~**Mini unreachable since 2026-05-27.**~~ RESOLVED 2026-06-08 — reached the Mini over Tailscale and fully synced (it was the VPN toggle, as predicted).
 - **`telos/.guya/` untracked-litter on the laptop.** Created during the nanoclaw#3 commit to satisfy the cross-repo pre-commit gate (which fires globally even on non-guya repos). Decide: `rm -rf` (gate will nag the next telos commit through Claude Code) vs `guya setup` telos intentionally.
+- **Close guya#5.** The `assignTask` bug is fixed + deployed, but the GitHub issue is still open — the fix commit is in nanoclaw while the issue is in the guya repo (cross-repo, won't auto-close; the create-only tool can't close it). Daniel to close by hand.
+- **P-023 / P-024 await Telos triage.** Filed this session: P-023 (ship a `reject_proposal` MCP tool + fix the morning-tick 5b rejection wording) and P-024 (add idempotency to `assign_task`/`propose_task` so a double-fired tick can't create duplicates). Both `target_priority: 3` — Telos re-grades at accept.
 
 **Anti-rot watches (carried + new):**
 - **Daemon heartbeat single point of trust** for "are commits making it to origin?" — unchanged from 2026-05-19.
@@ -29,12 +31,14 @@
 - **(NEW 2026-05-27) `systemMessage` is unreliable for plugin-sourced SessionStart hooks.** When a hook needs to reach the user (not just the model), bake the imperative into `additionalContext` so the agent relays it; treat `systemMessage` as best-effort insurance, not the primary path. The visibility-fix pattern (guya#3).
 
 **Next session first read:**
-1. **Mini reachability + daemon catch-up.** `ssh mini 'cat /Users/guya/constantia/.git/sync-status.json'` — confirm the Mini pulled the 2 new Guya log commits (laptop pushed `dba413c`) and the daemon is healthy. If still unreachable, toggle VPN before assuming anything is broken on the Mini side.
-2. **nanoclaw#3 visual confirm + close.** Did any Telos Discord message render a link clickably? If yes, close the issue.
-3. **nanoclaw#2 — take it or leave it.** Warm pipeline if taken now; cold restart of build+deploy if deferred.
-4. **T/P swap live confirmation** (still pending from 2026-05-21) — has a tick minted a new-scheme ID yet? Newest file in `constantia/tasks/proposals/` should be `P-012`+ and `tasks/tasks/` `T-006`+ once Telos creates work.
+1. **Daemon health (one-liner).** `ssh mini 'cat /Users/guya/constantia/.git/sync-status.json'` — outcome should be `ok`/`no-op`/`pulled`, heartbeat <5min. (Mini reachability + T/P-swap live confirmation both resolved 2026-06-08 — T-006 graded, idle-pull verified.)
+2. **Close guya#5** on GitHub (fix deployed; cross-repo so won't auto-close).
+3. **nanoclaw#3 visual confirm + close.** Did any Telos Discord message render a link clickably? If yes, close the issue.
+4. **Telos triage of P-023 / P-024** — watch whether a morning tick accepts them (→ new T-tasks) or leaves them queued.
+5. **nanoclaw#2 — take it or leave it.** Warm pipeline if taken now; cold restart of build+deploy if deferred.
 
 ## Recent Changes
+- [2026-06-08] `60f60f5` — docs: propagate ADR-024 amendment (idle-pull + deploy-key) across the doc set
 - [2026-06-08] `b7384bd` — chore(telos-scribe): A — constantia-sync idle-pull + deploy-key pin (ADR-024 amendment)
 - [2026-06-01] `4512aee` — fix(guya-reflect): commit Constantia logs from inside Constantia repo
 - [2026-05-27] `bbff4df` — chore(telos-scribe): A — nanoclaw#3 Discord masked-link transform deployed (2026-05-21)
