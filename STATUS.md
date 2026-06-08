@@ -1,6 +1,6 @@
 # guya — Status
 
-> Last updated: 2026-05-27
+> Last updated: 2026-06-08
 
 ## Current Focus
 
@@ -20,7 +20,7 @@
 
 **Anti-rot watches (carried + new):**
 - **Daemon heartbeat single point of trust** for "are commits making it to origin?" — unchanged from 2026-05-19.
-- **`constantia-sync` doesn't pull on idle.** Pushing constantia from anywhere other than the Mini won't reach the Mini until it next commits locally. If the Mini needs the change now, `ssh mini` + `git -C ~/constantia merge --ff-only origin/main`.
+- **~~`constantia-sync` doesn't pull on idle~~ — RESOLVED 2026-06-08.** The daemon now idle-pulls (throttled 60s `fetch + merge --ff-only` in the idle branch), so laptop pushes reach an idle Mini within ~60s without waiting for a Telos commit. ADR-024 amendment, constantia `scripts/constantia-sync.sh` (`eec5382`). Manual `ssh mini` + `merge --ff-only` no longer needed for the Mini-pull direction. (Daemon also now pins the repo deploy key via `GIT_SSH_COMMAND`+`IdentitiesOnly` — was silently falling back to the host `guyacode` identity.)
 - **Mini on WiFi destabilizes the Discord gateway → "Telos is slow / not responding."** If all three channels go slow + respond in bursts, suspect mini's network link, NOT a container or code problem. Diagnosis: `ping -c 15 8.8.8.8` from mini — high stddev/max jitter is the tell. Fix: wired ethernet. See 2026-05-20 incident below.
 - **Telos doc refresh debt** — `telos context/STATUS.md` drifts unless `/guya-telos-scribe` Pass A fires regularly.
 - **Container working-tree mutations beyond rebase** — unchanged from 2026-05-19 (checkout/merge/cherry-pick hit the bind-mount wall).
@@ -35,6 +35,10 @@
 4. **T/P swap live confirmation** (still pending from 2026-05-21) — has a tick minted a new-scheme ID yet? Newest file in `constantia/tasks/proposals/` should be `P-012`+ and `tasks/tasks/` `T-006`+ once Telos creates work.
 
 ## Recent Changes
+- [2026-06-08] `b7384bd` — chore(telos-scribe): A — constantia-sync idle-pull + deploy-key pin (ADR-024 amendment)
+- [2026-06-01] `4512aee` — fix(guya-reflect): commit Constantia logs from inside Constantia repo
+- [2026-05-27] `bbff4df` — chore(telos-scribe): A — nanoclaw#3 Discord masked-link transform deployed (2026-05-21)
+- [2026-05-27] `2be0980` — chore(scribe): session wrap-up — issue sweep + constantia laptop sync (2026-05-21 → 2026-05-27)
 - [2026-05-21] `8e5ae79` — fix(session-start): surface evolve nudge to Daniel, not just to context (guya#3)
 - [2026-05-21] `2103dcf` — chore(telos-scribe): A — T/P swap deploy + week-ships pointer to new scheme
 - [2026-05-21] `db6bf3a` — chore(scribe): record T/P swap deploy — STATUS focus + decision log
@@ -64,7 +68,7 @@
 - [ ] **Laptop-side sync-status visibility.** Status file lives at `<constantia>/.git/sync-status.json` on mini only. Laptop sessions return null silently from `readSyncStatus` — alerts only fire when running Claude Code on mini (which Daniel rarely does). Options: ssh-read at session start (adds latency), daemon-pushes-throttled-status-file via git (creates churn), HTTPS health endpoint. Decide later.
 - [ ] **NEXT SESSION FIRST READ — L-005 grading.** Artifact at `constantia/evidence/PILLAR2-loop-trace.md` (commit `a23340c`). If Telos hasn't graded yet, DM LEARN asking for review-then-grade.
 - [ ] **NEXT SESSION SECOND READ — T-009 acceptance.** Proposal at `constantia/tasks/proposals/T-009.md` (commit `e0f70f3`). If Telos has accepted, L-007 will be at `tasks/learn/L-007.md`.
-- [ ] **NEXT SESSION THIRD READ — daemon health.** Read `/Users/guya/constantia/.git/sync-status.json` on mini (via ssh). If heartbeat >5min or outcome != 'ok'/'no-op', daemon needs attention. (Resolved 2026-05-20: WORK tick post-DM-deletion landed in channel.)
+- [ ] **NEXT SESSION THIRD READ — daemon health.** Read `/Users/guya/constantia/.git/sync-status.json` on mini (via ssh). If heartbeat >5min or outcome not in {'ok','no-op','pulled'}, daemon needs attention. (Resolved 2026-05-20: WORK tick post-DM-deletion landed in channel.)
 - [ ] **`/guya-telos-scribe` first real use.** Skill deployed 2026-05-20 but never invoked. Next session that touches Telos infra is the validation surface. Watch for: do passes fire cleanly? does the final-report block read well? does the daemon-stale check work on laptop (no sync-status file expected)?
 - [x] **Phase 5 — Reminder firing infra. SHIPPED 2026-05-11 23:47 PT.** (Will be archived after 3 days.)
 - [ ] **`<reminder>` handler in LIFE addendum.** 5-min content edit: teach `groups/telos-life/CLAUDE.local.md` to surface `<reminder>` payloads as Korean Discord DMs. Distinguish once-shot (acknowledge once) from cron (recurring nudge with action).

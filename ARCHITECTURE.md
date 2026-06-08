@@ -1,6 +1,6 @@
 # guya — Architecture
 
-> Last updated: 2026-05-19 (post constantia-sync daemon ship — container commits / host pushes split, ADR-024; WORK proactive DM destination retired + Discord 2000-char chunker re-wired)
+> Last updated: 2026-06-08 (constantia-sync idle-pull + deploy-key pin — ADR-024 amendment) — prior: 2026-05-19 (constantia-sync daemon ship — container commits / host pushes split; WORK proactive DM destination retired + Discord 2000-char chunker re-wired)
 
 ## Current Architecture
 
@@ -8,7 +8,7 @@
 
 Guya is a hook-native, plugin-delivered personal agent system. There is no Guya-side daemon. All Guya runtime behavior is driven by Claude Code lifecycle hooks, git hooks, and an MCP server — assembled at session start and triggered by events.
 
-One host-side daemon now lives in the wider system: `constantia-sync` (launchd, on the mini), which owns the `git fetch + rebase + push` for the shared Constantia repo. Telos containers commit locally only; the daemon is the single pusher. Guya's session-start hook reads its heartbeat/status file and surfaces alerts when sync stalls. See ADR-024 and the **constantia-sync daemon (container/host split)** subsystem below.
+One host-side daemon now lives in the wider system: `constantia-sync` (launchd, on the mini), which owns the `git fetch + rebase + push` for the shared Constantia repo. Telos containers commit locally only; the daemon is the single pusher. It also **idle-pulls** (throttled `fetch + merge --ff-only` when the Mini has nothing of its own to push) so an idle Mini tracks laptop pushes within ~60s, and authenticates with the repo-scoped deploy key (`GIT_SSH_COMMAND`+`IdentitiesOnly`) — both 2026-06-08 amendments. Guya's session-start hook reads its heartbeat/status file and surfaces alerts when sync stalls. See ADR-024 and the **constantia-sync daemon (container/host split)** subsystem below.
 
 ### Module Map
 
@@ -200,6 +200,8 @@ Guya (executor)                    Telos (mentor)
 ### constantia-sync Daemon (container/host split, shipped 2026-05-16 — ADR-024)
 
 The Constantia repo is shared across two filesystems: it lives on mini's native APFS at `/Users/guya/constantia` and is bind-mounted into Telos containers at `/workspace/extra/constantia`. Docker's bind-mount layer breaks git's `unpack-trees` safety check during `rebase` — the same git binary fails on the bind mount and succeeds on the container's overlay FS, confirmed by side-by-side experiment. The structural fix is to keep all working-tree mutations off the bind mount; the bind-mount side does commits only.
+
+**2026-06-08 amendment (see ADR-024):** the daemon's idle branch (`local == last_pushed`) now also does a throttled (60s) `fetch + merge --ff-only` so an idle Mini pulls laptop commits without waiting for its own next commit — ff-only is safe there because an idle Mini has zero unpushed commits, so origin is equal-or-ahead. New healthy outcome `pulled`. The daemon also pins the repo-scoped deploy key via `GIT_SSH_COMMAND`+`IdentitiesOnly` (was silently falling back to the host default `guyacode` identity through a container-path `core.sshCommand`).
 
 ```
 ┌─────────────────────────────────────────┐      ┌─────────────────────────────────────────┐

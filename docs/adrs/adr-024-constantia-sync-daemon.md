@@ -11,6 +11,16 @@ The container-side `helpers.ts:commitAndPush` is renamed `commitOnly(message, pa
 
 Daemon health surfaces via `/Users/guya/constantia/.git/sync-status.json` (heartbeat + last-cycle outcome). The Guya session-start hook reads it and emits an alert when the heartbeat is stale (>5 min) or the last cycle ended in a rebase conflict / push failure. Silent in the healthy case.
 
+## Amendment (2026-06-08): idle-pull + deploy-key pin
+
+Two gaps surfaced when laptop→Mini sync stalled — triggered by the first-ever task-file merge conflict: Telos graded T-006 (`status: graded`, grade A) on the Mini from a *stale* base while the laptop set `status: complete`, colliding on the same frontmatter line. The daemon (correctly) parked on `conflict`; clearing it took a manual pause → rebase → merge-keeping-both → regen MANIFEST → push → restart.
+
+1. **Idle-pull.** `do_cycle` short-circuited to `no-op` the moment `local == last_pushed`, never fetching — so an idle Mini never pulled laptop commits until its own next commit (this is the gap that let Telos grade from a stale base). The idle branch now does a throttled (60s) `git fetch + merge --ff-only`. **ff-only is provably safe there:** `local == last_pushed` ⇒ zero unpushed local commits ⇒ origin is equal-or-ahead, never diverged. This revisits the Decision's original "fetch+rebase as a push precondition" model — and the 2026-05-06 "not a periodic pull-cron" caution: that footgun was *container-side* bind-mount corruption, which **this ADR already eliminated** by moving git to the host's native APFS. Host-side ff-only is safe. Folded into the one daemon (not a separate puller) to avoid a two-process `index.lock` race. New status outcome `pulled` is healthy — `readSyncStatus` treats it as such by omission (blacklist of `conflict`/`push-failed`/`fetch-failed`).
+
+2. **Deploy-key pin.** The daemon ran git with no explicit key, relying on the repo's `core.sshCommand` — which points at the *container* path (`/workspace/extra/ssh-key/constantia-deploy-key`, nonexistent on the host). git silently fell back to the host's default SSH identity (`guyacode`, **not** the repo-scoped `daniellee6925/constantia` deploy key). It happened to work because guyacode is a collaborator — a latent landmine. The daemon now `export`s `GIT_SSH_COMMAND="ssh -i /Users/guya/.config/nanoclaw/constantia-deploy-key -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"`, so a broken/rotated default identity can't mask a failure.
+
+Both shipped in constantia `scripts/constantia-sync.sh` (`eec5382`), `bash -n` + both review passes clean, and verified live: an idle Mini pulled a marker commit on its own (`last_cycle_outcome: "pulled"`, divergence 0/0).
+
 ## Why — symptom
 
 For ~2 days (2026-05-14 → 2026-05-16) Telos commits accumulated on mini's local main without ever reaching origin. The reflog showed **14 consecutive `rebase (start) + rebase (abort)` pairs in the same second** — every Telos action hit a rebase failure that `helpers.ts:commitAndPush`'s try/catch auto-aborted, retaining the local commit. After 2 days, 21 commits sat unpushed and Telos's DMs to Daniel reported a different "blocking file" each time (whichever file the latest action wrote).
@@ -111,6 +121,7 @@ Two-and-a-half years of git releases between container (2.39.5) and host (2.50.1
 
 | Repo | SHA | What |
 |------|-----|------|
+| constantia | `eec5382` | **Amendment (2026-06-08):** idle-pull (throttled fetch + ff-only) + deploy-key pin via `GIT_SSH_COMMAND`+`IdentitiesOnly` |
 | constantia | `0257c57` | Bootstrap rebase of 21-commit backlog (host git) |
 | constantia | `deeb32c` | post-commit `trunc` pure-bash + daemon jq conflict-extraction safe |
 | constantia | `1930445` | Drop post-commit auto-push (daemon owns push) |
