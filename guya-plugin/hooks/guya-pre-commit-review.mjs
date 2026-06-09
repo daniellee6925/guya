@@ -209,6 +209,24 @@ function parseAddArgs(argStr) {
   return tokens;
 }
 
+// A git-add token containing an unexpanded shell construct is NOT a literal
+// path — the shell rewrites it before git ever sees it, so it can't be resolved
+// statically here. Detects: $VAR / $(...) substitution, `backtick` substitution,
+// and globs/brace-expansion (* ? [ ] { }). Deliberately does NOT flag bare
+// parens or ~ so legit filenames like "screenshot (1).png" stay literal.
+//
+// Why this matters: getStagedFiles scrapes filenames out of the RAW (pre-shell)
+// command string as a TOCTOU supplement. Before this filter, `git add "$LOG"`
+// fed the literal token `$LOG` into the staged set; `$LOG` has no extension so
+// it matched no reviewExempt entry and counted as a non-exempt file — a false
+// "1 non-exempt file" block on every variable-based commit (e.g. /guya-reflect).
+// The `git diff --cached` source in getStagedFiles already captures what's
+// actually staged once the add runs, so dropping these phantom tokens costs no
+// real coverage. Exported for unit testing.
+function isShellExpansion(token) {
+  return /[$`*?\[\]{}]/.test(token);
+}
+
 function hasNoVerify(toolInput) {
   const cmd = typeof toolInput === 'string' ? toolInput : (toolInput?.command || '');
   return /--no-verify/.test(cmd);
@@ -235,7 +253,13 @@ function getStagedFiles(directory, toolInput) {
   const rawCmd = typeof toolInput === 'string' ? toolInput : (toolInput?.command || '');
   const cmd = rawCmd.split(/\bgit\s+commit\b/)[0];
   for (const m of cmd.matchAll(/\bgit\s+add\s+(.+?)(?:\s*&&|\s*;|\s*\||\s*$)/g)) {
-    parseAddArgs(m[1]).forEach(f => staged.add(f));
+    for (const f of parseAddArgs(m[1])) {
+      if (isShellExpansion(f)) {
+        process.stderr.write(`[guya-gate] Skipping unresolvable add token '${f}' (shell expansion — relying on actual staged state)\n`);
+        continue;
+      }
+      staged.add(f);
+    }
   }
 
   return [...staged];
@@ -372,6 +396,20 @@ async function main() {
       return output({ continue: true, suppressOutput: true });
     }
 
+    // Per-repo opt-out. A repo that is pure prose/data (e.g. Constantia —
+    // markdown logs, tasks, evidence) has nothing for the code-review gate to
+    // check; the repo's own pre-commit hook validates frontmatter instead.
+    // Set `"disabled": true` in that repo's .guya/pre-commit-config.json to
+    // turn the review gate off there WITHOUT touching the user-wide default
+    // (which keeps gating actual code repos). Short-circuits before staged-file
+    // parsing, so it also sidesteps false positives from `git add "$VAR"`
+    // commands where the unexpanded token can't be exemption-matched.
+    // Strict `=== true` so a stray `"disabled": "false"` can't ungate by accident.
+    if (config.disabled === true) {
+      process.stderr.write('[guya-gate] Review gate disabled for this project via config\n');
+      return output({ continue: true, suppressOutput: true });
+    }
+
     const stagedFiles = getStagedFiles(directory, toolInput);
     if (stagedFiles.length === 0) {
       return output({ continue: true, suppressOutput: true });
@@ -444,4 +482,4 @@ if (isMain) {
 
 // Exports for testing — loadConfig is the primary unit under test;
 // USER_CONFIG_PATH is exported so tests can point it at a tmp fixture.
-export { loadConfig, USER_CONFIG_PATH, parseAddArgs };
+export { loadConfig, USER_CONFIG_PATH, parseAddArgs, isShellExpansion };

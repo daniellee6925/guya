@@ -285,6 +285,35 @@ describe('pre-commit-review e2e: happy path and failure modes', () => {
     assert.ok(decision.continue, `expected continue:true, got ${r.stdout}`);
     assert.match(r.stderr, /exempt/);
   });
+
+  it('disabled:true short-circuits the gate for a change that would otherwise block', () => {
+    // Pure-data repos (e.g. Constantia) opt out via "disabled": true. A large
+    // non-exempt change with NO review evidence must still be allowed — and the
+    // short-circuit must fire before file parsing, so it overrides the gate
+    // regardless of staged content.
+    rmSync(dir, { recursive: true, force: true });
+    dir = initFixtureRepo({ disabled: true });
+    writeFileSync(join(dir, 'feature.py'), 'def f():\n'.repeat(20)); // would block: large, no evidence
+    execSync('git add feature.py', { cwd: dir });
+
+    const r = attemptCommit();
+    const decision = parseDecision(r.stdout);
+    assert.ok(decision.continue, `expected continue:true, got ${r.stdout}`);
+    assert.match(r.stderr, /disabled for this project/);
+  });
+
+  it('disabled must be strictly true — "false"/0 do NOT ungate', () => {
+    // Guard against a stray truthy-but-not-true value silently disabling the
+    // gate. A large unreviewed change with disabled:"false" must still block.
+    rmSync(dir, { recursive: true, force: true });
+    dir = initFixtureRepo({ disabled: 'false' });
+    writeFileSync(join(dir, 'feature.py'), 'def f():\n'.repeat(20));
+    execSync('git add feature.py', { cwd: dir });
+
+    const r = attemptCommit();
+    const decision = parseDecision(r.stdout);
+    assert.equal(decision.decision, 'block');
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -428,5 +457,21 @@ describe('pre-commit-review e2e: combined git add && git commit command parsing'
     assert.match(decision.reason, /feature\.py/);
     assert.doesNotMatch(decision.reason, /matchAll/);
     assert.doesNotMatch(decision.reason, /calls/);
+  });
+
+  it('regression: an unexpanded $VAR add-token is not counted as a non-exempt file', () => {
+    // `git add "$LOG" && git commit` — nothing pre-staged, so the only filename
+    // the hook can scrape is the literal token `$LOG`. It is shell-expansion,
+    // not a real path: the arg parser must drop it instead of counting it as a
+    // non-exempt file (which produced the false "1 non-exempt file" block on
+    // every variable-based commit, e.g. /guya-reflect). With the ghost dropped
+    // and nothing staged, the gate allows.
+    const r = runHook(dir, {
+      tool_name: 'Bash',
+      tool_input: { command: 'git add "$LOG" && git commit -m "log: session"' },
+    });
+    const decision = parseDecision(r.stdout);
+    assert.ok(decision.continue, `expected continue:true, got ${r.stdout}`);
+    assert.match(r.stderr, /Skipping unresolvable add token '\$LOG'/);
   });
 });

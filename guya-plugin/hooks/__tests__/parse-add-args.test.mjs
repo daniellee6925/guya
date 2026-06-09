@@ -16,7 +16,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { parseAddArgs } from '../guya-pre-commit-review.mjs';
+import { parseAddArgs, isShellExpansion } from '../guya-pre-commit-review.mjs';
 
 describe('parseAddArgs: shell-aware tokenizer', () => {
   it('parses a double-quoted path with spaces', () => {
@@ -54,5 +54,37 @@ describe('parseAddArgs: shell-aware tokenizer', () => {
   it('normalizes ./ prefix so paths match git diff --name-only output', () => {
     const result = parseAddArgs('./src/a.py ./src/b.py');
     assert.deepEqual(result, ['src/a.py', 'src/b.py']);
+  });
+});
+
+describe('isShellExpansion: drop unresolvable pre-shell tokens', () => {
+  // Regression: `git add "$LOG" && git commit` fed the literal token `$LOG`
+  // into the staged set. `$LOG` has no extension, matched no reviewExempt
+  // entry, and counted as "1 non-exempt file" — a false review block on every
+  // variable-based commit (notably /guya-reflect). These tokens can't be
+  // resolved statically; getStagedFiles drops them and relies on the
+  // git diff --cached source for the real staged state.
+  it('flags an unexpanded variable', () => {
+    assert.equal(isShellExpansion('$LOG'), true);
+  });
+
+  it('flags command substitution', () => {
+    assert.equal(isShellExpansion('$(date +%F).md'), true);
+    assert.equal(isShellExpansion('`date`'), true);
+  });
+
+  it('flags globs and brace expansion', () => {
+    assert.equal(isShellExpansion('*.md'), true);
+    assert.equal(isShellExpansion('src/*.js'), true);
+    assert.equal(isShellExpansion('f?o.txt'), true);
+    assert.equal(isShellExpansion('[abc].md'), true);
+    assert.equal(isShellExpansion('{a,b}.md'), true);
+  });
+
+  it('treats literal paths (incl. parens) as resolvable', () => {
+    assert.equal(isShellExpansion('log/guya/2026-06-08-voice-chat-dd71f0c7.md'), false);
+    assert.equal(isShellExpansion('file with spaces.js'), false);
+    assert.equal(isShellExpansion('screenshot (1).png'), false);
+    assert.equal(isShellExpansion('src/a.py'), false);
   });
 });
