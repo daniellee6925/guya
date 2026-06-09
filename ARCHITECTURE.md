@@ -48,7 +48,7 @@ guya/
 │   │   ├── guya-issue        # Capture a mid-work bug into a GitHub issue, return to task
 │   │   ├── guya-status       # Show current Guya state
 │   │   ├── guya-skill-creator # Create/improve skills
-│   │   ├── guya-decision-bugfix / feature / refactor  # Decision harnesses
+│   │   ├── guya-decision-bugfix / feature / refactor  # bugfix = diagnosis/fix loop; feature/refactor = decision harnesses
 │   │   ├── guya-decision-kickoff  # Kickoff harness: 12-question alignment → Project Setup scaffold → lod-planner delegation
 │   │   ├── guya-scout        # 2-phase codebase onboarding: Explore subagent → scout-report.md → bidirectional Q&A
 │   │   └── AGENTS.md         # Agent catalog (spawnable via Agent tool)

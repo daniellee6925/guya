@@ -74,7 +74,7 @@ Force real thinking before implementation. Claude is the advisor, you are the de
 | --- | --- |
 | `/guya-decision-kickoff` | Starting a new project. Produces architecture + implementation plan before any code. |
 | `/guya-decision-feature` | Adding a feature to an existing project. Scope + constraints + success criteria first. |
-| `/guya-decision-bugfix` | Fixing a bug. Forces root-cause thinking and blast-radius assessment. |
+| `/guya-decision-bugfix` | Fixing a bug or perf regression. Builds a deterministic feedback loop first, then reproduce → ranked hypotheses → fix + regression test → post-mortem (blast radius). |
 | `/guya-decision-refactor` | Refactoring. No vague "clean up" — specific problems, behavior preservation, regression strategy. |
 | `/guya-distinguished-engineer` | Zoom out. Debate what this program fundamentally should be. Challenges decisions against core beliefs. |
 

@@ -37,7 +37,7 @@ Staff-engineer-level decision harnesses. Each forces structured thinking before 
 |-----------|-------|---------|
 | `guya-decision-kickoff/` | guya-decision-kickoff | Project kickoff harness. Forces product and architecture thinking before writing any code. |
 | `guya-decision-feature/` | guya-decision-feature | Feature harness. Forces requirements, design, and test-plan thinking before implementation. |
-| `guya-decision-bugfix/` | guya-decision-bugfix | Bug-fix harness. Forces root-cause analysis and reproduction before any fix. |
+| `guya-decision-bugfix/` | guya-decision-bugfix | Diagnosis & fix loop. Builds a deterministic feedback loop first, then reproduce → ranked hypotheses → instrument → fix + regression test → post-mortem (blast radius). |
 | `guya-decision-refactor/` | guya-decision-refactor | Refactor harness. Forces scoping, behavior-preservation contract, and rollback plan. |
 | `guya-distinguished-engineer/` | guya-distinguished-engineer | Project direction harness. Discusses what the program fundamentally IS, challenges drift against core beliefs, and maintains `context/core-beliefs.md` and `context/vision.md`. |
 
