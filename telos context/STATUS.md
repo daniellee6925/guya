@@ -1,6 +1,6 @@
 # Telos — Status
 
-> Last updated: 2026-06-08 (constantia-sync idle-pull + deploy-key pin — ADR-024 amendment, see Decisions & Notes) — nanoclaw#3 Discord masked-link 2026-05-21, T/P prefix swap 2026-05-21, prior catch-up 2026-05-19 from 2026-05-06
+> Last updated: 2026-06-09 (reject_proposal MCP tool + morning-tick step 5(b) fix — T-024, see Tests & Observations) — 2026-06-08 constantia-sync idle-pull + deploy-key pin (ADR-024 amendment), nanoclaw#3 Discord masked-link 2026-05-21, T/P prefix swap 2026-05-21, prior catch-up 2026-05-19 from 2026-05-06
 >
 > Telos-scoped status: runtime, identity, implementation state, and behavioral observations. Lives alongside `vision.md`, `core-beliefs.md`, and `goal.md` in this directory. The guya plugin's STATUS.md tracks the meta-project; this file tracks the agent itself.
 >
@@ -21,7 +21,7 @@
 **Constantia git architecture (ADR-024, shipped 2026-05-16):** Container-side `commitOnly(message, paths)` in `shared/telos-tools/helpers.ts` writes locally only — no fetch/rebase/push from inside containers (Docker bind-mount breaks `git rebase` via macOS `unpack-trees` safety check). Host-side `constantia-sync` launchd daemon (`com.guya.constantia-sync`) polls `/Users/guya/constantia/` every 5s and runs `git fetch + rebase + push` on mini's native APFS git (plus a throttled idle `fetch + merge --ff-only` so an idle Mini tracks laptop pushes within ~60s — 2026-06-08 amendment; auths via the pinned deploy key). Heartbeat at `<constantia>/.git/sync-status.json` (atomic tmp+rename per cycle). Guya session-start hook reads via `readSyncStatus()` and emits `constantia-sync-alert` when stale/errored.
 
 **MCP server (`shared/telos-tools/mcp-server.ts` + `helpers.ts`) ships 10+ tools:**
-- `assign_task`, `accept_proposal`, `grade_task`, `propose_task` — task lifecycle
+- `assign_task`, `accept_proposal`, `reject_proposal`, `grade_task`, `propose_task` — task lifecycle (`reject_proposal` shipped 2026-06-09, T-024)
 - `assign_learn`, `gradeLearn` — L-task lifecycle (Phase 3, shipped 5/10)
 - `addReminder` — R-task scheduling (Phase 5, shipped 5/11)
 - `write_evidence` — EVD-NNN entries with calibration rule (shipped 5/6 PM)
@@ -269,6 +269,14 @@ ssh mini "cat ~/.config/nanoclaw/constantia-deploy-key.pub"
 ## Tests & Observations
 
 > Entries below stop at 2026-05-06. The 5/7→5/19 chronicle of tests, smoke runs, and behavioral observations lives in `guya/STATUS.md` (Decisions & Notes section) and constantia log entries under `log/telos/` + `log/guya/`. New entries here should resume from 5/19 forward.
+
+### 2026-06-09 — `reject_proposal` MCP tool shipped + morning-tick step 5(b) fixed (T-024)
+
+**The bug.** Morning-tick step 5(b) told Telos: to reject a proposal, "use `grade_task` with the proposal's spawned task." Logically impossible — `accept_proposal` is what spawns the T/L task from a P-proposal, so a proposal you're *rejecting* was never accepted and has no spawned task to grade. The only working path was the parenthetical fallback (hand-edit the file), which bypassed the tool layer's logging/audit/commit-convention. Surfaced during the T-006 audit of the planning ticks (2026-06-08).
+
+**The fix.** New `reject_proposal` tool in `shared/telos-tools/mcp-server.ts` — validates `P-NNN` is `status: proposed`, flips to `rejected` + stamps `rejected_at` + `rejection_reason` (≥10 chars), appends a tick-log section, `commitOnly`. NO artifact spawned — it's a strict simplification of `acceptProposal` (same audit-stamp shape: `accepted_at`/`accepted_into` ↔ `rejected_at`/`rejection_reason`) minus the spawn branch. Step 5(b) rewritten to point at it and explicitly say "do not reach for `grade_task` here." Pre-commit proposal validator already accepted `status: rejected` (enum `proposed|accepted|rejected`, no status-conditional branch, no forbid-extra-fields) — confirmed, no change needed.
+
+**Verification + deploy.** Both Karpathy review passes clean. Existing `bun test shared/telos-tools` suite green (43 pass). Live JSON-RPC smoke on the laptop: tool lists with the right required fields; bad-`P-NNN` and sub-10-char-reason guards both fire before any filesystem/commit. Committed `2f7832d`, pushed, pulled to Mini `/Users/guya/telos` (now at `2f7832d`). Source is bind-mounted RO so no rebuild — the next tick that spawns the MCP server serves the tool, and the morning-tick prompt self-applies on its next fire (per ADR-018 deploy-path: laptop edits don't auto-deploy; the Mini pull is what makes it live). Couldn't run the in-container smoke (bun lives inside the container, not on the Mini host) — verified by transitivity: Mini source is byte-identical to the laptop-smoked commit.
 
 ### 2026-05-21 — nanoclaw#3 Discord masked-link transform deployed live
 
