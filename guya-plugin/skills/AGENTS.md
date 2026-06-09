@@ -47,4 +47,5 @@ Staff-engineer-level decision harnesses for major decisions:
 | `guya-review/SKILL.md` | guya-review | Review code using Karpathy guidelines + silent errors, scalability, security, race conditions |
 | `guya-deep-review/SKILL.md` | guya-deep-review | Deep second-pass review: logic correctness, state management, data integrity, performance, observability |
 | `guya-optimize/SKILL.md` | guya-optimize | Find simplification and optimization opportunities — report only, no fixes |
+| `guya-architecture/SKILL.md` | guya-architecture | Find deepening opportunities (shallow→deep modules) — HTML before/after report + grilling; hands execution to guya-decision-refactor |
 | `guya-learn/SKILL.md` | guya-learn | Interactive learning session from first principles with active recall and progress tracking |

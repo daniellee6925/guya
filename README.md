@@ -85,6 +85,7 @@ Force real thinking before implementation. Claude is the advisor, you are the de
 | `/guya-review` | Focused review applying Karpathy principles — complexity, silent errors, scalability, races. |
 | `/guya-deep-review` | Deep second-pass review after `/guya-review` findings are fixed. |
 | `/guya-optimize` | Analyze code for simplification, performance, and efficiency opportunities. |
+| `/guya-architecture` | Find deepening opportunities — turn shallow modules into deep ones (testability + AI-navigability). Visual before/after HTML report, then grills the chosen one; hands the refactor to `/guya-decision-refactor`. |
 | `/guya-issue` | Capture a bug or follow-up surfaced mid-work into a GitHub issue, then return to the original task. |
 
 ### Memory & evolution

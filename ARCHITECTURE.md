@@ -45,6 +45,7 @@ guya/
 │   │   ├── guya-review       # Code review (Karpathy principles)
 │   │   ├── guya-deep-review  # Second-pass review after fixes
 │   │   ├── guya-optimize     # Simplification and performance analysis
+│   │   ├── guya-architecture # Deepening opportunities (shallow→deep modules): Explore → HTML before/after report → grill → refactor handoff
 │   │   ├── guya-issue        # Capture a mid-work bug into a GitHub issue, return to task
 │   │   ├── guya-status       # Show current Guya state
 │   │   ├── guya-skill-creator # Create/improve skills

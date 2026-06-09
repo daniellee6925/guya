@@ -48,6 +48,7 @@ Staff-engineer-level decision harnesses. Each forces structured thinking before 
 | `guya-review/` | guya-review | Focused code review: Karpathy principles, silent errors, scalability, security, race conditions. |
 | `guya-deep-review/` | guya-deep-review | Deep second-pass review after `guya-review` findings are fixed. Catches logic bugs, state management issues, data integrity gaps, and observability holes. |
 | `guya-optimize/` | guya-optimize | Analyze code for simplification, performance, and resource efficiency opportunities. Report only — no fixes applied. |
+| `guya-architecture/` | guya-architecture | Find deepening opportunities — turn shallow modules into deep ones for testability + AI-navigability. Explore → HTML before/after report → grilling loop → optional parallel interface design. Find-and-design; hands execution to `guya-decision-refactor`. Vocabulary in `LANGUAGE.md`. |
 
 ### Learning
 
