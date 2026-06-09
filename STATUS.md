@@ -1,8 +1,12 @@
 # guya — Status
 
-> Last updated: 2026-06-08
+> Last updated: 2026-06-09
 
 ## Current Focus
+
+**Pre-commit gate fixes (2026-06-09).** Two fixes after the gate repeatedly false-blocked Constantia reflection-log commits: (1) the gate now honors a per-repo `"disabled": true` in `.guya/pre-commit-config.json` and Constantia opts out (it's pure prose/data; its own pre-commit validates frontmatter) — code repos stay gated; (2) root-caused the false block to the arg-parser counting an unexpanded `$LOG` shell token as a non-exempt file, fixed via `isShellExpansion` dropping `$ \` * ? [ ] { }` tokens. 31/31 tests. Commits: guya `2f16faa`, constantia `8a87acd`. The 2026-06-08 Telos work below still carries its outstanding items.
+
+---
 
 **Telos planning-tick hardening + Constantia sync repair (2026-06-08).** Shipped two assigned tasks (T-006, T-007), fixed a tool bug Telos itself surfaced via the new tool (guya#5), and repaired + hardened the Constantia sync daemon after the first-ever task-file merge conflict. All deployed to the Mini and verified live.
 
@@ -38,6 +42,10 @@
 5. **nanoclaw#2 — take it or leave it.** Warm pipeline if taken now; cold restart of build+deploy if deferred.
 
 ## Recent Changes
+- [2026-06-09] `2f16faa` — fix(gate): per-repo disable flag + drop unresolvable shell-expansion add-tokens
+- [2026-06-08] `ab85a00` — chore(memory): append reflect #2 (session-close) to 2026-06-08 reflection
+- [2026-06-08] `67b9845` — chore(memory): 2026-06-08 reflection + archival session log (+ commit stray 5/21, 5/27 reflections)
+- [2026-06-08] `76350d9` — chore(scribe): refresh Current Focus to 2026-06-08 session + close finished items
 - [2026-06-08] `60f60f5` — docs: propagate ADR-024 amendment (idle-pull + deploy-key) across the doc set
 - [2026-06-08] `b7384bd` — chore(telos-scribe): A — constantia-sync idle-pull + deploy-key pin (ADR-024 amendment)
 - [2026-06-01] `4512aee` — fix(guya-reflect): commit Constantia logs from inside Constantia repo
@@ -116,6 +124,8 @@
 - [ ] Growth tracker milestone #5: review code Guya writes — pick one function per session.
 
 ## Decisions & Notes
+
+- [2026-06-09] **Pre-commit review gate — per-repo opt-out + arg-parser false-block fix (guya `2f16faa`, constantia `8a87acd`).** The global Guya review gate (`PreToolUse:Bash` → `guya-pre-commit-review.mjs`) repeatedly blocked Constantia reflection-log commits with "1 non-exempt file" even though the user-wide config already exempts `*.md`. **Two findings:** (1) the block was NOT Constantia's own pre-commit hook (which only validates frontmatter — kept as-is), but the global review gate firing on a phantom file. (2) Root cause of the phantom: `getStagedFiles` scrapes `git add` arguments out of the *raw, pre-shell* command string as a TOCTOU supplement; `git add "$LOG" && git commit` fed the literal token `$LOG` into the staged set — no extension → matched no `reviewExempt` entry → counted as a non-exempt file. This misfires for any shell-variable/glob/substitution add-token. **Fixes:** (a) new exported `isShellExpansion(token)` drops tokens containing `$ \` * ? [ ] { }` (deliberately not bare parens/`~`, so `"screenshot (1).png"` stays literal) — the `git diff --cached` source still covers real staged state; emits an observable stderr note. (b) New per-repo `"disabled": true` short-circuit in `.guya/pre-commit-config.json` (strict `=== true`), used by Constantia — a pure prose/data repo where code review is meaningless. **Rejected:** killing the gate globally (would un-gate SDF/voice-chat/lina; the hook's own history records SDF "ran ungated for weeks" as a bug). Tests: tokenizer predicate (unit) + disabled flag both directions + `$VAR`-token regression (e2e), 31/31. **Plugin note:** hooks have two copies (source `guya-plugin/hooks/` + runtime cache `~/.claude/plugins/cache/...`); the commit's `sync-plugin` post-commit hook syncs source→cache automatically. Saved as memory `project_guya_plugin_source_vs_cache`.
 
 - [2026-05-27] **Constantia laptop sync — the laptop has no auto-push (operational discovery).** Laptop drifted to `ahead 1, behind 12` plus an orphaned 5/26 voice-chat log because Guya's `/guya-reflect` commits had no mechanism to reach origin. Root cause: ADR-024 removed the post-commit auto-push when the `constantia-sync` daemon took over, but the daemon only manages the Mini's checkout (`/Users/guya/constantia`), not the laptop's (`~/Desktop/constantia`). So laptop commits sit locally until manually rebased + pushed. **Sync pattern (works cleanly):** (1) `git fetch` + `git rebase origin/main` — the post-commit hook self-skips during rebase via `$GIT_DIR/{rebase-merge,…}` guards, so MANIFEST regeneration doesn't dirty the working tree mid-rebase (the lesson from ADR-019). (2) Conflicts on the generated MANIFESTs (`tasks/MANIFEST.md`, `log/MANIFEST.md`) are usually truncation-width regen noise — resolve `--ours` (origin's base in rebase terms); a later real commit's regen fixes them canonically. (3) Commit any orphan logs **after** the rebase — the post-commit hook then regenerates all three MANIFESTs from the merged directory state and `--amend`s them in. (4) `git push` (pre-push hook validates with `wip` + `guya-hook-smoke`). Mini unreachable during sync is fine — VPN/Tailscale toggle, not an outage; daemon self-catches-up on reconnect (Telos ticks vs Guya logs touch different files → clean rebase). Saved as `project_constantia_laptop_sync` memory. **Append-only discipline still applies** — never force-push shared truth.
 
