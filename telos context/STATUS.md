@@ -56,6 +56,7 @@ All write-tool callers pass explicit paths to `commitOnly` (kills the latent `gi
 - **Processes under launchd:**
   - `com.nanoclaw-v2-53edea47` — nanoclaw daemon, hosts WORK / LIFE / LEARN agent containers
   - `com.guya.constantia-sync` — host-side daemon, 5s poll cycle, owns push to constantia origin (ADR-024); also idle-pulls (fetch + ff-only, throttled 60s) so an idle Mini tracks laptop pushes (2026-06-08 amendment); pins the repo deploy key via `GIT_SSH_COMMAND` + `IdentitiesOnly=yes`
+  - `com.guya.constantia-dashboard` — **separate product** (Constantia T-019, repo `~/Desktop/constantia-dashboard` / Mini `/Users/guya/constantia-dashboard`), shipped 2026-06-11. A read-only FastAPI dashboard (Python 3.9 venv) that renders Constantia state in a browser. Bound to the Tailscale IP → `http://100.73.197.23:8787`. `RunAtLoad` + `KeepAlive`; reads `/Users/guya/constantia` (read-only, never writes). Deployed by rsync from the laptop (no git remote). Not a Telos component — listed here only because it shares the Mini.
 - **Container runtime:** Docker Desktop (start-at-login enabled). Post-reboot recovery chain: auto-login → Tailscale → Docker → nanoclaw → Discord, no manual intervention.
 - **Three Telos sessions:**
   - **WORK** (`telos-work`) — English mentor / 두식 보스 register / channel-only Discord routing (post-5/19) / cron 09:00 + 13:00 + 21:00 + 22:00 (Mon-Sat) + 22:00 Sun
