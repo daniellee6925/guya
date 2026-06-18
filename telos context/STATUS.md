@@ -1,6 +1,6 @@
 # Telos — Status
 
-> Last updated: 2026-06-11 (WORK tick schedule orphan diagnosed + restored + permanently fixed: one-active-session-per-channel + schedule carry-over, nanoclaw `6f432a6` — see Tests & Observations and Decisions & Notes; warrants ADR-026) — 2026-06-09 reject_proposal MCP tool + morning-tick step 5(b) fix (T-024), 2026-06-08 constantia-sync idle-pull + deploy-key pin (ADR-024 amendment), nanoclaw#3 Discord masked-link 2026-05-21, T/P prefix swap 2026-05-21, prior catch-up 2026-05-19 from 2026-05-06
+> Last updated: 2026-06-18 (T-030 same-day same-purpose dedup guard on `assign_task`/`propose_task`, nanoclaw `189b842` — see Tests & Observations) — 2026-06-11 (WORK tick schedule orphan diagnosed + restored + permanently fixed: one-active-session-per-channel + schedule carry-over, nanoclaw `6f432a6` — see Tests & Observations and Decisions & Notes; warrants ADR-026) — 2026-06-09 reject_proposal MCP tool + morning-tick step 5(b) fix (T-024), 2026-06-08 constantia-sync idle-pull + deploy-key pin (ADR-024 amendment), nanoclaw#3 Discord masked-link 2026-05-21, T/P prefix swap 2026-05-21, prior catch-up 2026-05-19 from 2026-05-06
 >
 > Telos-scoped status: runtime, identity, implementation state, and behavioral observations. Lives alongside `vision.md`, `core-beliefs.md`, and `goal.md` in this directory. The guya plugin's STATUS.md tracks the meta-project; this file tracks the agent itself.
 >
@@ -30,6 +30,8 @@
 - `do_nothing` — explicit no-op
 
 All write-tool callers pass explicit paths to `commitOnly` (kills the latent `git add -A` cross-container race). Container post-commit hook regenerates `tasks/MANIFEST.md` (pure-bash trunc helper after 5/16 python3 cascade fix).
+
+`assign_task` + `propose_task` carry a **same-day same-purpose dedup guard** (T-030, nanoclaw `189b842`): before allocating an id they scan the target dir via `findDuplicateByPurpose` (helpers.ts — token-set Jaccard ≥ `DUP_SIMILARITY_THRESHOLD` 0.8, matched on `assigned`/`proposed_at` date) and on a hit return the existing id as a *success* (idempotent), logging `duplicate suppressed` to stderr. Best-effort against **sequential** double-fires (cron double-fire / manual re-run / retry) only — not a concurrency lock; truly-concurrent processes deferred (T-030 Options 2-3).
 
 **Three pillar curricula authored 2026-05-14** at bytebytego-grade detail (in `tasks/learn/curricula/`):
 - `pillar-1-llm-serving.md` (954 lines) — operator-mode Production Serving Cookbook (vLLM + SGLang on 7B), 16 weeks, locked
@@ -270,6 +272,16 @@ ssh mini "cat ~/.config/nanoclaw/constantia-deploy-key.pub"
 ## Tests & Observations
 
 > Entries below stop at 2026-05-06. The 5/7→5/19 chronicle of tests, smoke runs, and behavioral observations lives in `guya/STATUS.md` (Decisions & Notes section) and constantia log entries under `log/telos/` + `log/guya/`. New entries here should resume from 5/19 forward.
+
+### 2026-06-18 — same-day same-purpose dedup guard on `assign_task`/`propose_task` shipped (T-030, nanoclaw `189b842`)
+
+**The gap.** `assignTask`/`proposeTask` had no dedup — `nextTaskId()`/`nextProposalId()` just scan the dir and return `max+1`. A tick that double-fires for the same day (cron double-fire, manual re-run, retry-after-transient) and decides to create for the same gap on both turns mints two near-identical entries (T-020 *and* T-021, same purpose, same day). Data-integrity issue: pollutes the portfolio, double-counts in the manifest, can mislead the morning brief's "idle N days" heuristic. Can't be fixed in-prompt — the durable fix lives in the handler.
+
+**The fix (Option 1 — lowest-infra).** New pure matcher in `helpers.ts`: `normalizePurpose` (lowercase, punctuation/markdown/unicode-aware collapse) + `purposeSimilarity` (token-set Jaccard) + `DUP_SIMILARITY_THRESHOLD = 0.8` + `findDuplicateByPurpose(dir, prefix, dateField, date, purpose)` — scans `${prefix}-NNN.md`, matches on same `assigned`/`proposed_at` date AND fuzzy-equal purpose, returns the best hit (deterministic `files.sort()` tie-break → the canonical lowest/original id). `assignTask` (scans `tasks/`) and `proposeTask` (scans `proposals/`) call it *before* id allocation; on a hit they return the existing id as a **success** (idempotent — a retried tick converges instead of erroring into another retry) and log `duplicate suppressed` to stderr. Threshold is deliberately high: a missed dup is cheap, wrongly *blocking* a distinct task is the costly failure.
+
+**Known limitation (deferred per task body).** Best-effort check-then-write — closes **sequential** re-fires (the documented failure mode) but NOT two truly-concurrent tick processes (TOCTOU). A real concurrency fix needs a lock / atomic create-if-absent (Options 2-3); not worth the infra at today's failure rate. Documented in the helper comment so nobody assumes it's airtight.
+
+**Verification + deploy.** Both Karpathy review passes (deep review added the `files.sort()` determinism + the two stderr observability logs). 11 new unit tests for the pure matcher (`helpers.test.ts`; full suite 53/53), `tsc --noEmit` clean, plus a manual double-fire test against real constantia tasks (reworded same-intent → suppressed; distinct → null; cross-day similar → correctly ignored). Committed `189b842`, pushed, pulled to Mini `/Users/guya/telos` (now at `189b842`). Source is bind-mounted RO → no rebuild; the MCP server re-spawns per `query()` so the guard goes live on the next planning tick (the stale telos-learn container had already exited, no running container held old code). First real exercise is the next WORK morning/evening tick; a fired suppression will show as `[telos-constantia] … duplicate suppressed` in container logs. **Also closed in Constantia:** T-017 (T-003 cleanup) + T-030 marked `complete` (Guya marks complete; Telos grades).
 
 ### 2026-06-11 — WORK tick schedule silently orphaned by session rotation; restored + permanently fixed (nanoclaw `6f432a6`)
 
