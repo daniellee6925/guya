@@ -46,6 +46,7 @@
 5. **nanoclaw#2 — take it or leave it.** Warm pipeline if taken now; cold restart of build+deploy if deferred.
 
 ## Recent Changes
+- [2026-08-03] `67ffae3` — refactor(guya-audit): reframe scale as growth; add silent-failure angle
 - [2026-08-03] `41b7bc7` — chore(scribe): record guya-audit angle refactor
 - [2026-08-03] `1a0a7cf` — refactor(guya-audit): 11-angle agent fan-out; file via /guya-issue
 - [2026-08-03] `6cfc9c6` — chore(scribe): record /guya-audit + /guya-resolve session
