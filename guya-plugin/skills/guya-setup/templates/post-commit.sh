@@ -5,7 +5,11 @@ REPO_ROOT="$(git rev-parse --show-toplevel)"
 [ -d "$REPO_ROOT/.guya" ] || exit 0
 
 CACHE_BASE="$HOME/.claude/plugins/cache/guya/guya"
-VERSION_DIR=$(find "$CACHE_BASE" -mindepth 1 -maxdepth 1 -type d 2>/dev/null \
+# `-type l` matters (ADR-028): the install may be a SYMLINK to the plugin source
+# rather than a copy directory. A `-type d`-only search skips it and silently
+# selects an older, no-longer-updated copy — so the scribe would keep running
+# stale code forever while the rest of the system ran current code.
+VERSION_DIR=$(find "$CACHE_BASE" -mindepth 1 -maxdepth 1 \( -type d -o -type l \) 2>/dev/null \
   | xargs -I{} basename {} | sort -V | tail -1)
 if [ -n "$VERSION_DIR" ]; then
   PLUGIN_ROOT="$CACHE_BASE/$VERSION_DIR"
