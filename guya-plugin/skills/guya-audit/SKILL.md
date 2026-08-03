@@ -1,6 +1,6 @@
 ---
 name: guya-audit
-description: Full-codebase rot audit for the CURRENT repo — a deterministic standards scanner plus a fan-out of 12 parallel agents, each hunting one orthogonal failure mode (duplication & convention drift, silent failure, growth & cost of change, dead weight, doc drift, error paths, contracts, state, test integrity, data integrity, concurrency, trust) — then files GitHub issues for everything found. Runs unattended (overnight) and produces the same report every time on unchanged code. Use whenever Daniel says "audit this repo", "what's rotting", "check the codebase", "find all the issues", "file issues for what's broken", or wants an agent-built codebase held to standard. Prefer this over ad-hoc review prompts for whole-repo sweeps; use /guya-review for a single diff and /guya-architecture for interactive design work.
+description: Full-codebase rot audit for the CURRENT repo — a deterministic standards scanner plus a fan-out of 16 parallel agents, each hunting one orthogonal failure mode (duplication & convention drift, config & environment coupling, silent failure, idempotency & re-run safety, growth & cost of change, dead weight, persistence & schema evolution, doc drift, error paths, observability, contracts, state, test integrity, data integrity, concurrency, trust) — then files GitHub issues for everything found. Runs unattended (overnight) and produces the same report every time on unchanged code. Use whenever Daniel says "audit this repo", "what's rotting", "check the codebase", "find all the issues", "file issues for what's broken", or wants an agent-built codebase held to standard. Prefer this over ad-hoc review prompts for whole-repo sweeps; use /guya-review for a single diff and /guya-architecture for interactive design work.
 argument-hint: "[--dry-run] [path or subdirectory to limit scope]"
 ---
 
@@ -76,35 +76,45 @@ Each angle says what it owns *and what it must not report*. The exclusions matte
 
 The selection principle: **an audit hunts what you cannot notice by using the system.** Slowness, crashes, and wrong output announce themselves — you go look without being told. Duplication, a mechanism that quietly stopped running, and code that costs a week to extend stay invisible until they are expensive. Weight the angle set toward the invisible half.
 
-Listed in rough order of expected yield on an agent-built codebase.
+Listed in rough order of expected yield on an agent-built codebase. **Exclusions reference angles by name, never by number** — numbers shift whenever the list is reordered, and a stale "see angle N" turns an exclusion into noise.
 
 | # | Angle | Hunts for | Must NOT report |
 |---|-------|-----------|-----------------|
-| 1 | **Duplication & convention drift** | The same logic implemented more than once; near-identical helpers in different modules; the same *concept* handled a different way in each place it appears — error style, config access, naming, validation | Style/formatting alone; anything with a single implementation |
-| 2 | **Silent failure** | Code that can stop working with nothing surfaced: guards that always pass, handlers registered but never invoked, `main()` never reached, retries swallowing the final error, jobs whose failure is logged at debug and nowhere else, flags stuck in a default nobody checks | A failure branch that exists but behaves wrongly — that is angle 6 |
-| 3 | **Growth & cost of change** | What it costs to make this program bigger. Adding one feature: how many files must change, how much must be understood first, does the abstraction fight you? Then growth in data/load: unbounded structures, algorithmic complexity that is fine now and fatal later, work recomputed per item | Micro-optimizations with no observable effect; slowness already visible in normal use |
-| 4 | **Dead weight & abandoned scaffolding** | Unreachable branches, unused exports, abstractions with exactly one caller, config nothing reads, half-built approaches left in place when the next attempt landed | Duplication (angle 1); untested code (angle 9) |
-| 5 | **Doc/code divergence** | Comments, docstrings, READMEs and calling specs describing behavior the code no longer has | Absent docs — that is `missing-calling-spec` from the scanner |
-| 6 | **Error paths** | Swallowed exceptions, bare catches, errors that lose context, cleanup that only runs on success, fail-open where it must fail-closed | Something that never ran at all (angle 2) |
-| 7 | **Contracts & boundaries** | What a module promises vs what it does; callers relying on undocumented behavior; return shapes that vary by path; shallow modules whose interface costs as much as their body | Internal logic bugs (angles 6, 8) |
-| 8 | **State & lifecycle** | Mutable state shared across calls, init/teardown asymmetry, caches with no eviction, module-level mutable singletons | Concurrency specifically (angle 11) |
-| 9 | **Test integrity** | Tests asserting nothing meaningful, happy-path-only coverage, tests that would still pass if the feature were deleted, known bugs with no regression pin | Missing test *files* — the scanner already reports those |
-| 10 | **Data integrity** | Non-atomic writes, in-place mutation where a copy was intended, unchecked assumptions about sortedness/uniqueness/non-null, lossy conversions | Input arriving from outside (angle 12) |
-| 11 | **Concurrency & ordering** | Races, `await` in a loop assuming stable state, unguarded shared writes, ordering assumptions between async steps | Single-threaded state issues (angle 8) |
-| 12 | **Trust & input** | Unvalidated external input, injection into shell/SQL/prompts, secrets in logs or serialized objects, permissive defaults | Internal data handling (angle 10) |
+| 1 | **Duplication & convention drift** | The same logic implemented more than once; near-identical helpers in different modules; the same *concept* handled a different way in each place it appears — error style, config access, naming, validation | Style/formatting alone; duplicated *values* (→ Config & environment coupling); anything with a single implementation |
+| 2 | **Config & environment coupling** | The same fact written in more than one place and required to agree; hardcoded paths, hosts and machine assumptions; code defaults that disagree with config-file defaults; knowledge of *where things live* duplicated across scripts | Duplicated *logic* (→ Duplication & convention drift); unvalidated config input (→ Trust & input) |
+| 3 | **Silent failure** | Code that can stop working with nothing surfaced: guards that always pass, handlers registered but never invoked, `main()` never reached, retries swallowing the final error, flags stuck in a default nobody checks | Failures you DO learn about but cannot explain (→ Observability & diagnosability); a failure branch that exists but behaves wrongly (→ Error paths) |
+| 4 | **Idempotency & re-run safety** | Operations that corrupt or duplicate when run twice; missing markers or guards on anything that can fire more than once; retries that are not safe to retry; partial runs that cannot resume cleanly | Two things racing at the same instant (→ Concurrency & ordering) |
+| 5 | **Growth & cost of change** | What it costs to make this program bigger. Adding one feature: how many files must change, how much must be understood first, does the abstraction fight you? Then growth in data/load: unbounded structures, algorithmic complexity that is fine now and fatal later, work recomputed per item | Micro-optimizations with no observable effect; slowness already visible in normal use |
+| 6 | **Dead weight & abandoned scaffolding** | Unreachable branches, unused exports, abstractions with exactly one caller, config nothing reads, half-built approaches left in place when the next attempt landed | Duplication (→ Duplication & convention drift); untested code (→ Test integrity) |
+| 7 | **Persistence & schema evolution** | Code reading data written by an older version; format changes with no migration path; on-disk shapes no test covers; version fields that exist but are never checked; writes that can leave a half-written file behind | In-memory data handling (→ Data integrity) |
+| 8 | **Doc/code divergence** | Comments, docstrings, READMEs and calling specs describing behavior the code no longer has | Absent docs — that is `missing-calling-spec` from the scanner |
+| 9 | **Error paths** | Swallowed exceptions, bare catches, errors that lose context, cleanup that only runs on success, fail-open where it must fail-closed, irreversible operations (delete, overwrite, force-push) with no backup or confirmation | Something that never ran at all (→ Silent failure) |
+| 10 | **Observability & diagnosability** | Failures you know happened but cannot explain: log lines with no context, errors that drop the input that caused them, no way to tell which of several paths ran, long operations with no progress signal, unattended jobs whose only record is an exit code | Failures nothing surfaces at all (→ Silent failure) |
+| 11 | **Contracts & boundaries** | What a module promises vs what it does; callers relying on undocumented behavior; return shapes that vary by path; shallow modules whose interface costs as much as their body | Internal logic bugs (→ Error paths, State & lifecycle) |
+| 12 | **State & lifecycle** | Mutable state shared across calls, init/teardown asymmetry, caches with no eviction, module-level mutable singletons, resources not released on every path | Concurrency specifically (→ Concurrency & ordering); on-disk state (→ Persistence & schema evolution) |
+| 13 | **Test integrity** | Tests asserting nothing meaningful, happy-path-only coverage, tests that would still pass if the feature were deleted, known bugs with no regression pin | Missing test *files* — the scanner already reports those |
+| 14 | **Data integrity** | Non-atomic writes, in-place mutation where a copy was intended, unchecked assumptions about sortedness/uniqueness/non-null, lossy conversions | Input arriving from outside (→ Trust & input); on-disk format changes (→ Persistence & schema evolution) |
+| 15 | **Concurrency & ordering** | Races, `await` in a loop assuming stable state, unguarded shared writes, ordering assumptions between async steps | Single-threaded state issues (→ State & lifecycle); sequential re-runs (→ Idempotency & re-run safety) |
+| 16 | **Trust & input** | Unvalidated external input — including content authored elsewhere that an agent will later act on, such as issue bodies and fetched pages; injection into shell, SQL or prompts; secrets in logs or serialized objects; permissive defaults | Internal data handling (→ Data integrity) |
 
-**Why the top of the list looks like this.** Angles 1, 2, 3, 4 and 5 target how *agent-built* code rots specifically. Each session re-solves a solved problem its own way, leaves a half-built approach behind, edits code without touching the prose above it, and adds a mechanism nobody ever confirms is still firing. Those out-produce classic bug-hunting on this kind of codebase, which is why they run first.
+**Why the top of the list looks like this.** The first eight target how *agent-built, self-running* code rots specifically. Each session re-solves a solved problem its own way, hardcodes a fact that already lives somewhere else, leaves a half-built approach behind, edits code without touching the prose above it, and adds a mechanism nobody ever confirms is still firing. Those out-produce classic bug-hunting on this kind of codebase, which is why they run first.
 
-Angle 2 exists because this project has documented the same failure three times — ADR-011 (evolve auto-fire dead six days), ADR-012 (review gate bypassed sixteen days), ADR-013 (five hooks whose `main()` never ran). Every one was a trusted mechanism that stopped working with no symptom. It is the single most repeated defect here and it deserves a dedicated hunter.
+**Silent failure** exists because this project has documented the same defect three times — ADR-011 (evolve auto-fire dead six days), ADR-012 (review gate bypassed sixteen days), ADR-013 (five hooks whose `main()` never ran). Every one was a trusted mechanism that stopped working with no symptom.
 
-Angles 11 and 12 are repo-dependent — a dashboard or a docs repo will score zero on both, and that is a correct result, not a broken agent. The report prints zeros for exactly this reason: a zero that *changed* is the signal, not a zero itself.
+**Idempotency** and **Persistence** exist because these systems run themselves. Ticks, crons and agents re-fire constantly, and almost everything here keeps state on disk. A non-idempotent operation that gets retried corrupts quietly; a format change with no migration passes every test until the day it reads old data.
+
+**Observability** is deliberately narrow, and its boundary with Silent failure is the difference between *you never find out* and *you find out but cannot tell why*. Both agents will be tempted by the same code; the exclusions in both rows are what keep them from filing the same finding twice.
+
+**Concurrency** and **Trust & input** are repo-dependent — a dashboard or a docs repo will score zero on both, and that is a correct result, not a broken agent. The report prints zeros for exactly this reason: a zero that *changed* is the signal, not a zero itself.
 
 ### Fan-out
 
 Take the scanner's file list — already sorted, already excluding vendored trees.
 
-- **≤ 60 files:** one agent per angle, each given the whole inventory. 11 agents.
+- **≤ 60 files:** one agent per angle, each given the whole inventory. 16 agents.
 - **> 60 files:** split into deterministic shards of 60 (sorted order, fixed size, so shard boundaries are identical every run). Run **angle by angle**, shards within an angle in parallel, at most ~8 concurrent agents.
+
+Total agents is `16 × ceil(files / 60)`, so a 780-file repo is ~208 agents at 8 concurrent — on the order of half an hour. That is fine for an overnight run and absurd for an interactive one. **State the projected agent count before starting** and, if the run was invoked interactively rather than on a schedule, say so and offer `--dry-run` or a scoped path instead. Nobody should discover the scale of this by watching it.
 
 Every agent gets an **identical prompt template**, varying only in the angle definition and its file list. This is load-bearing for reproducibility: a subagent handed a bespoke prompt produces a bespoke report, and the run stops being comparable to the last one.
 
@@ -184,7 +194,7 @@ Print, and save to `.guya/audits/YYYY-MM-DD-audit.md`:
 
 - Repo, commit SHA audited, file count scanned, shard count
 - Mechanical findings by check
-- **Judgment findings by angle — all 12 listed, including the zeros.** An angle that returns nothing is either genuinely clean or quietly broken, and those look identical unless the zero is printed. An angle that reports zero on a repo where it scored last month is the signal that something in the fan-out stopped working.
+- **Judgment findings by angle — all 16 listed, including the zeros.** An angle that returns nothing is either genuinely clean or quietly broken, and those look identical unless the zero is printed. An angle that reports zero on a repo where it scored last month is the signal that something in the fan-out stopped working.
 - Agents spawned vs agents that returned; any that failed
 - Issues created, skipped as duplicates, closed as fixed
 - Anything that failed (unreadable files, `gh` errors) — **never** let a partial run look like a clean one
