@@ -229,9 +229,16 @@ Show Daniel before/after.
 ## Phase 7: Save and Deploy
 
 1. Final skill at `guya-plugin/skills/{skill-name}/SKILL.md`
-2. Copy to plugin cache: `~/.claude/plugins/cache/guya/guya/0.1.0/skills/{skill-name}/SKILL.md`
-3. Remove `.guya/decisions/.harness-active`
-4. Tell Daniel: "Saved. Restart Claude Code to pick it up. Invoke with `/guya:{skill-name}`."
+2. Copy to the plugin cache — the runtime is a real copy, not a symlink:
+   `~/.claude/plugins/cache/guya/guya/0.1.0/skills/{skill-name}/`
+   (A symlink install was tried on 2026-08-03 and broke the plugin outright;
+   see ADR-028. Do not hand-edit `installed_plugins.json` or the cache tree.)
+3. Add the skill to the catalog tables in `guya-plugin/skills/CLAUDE.md` and
+   `guya-plugin/skills/AGENTS.md`, or it exists but is undiscoverable.
+4. Remove `.guya/decisions/.harness-active`
+5. Tell Daniel: "Saved. **Restart Claude Code to pick it up** — skills are read
+   into the session at startup, so an edit is invisible to the running session
+   even though hooks pick up changes immediately. Invoke with `/guya:{skill-name}`."
 
 ---
 

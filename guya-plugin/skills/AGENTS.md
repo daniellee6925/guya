@@ -27,6 +27,8 @@ Skills are reusable workflow templates that can be invoked via `/guya-skill-name
 | File | Skill | Purpose |
 |-----------|-------|---------|
 | `guya-issue/SKILL.md` | guya-issue | Capture a bug or follow-up surfaced mid-work into a GitHub issue via `gh`, returning to the original task |
+| `guya-audit/SKILL.md` | guya-audit | Whole-repo rot audit against the repo's own standards → files GitHub issues. Deterministic; unattended-safe; never fixes |
+| `guya-resolve/SKILL.md` | guya-resolve | Fixes open `guya-audit` issues unattended — failing test first, three-pass gate, one PR per unit. Never merges |
 
 ## Decision Harness Skills
 

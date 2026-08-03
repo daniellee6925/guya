@@ -1,0 +1,12 @@
+{
+  "_comment": "Default leftover-debug markers for scan-standards.mjs, used only when the audited repo has no .guya/pre-commit-config.json cleanup patterns of its own. These live in a data file rather than inline in the scanner because any file containing these strings literally is itself flagged by every marker-scanning tool in the repo — including this scanner and the repo's own .git/hooks/pre-commit cleanup check. Separating the data from the logic sidesteps the use-mention problem entirely instead of special-casing it. Data files are not scanned (only code extensions are), so this file is inert.",
+  "markers": [
+    "HACK",
+    "FIXME",
+    "XXX",
+    "breakpoint()",
+    "pdb.set_trace",
+    "debugger;",
+    "console.log("
+  ]
+}

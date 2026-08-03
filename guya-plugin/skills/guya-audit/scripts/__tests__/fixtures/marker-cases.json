@@ -1,0 +1,27 @@
+{
+  "_comment": "Fixtures for the leftover-marker detection tests. These live in a data file for the same reason scan-standards.mjs keeps its default list in default-markers.json: a test that exercises marker detection must contain marker strings, and any code file containing them literally is flagged by every marker-scanning tool in the repo — including the repo's own .git/hooks/pre-commit cleanup check, which blocked this commit until the fixtures moved here. Only code extensions are scanned, so JSON is inert.",
+
+  "namedOnly": [
+    { "line": "const m = ['HACK', 'FIXME'];", "marker": "HACK", "why": "array of marker names is a definition, not a leftover" },
+    { "line": "markers: [\"debugger;\"]", "marker": "debugger;", "why": "config listing the marker as data" },
+    { "line": "x = 'breakpoint()'", "marker": "breakpoint()", "why": "quoted code-fragment marker" }
+  ],
+
+  "genuine": [
+    { "line": "# HACK: work around the thing", "marker": "HACK", "why": "real leftover in a comment" },
+    { "line": "  debugger;", "marker": "debugger;", "why": "real leftover statement" },
+    { "line": "    breakpoint()", "marker": "breakpoint()", "why": "real leftover call" }
+  ],
+
+  "bothNamedAndLeft": [
+    { "line": "const m = ['HACK']; // HACK actually left one", "marker": "HACK", "why": "naming it must not mask a real one on the same line" }
+  ],
+
+  "pluralProse": [
+    { "line": "// ten FIXMEs in one file is one cleanup task, not ten issues", "marker": "FIXME", "why": "prose about the marker, plural form, must not match on word boundary" }
+  ],
+
+  "regexMetacharacters": [
+    { "line": "console.log(1)", "marker": "console.log(", "why": "unescaped regex build would throw and take the whole audit down" }
+  ]
+}
