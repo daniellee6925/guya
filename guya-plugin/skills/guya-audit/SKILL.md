@@ -1,6 +1,6 @@
 ---
 name: guya-audit
-description: Full-codebase rot audit for the CURRENT repo — a deterministic standards scanner plus a fan-out of 11 parallel agents, each hunting one orthogonal failure mode (duplication, dead weight, contracts, error paths, state, data integrity, concurrency, trust, scale, test integrity, doc drift) — then files GitHub issues for everything found. Runs unattended (overnight) and produces the same report every time on unchanged code. Use whenever Daniel says "audit this repo", "what's rotting", "check the codebase", "find all the issues", "file issues for what's broken", or wants an agent-built codebase held to standard. Prefer this over ad-hoc review prompts for whole-repo sweeps; use /guya-review for a single diff and /guya-architecture for interactive design work.
+description: Full-codebase rot audit for the CURRENT repo — a deterministic standards scanner plus a fan-out of 12 parallel agents, each hunting one orthogonal failure mode (duplication & convention drift, silent failure, growth & cost of change, dead weight, doc drift, error paths, contracts, state, test integrity, data integrity, concurrency, trust) — then files GitHub issues for everything found. Runs unattended (overnight) and produces the same report every time on unchanged code. Use whenever Daniel says "audit this repo", "what's rotting", "check the codebase", "find all the issues", "file issues for what's broken", or wants an agent-built codebase held to standard. Prefer this over ad-hoc review prompts for whole-repo sweeps; use /guya-review for a single diff and /guya-architecture for interactive design work.
 argument-hint: "[--dry-run] [path or subdirectory to limit scope]"
 ---
 
@@ -74,21 +74,30 @@ Apply **every** angle, one agent each. The list is closed — do not improvise a
 
 Each angle says what it owns *and what it must not report*. The exclusions matter as much as the inclusions: overlapping agents produce duplicate findings that survive dedup because they are phrased differently.
 
+The selection principle: **an audit hunts what you cannot notice by using the system.** Slowness, crashes, and wrong output announce themselves — you go look without being told. Duplication, a mechanism that quietly stopped running, and code that costs a week to extend stay invisible until they are expensive. Weight the angle set toward the invisible half.
+
+Listed in rough order of expected yield on an agent-built codebase.
+
 | # | Angle | Hunts for | Must NOT report |
 |---|-------|-----------|-----------------|
-| 1 | **Duplication & drift** | The same logic implemented more than once; near-identical helpers in different modules; one concept spelled differently in different places | Style/formatting; anything with a single implementation |
-| 2 | **Dead weight** | Unreachable branches, unused exports, abstractions with exactly one caller, config nothing reads, scaffolding from an abandoned approach | Duplication (angle 1); untested code (angle 10) |
-| 3 | **Contracts & boundaries** | What a module promises vs what it does; callers relying on undocumented behavior; return shapes that vary by path; shallow modules whose interface costs as much as their body | Internal logic bugs (angle 4-6) |
-| 4 | **Error paths** | Swallowed exceptions, bare catches, errors that lose context, cleanup that only runs on success, fail-open where it must fail-closed | Happy-path logic; missing tests |
-| 5 | **State & lifecycle** | Mutable state shared across calls, init/teardown asymmetry, caches with no eviction, module-level mutable singletons | Concurrency specifically (angle 7) |
-| 6 | **Data integrity** | Non-atomic writes, in-place mutation where a copy was intended, unchecked assumptions about sortedness/uniqueness/non-null, lossy conversions | Input validation from outside (angle 8) |
-| 7 | **Concurrency & ordering** | Races, `await` in a loop assuming stable state, unguarded shared writes, ordering assumptions between async steps | Single-threaded state issues (angle 5) |
-| 8 | **Trust & input** | Unvalidated external input, injection into shell/SQL/prompts, secrets in logs or serialized objects, permissive defaults | Internal data handling (angle 6) |
-| 9 | **Scale** | Algorithmic complexity, N+1 patterns, unbounded growth, work recomputed in loops, blocking I/O on hot paths | Micro-optimizations with no measurable effect |
-| 10 | **Test integrity** | Tests asserting nothing meaningful, happy-path-only coverage, tests that would still pass if the feature were deleted, known bugs with no regression pin | Missing test *files* — the scanner already reports those |
-| 11 | **Doc/code divergence** | Comments, docstrings, and READMEs describing behavior the code no longer has; calling specs that drifted from the signature | Absent docs — that is `missing-calling-spec` from the scanner |
+| 1 | **Duplication & convention drift** | The same logic implemented more than once; near-identical helpers in different modules; the same *concept* handled a different way in each place it appears — error style, config access, naming, validation | Style/formatting alone; anything with a single implementation |
+| 2 | **Silent failure** | Code that can stop working with nothing surfaced: guards that always pass, handlers registered but never invoked, `main()` never reached, retries swallowing the final error, jobs whose failure is logged at debug and nowhere else, flags stuck in a default nobody checks | A failure branch that exists but behaves wrongly — that is angle 6 |
+| 3 | **Growth & cost of change** | What it costs to make this program bigger. Adding one feature: how many files must change, how much must be understood first, does the abstraction fight you? Then growth in data/load: unbounded structures, algorithmic complexity that is fine now and fatal later, work recomputed per item | Micro-optimizations with no observable effect; slowness already visible in normal use |
+| 4 | **Dead weight & abandoned scaffolding** | Unreachable branches, unused exports, abstractions with exactly one caller, config nothing reads, half-built approaches left in place when the next attempt landed | Duplication (angle 1); untested code (angle 9) |
+| 5 | **Doc/code divergence** | Comments, docstrings, READMEs and calling specs describing behavior the code no longer has | Absent docs — that is `missing-calling-spec` from the scanner |
+| 6 | **Error paths** | Swallowed exceptions, bare catches, errors that lose context, cleanup that only runs on success, fail-open where it must fail-closed | Something that never ran at all (angle 2) |
+| 7 | **Contracts & boundaries** | What a module promises vs what it does; callers relying on undocumented behavior; return shapes that vary by path; shallow modules whose interface costs as much as their body | Internal logic bugs (angles 6, 8) |
+| 8 | **State & lifecycle** | Mutable state shared across calls, init/teardown asymmetry, caches with no eviction, module-level mutable singletons | Concurrency specifically (angle 11) |
+| 9 | **Test integrity** | Tests asserting nothing meaningful, happy-path-only coverage, tests that would still pass if the feature were deleted, known bugs with no regression pin | Missing test *files* — the scanner already reports those |
+| 10 | **Data integrity** | Non-atomic writes, in-place mutation where a copy was intended, unchecked assumptions about sortedness/uniqueness/non-null, lossy conversions | Input arriving from outside (angle 12) |
+| 11 | **Concurrency & ordering** | Races, `await` in a loop assuming stable state, unguarded shared writes, ordering assumptions between async steps | Single-threaded state issues (angle 8) |
+| 12 | **Trust & input** | Unvalidated external input, injection into shell/SQL/prompts, secrets in logs or serialized objects, permissive defaults | Internal data handling (angle 10) |
 
-Angles 1, 2, and 11 are weighted toward how **agent-built** code specifically rots: each session re-solves a solved problem, abandons a half-built approach, or edits code without touching the prose above it. Those three routinely out-produce the classic correctness angles on this kind of codebase.
+**Why the top of the list looks like this.** Angles 1, 2, 3, 4 and 5 target how *agent-built* code rots specifically. Each session re-solves a solved problem its own way, leaves a half-built approach behind, edits code without touching the prose above it, and adds a mechanism nobody ever confirms is still firing. Those out-produce classic bug-hunting on this kind of codebase, which is why they run first.
+
+Angle 2 exists because this project has documented the same failure three times — ADR-011 (evolve auto-fire dead six days), ADR-012 (review gate bypassed sixteen days), ADR-013 (five hooks whose `main()` never ran). Every one was a trusted mechanism that stopped working with no symptom. It is the single most repeated defect here and it deserves a dedicated hunter.
+
+Angles 11 and 12 are repo-dependent — a dashboard or a docs repo will score zero on both, and that is a correct result, not a broken agent. The report prints zeros for exactly this reason: a zero that *changed* is the signal, not a zero itself.
 
 ### Fan-out
 
@@ -175,7 +184,7 @@ Print, and save to `.guya/audits/YYYY-MM-DD-audit.md`:
 
 - Repo, commit SHA audited, file count scanned, shard count
 - Mechanical findings by check
-- **Judgment findings by angle — all 11 listed, including the zeros.** An angle that returns nothing is either genuinely clean or quietly broken, and those look identical unless the zero is printed. An angle that reports zero on a repo where it scored last month is the signal that something in the fan-out stopped working.
+- **Judgment findings by angle — all 12 listed, including the zeros.** An angle that returns nothing is either genuinely clean or quietly broken, and those look identical unless the zero is printed. An angle that reports zero on a repo where it scored last month is the signal that something in the fan-out stopped working.
 - Agents spawned vs agents that returned; any that failed
 - Issues created, skipped as duplicates, closed as fixed
 - Anything that failed (unreadable files, `gh` errors) — **never** let a partial run look like a clean one
