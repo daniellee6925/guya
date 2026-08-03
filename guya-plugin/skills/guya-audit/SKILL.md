@@ -1,6 +1,6 @@
 ---
 name: guya-audit
-description: Full-codebase rot audit for the CURRENT repo — holds the code to the repo's own written standards, then files GitHub issues for everything found. Runs unattended (overnight) and produces the same report every time on unchanged code. Use whenever Daniel says "audit this repo", "what's rotting", "check the codebase", "find all the issues", "file issues for what's broken", or wants an agent-built codebase held to standard. Prefer this over ad-hoc review prompts for whole-repo sweeps; use /guya-review for a single diff and /guya-architecture for interactive design work.
+description: Full-codebase rot audit for the CURRENT repo — a deterministic standards scanner plus a fan-out of 11 parallel agents, each hunting one orthogonal failure mode (duplication, dead weight, contracts, error paths, state, data integrity, concurrency, trust, scale, test integrity, doc drift) — then files GitHub issues for everything found. Runs unattended (overnight) and produces the same report every time on unchanged code. Use whenever Daniel says "audit this repo", "what's rotting", "check the codebase", "find all the issues", "file issues for what's broken", or wants an agent-built codebase held to standard. Prefer this over ad-hoc review prompts for whole-repo sweeps; use /guya-review for a single diff and /guya-architecture for interactive design work.
 argument-hint: "[--dry-run] [path or subdirectory to limit scope]"
 ---
 
@@ -62,21 +62,60 @@ It emits JSON findings on stdout and a summary on stderr. It checks file length,
 
 Take its output as-is. Do not re-judge, re-rank, or filter its findings; that reintroduces the variance the script exists to remove. If a check is systematically wrong, fix the script.
 
-## Step 3 — Judgment Pass (lenses, fixed order)
+## Step 3 — Judgment Pass (one agent per angle, fanned out)
 
-The scanner cannot see design problems. This pass can, but it is the variable half, so constrain it hard.
+The scanner cannot see design problems. This pass can — and **fan-out across distinct angles is the mechanism, not an optimization for large repos.**
 
-**Scope.** Take the scanner's file list. Sort it. Process in batches of ~15 files, in order. Never sample, never "focus on what looks interesting" — the point is coverage you can rely on.
+One agent asked to "find issues" returns whatever it noticed first and calls it done. Ten agents asked the same thing return ten overlapping versions of the same shallow list. What actually surfaces real problems is *orthogonal* lenses: each agent hunting one specific failure mode, blind to what the others are looking for, so nobody's attention is diluted and nothing is left to "somebody else probably caught that."
 
-**Lenses.** Apply exactly these, in this order, to every batch. They mirror the review skills so the audit and the pre-commit gate look for the same things:
+### The angles
 
-1. **Correctness** (from `guya-review`) — silent errors, unhandled edge cases, race conditions, security.
-2. **Depth** (from `guya-deep-review`) — logic errors, state leaks, data integrity, observability gaps, boundary behavior.
-3. **Structure** (from `guya-architecture`) — shallow modules whose interface costs as much as their implementation, duplicated logic across files, abstractions with one caller, tangled dependencies.
+Apply **every** angle, one agent each. The list is closed — do not improvise an extra angle mid-run, and do not skip one because it "probably won't find anything." A run that varies its angle set is the ad-hoc prompt you are replacing.
 
-For large repos, run batches as parallel subagents with an identical prompt per batch. Identical prompts and fixed batching are what keep the run reproducible; a subagent that gets a different prompt produces a different report.
+Each angle says what it owns *and what it must not report*. The exclusions matter as much as the inclusions: overlapping agents produce duplicate findings that survive dedup because they are phrased differently.
 
-**Every judgment finding must name the standard it violates and the file it lives in.** No file anchor means it cannot be deduped, fixed, or verified — drop it.
+| # | Angle | Hunts for | Must NOT report |
+|---|-------|-----------|-----------------|
+| 1 | **Duplication & drift** | The same logic implemented more than once; near-identical helpers in different modules; one concept spelled differently in different places | Style/formatting; anything with a single implementation |
+| 2 | **Dead weight** | Unreachable branches, unused exports, abstractions with exactly one caller, config nothing reads, scaffolding from an abandoned approach | Duplication (angle 1); untested code (angle 10) |
+| 3 | **Contracts & boundaries** | What a module promises vs what it does; callers relying on undocumented behavior; return shapes that vary by path; shallow modules whose interface costs as much as their body | Internal logic bugs (angle 4-6) |
+| 4 | **Error paths** | Swallowed exceptions, bare catches, errors that lose context, cleanup that only runs on success, fail-open where it must fail-closed | Happy-path logic; missing tests |
+| 5 | **State & lifecycle** | Mutable state shared across calls, init/teardown asymmetry, caches with no eviction, module-level mutable singletons | Concurrency specifically (angle 7) |
+| 6 | **Data integrity** | Non-atomic writes, in-place mutation where a copy was intended, unchecked assumptions about sortedness/uniqueness/non-null, lossy conversions | Input validation from outside (angle 8) |
+| 7 | **Concurrency & ordering** | Races, `await` in a loop assuming stable state, unguarded shared writes, ordering assumptions between async steps | Single-threaded state issues (angle 5) |
+| 8 | **Trust & input** | Unvalidated external input, injection into shell/SQL/prompts, secrets in logs or serialized objects, permissive defaults | Internal data handling (angle 6) |
+| 9 | **Scale** | Algorithmic complexity, N+1 patterns, unbounded growth, work recomputed in loops, blocking I/O on hot paths | Micro-optimizations with no measurable effect |
+| 10 | **Test integrity** | Tests asserting nothing meaningful, happy-path-only coverage, tests that would still pass if the feature were deleted, known bugs with no regression pin | Missing test *files* — the scanner already reports those |
+| 11 | **Doc/code divergence** | Comments, docstrings, and READMEs describing behavior the code no longer has; calling specs that drifted from the signature | Absent docs — that is `missing-calling-spec` from the scanner |
+
+Angles 1, 2, and 11 are weighted toward how **agent-built** code specifically rots: each session re-solves a solved problem, abandons a half-built approach, or edits code without touching the prose above it. Those three routinely out-produce the classic correctness angles on this kind of codebase.
+
+### Fan-out
+
+Take the scanner's file list — already sorted, already excluding vendored trees.
+
+- **≤ 60 files:** one agent per angle, each given the whole inventory. 11 agents.
+- **> 60 files:** split into deterministic shards of 60 (sorted order, fixed size, so shard boundaries are identical every run). Run **angle by angle**, shards within an angle in parallel, at most ~8 concurrent agents.
+
+Every agent gets an **identical prompt template**, varying only in the angle definition and its file list. This is load-bearing for reproducibility: a subagent handed a bespoke prompt produces a bespoke report, and the run stops being comparable to the last one.
+
+Also hand every agent the mechanical findings from Step 2, with the instruction: **do not re-report these.** Otherwise eleven agents each independently rediscover the same oversized file.
+
+### What each agent returns
+
+Structured findings only, one JSON object per finding:
+
+```json
+{"angle": 4, "file": "src/auth.py", "anchor": "refresh_token",
+ "what": "one sentence", "why": "the concrete failure it causes",
+ "standard": "the written rule or invariant it violates",
+ "acceptance": "objectively checkable statement of done",
+ "test": "the test that should fail before a fix"}
+```
+
+**A finding with no `file` and `anchor` is dropped.** It cannot be fingerprinted, deduped, assigned, or verified — and an un-anchored complaint is exactly the vague output this skill exists to replace. Same for a finding with no `acceptance`: `/guya-resolve` will skip it, so filing it just grows the backlog.
+
+Fingerprint each with the same scheme as the scanner — `(angle-id, file, anchor)`, never line numbers.
 
 ## Step 4 — Dedupe Against Open Issues
 
@@ -92,13 +131,17 @@ Each issue body carries a `guya-audit-id`. Match new findings against those IDs.
 
 Fingerprints deliberately exclude line numbers. A problem that moved down 12 lines is the same problem.
 
-## Step 5 — File Issues
+## Step 5 — File Issues (via `/guya-issue` batch mode)
 
-One issue per finding, except **mechanical findings of the same check type get grouped into one issue per check** (all `missing-test` findings in one issue, all `leftover-marker` in another). Thirty near-identical issues is a tracker nobody reads, and the fixer batches them anyway.
+**Do not hand-roll `gh issue create` here.** `/guya-issue` already owns issue filing — preflight checks, body structure, label caution, URL capture. Duplicating that logic means two places to fix when GitHub or the conventions change, and they will drift.
+
+Invoke `/guya-issue` in **batch mode** (see its "Batch Mode" section). That mode exists for exactly this caller: it swaps the interactive per-issue approval for the audit's own preconditions — an explicit invocation, a dedup pass already run, and `guya-audit` labelling — while keeping the shared body format.
+
+One issue per finding, except **mechanical findings of the same check type get grouped into one issue per check** (all `missing-test` in one, all `leftover-marker` in another). Thirty near-identical issues is a tracker nobody reads, and `/guya-resolve` batches them anyway.
 
 Label every issue `guya-audit`, plus `mechanical` or `judgment`.
 
-**Body format — this is a contract with `/guya-resolve`, not decoration.** It must be machine-readable or the fixer cannot act:
+**Body format — this is a contract with `/guya-resolve`, not decoration.** It extends `/guya-issue`'s standard sections with a machine-readable header, and the fixer cannot act without it:
 
 ```markdown
 <!-- guya-audit
@@ -130,8 +173,10 @@ The acceptance criteria and suggested test are the load-bearing fields. `/guya-r
 
 Print, and save to `.guya/audits/YYYY-MM-DD-audit.md`:
 
-- Repo, commit SHA audited, file count scanned
-- Findings by check, mechanical vs judgment
+- Repo, commit SHA audited, file count scanned, shard count
+- Mechanical findings by check
+- **Judgment findings by angle — all 11 listed, including the zeros.** An angle that returns nothing is either genuinely clean or quietly broken, and those look identical unless the zero is printed. An angle that reports zero on a repo where it scored last month is the signal that something in the fan-out stopped working.
+- Agents spawned vs agents that returned; any that failed
 - Issues created, skipped as duplicates, closed as fixed
 - Anything that failed (unreadable files, `gh` errors) — **never** let a partial run look like a clean one
 
@@ -148,7 +193,14 @@ The acceptance test for this skill is not "did it find bugs." It is:
 
 If that ever differs, the mechanical half is broken and the skill has stopped solving the problem it exists for.
 
-The judgment half cannot be byte-stable — it is a model. Fixed batching, fixed lens order, identical prompts, and fingerprint dedup are what keep it *practically* stable: phrasing may drift, but the same problem resolves to the same issue instead of a new one.
+The judgment half cannot be byte-stable — it is a model. Four things keep it *practically* stable, and all four are load-bearing:
+
+- **A closed angle set.** Eleven angles, every run. Adding one ad-hoc mid-run is how the reports start diverging again.
+- **Deterministic sharding.** Sorted file list, fixed shard size, so shard boundaries are identical between runs.
+- **Identical prompt templates.** Only the angle definition and file list vary.
+- **Fingerprint dedup.** Phrasing drifts between runs; `(angle, file, anchor)` does not. The same problem resolves to the same issue rather than a new one.
+
+The cheapest way to notice this half has broken is the per-angle counts in the report. Compare against the previous `.guya/audits/` entry: a angle that went from twelve findings to zero on barely-changed code did not get fixed, it stopped running.
 
 ## What This Skill Does Not Do
 

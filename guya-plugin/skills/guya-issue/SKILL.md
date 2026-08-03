@@ -69,9 +69,26 @@ If Daniel asked for labels (`--label bug`, `--label tech-debt`) or an assignee (
 
 This is the whole point. Don't summarize, don't reflect, don't propose follow-ups. The user was doing something else; resume that.
 
+## Batch Mode (for `/guya-audit` — not for interactive use)
+
+`/guya-audit` files many issues in one unattended run, so the confirm-each-issue flow above cannot apply. Rather than letting it hand-roll its own `gh` calls — two places to drift when conventions change — it calls this skill in batch mode.
+
+The approval requirement is not waived, it is **relocated**. Batch mode is only legitimate when all of these hold, and you should refuse it when they don't:
+
+1. Daniel explicitly invoked the audit. The run itself is the approval.
+2. A dedup pass ran against open issues first, so nothing already-filed is filed again.
+3. Every issue carries the `guya-audit` label, making the whole batch findable and bulk-closable if it turns out to be noise.
+4. Findings are grouped — one issue per mechanical check type, not one per occurrence.
+
+What stays identical to interactive mode: the body sections, the "concrete not vague" standard for Problem, the requirement that Where locates real code, and the refusal to file against the wrong repo.
+
+What changes: no per-issue prompt, and the caller may pass extra body content (the audit's machine-readable header block) above the standard sections.
+
+Report the batch as a count plus URLs, not one line per issue.
+
 ## Rules
 
 - **GitHub for code, Constantia for growth.** This skill files code/repo issues only. If Daniel surfaces a learning gap or a habit to track, route to Constantia tasks instead — wrong tool here.
-- **No silent filing.** Always show the draft and get approval. Even when invoked with a complete-looking arg.
-- **One issue per invocation.** If Daniel describes three problems, file one and ask whether to do the others — batched issue spam is worse than the bug.
+- **No silent filing.** Always show the draft and get approval. Even when invoked with a complete-looking arg. The single exception is Batch Mode above, whose preconditions replace per-issue approval — and it is only reachable from an audit run Daniel started.
+- **One issue per invocation** in interactive mode. If Daniel describes three problems, file one and ask whether to do the others — batched issue spam is worse than the bug. Batch mode is the deliberate exception, and it earns that by deduping and labelling.
 - **Don't edit code as part of this skill.** No "// TODO: see #N" injections. The skill captures; it doesn't modify.
