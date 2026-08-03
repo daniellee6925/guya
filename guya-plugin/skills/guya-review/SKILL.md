@@ -1,6 +1,6 @@
 ---
 name: guya-review
-description: Focused code review applying Karpathy principles and targeted risk categories — complexity, silent errors, scalability, security, and race conditions. Use when asked to "review", "karpathy review", or "check this code". Trigger proactively on new or significantly changed code — don't wait to be asked. Run `/guya-deep-review` after fixes for the second pass.
+description: Focused code review applying Karpathy principles and targeted risk categories — complexity, silent errors, scalability, security, and race conditions. Use when asked to "review", "karpathy review", or "check this code". Trigger proactively on new or significantly changed code — don't wait to be asked. This is pass 1 of the 3-pass pre-commit gate — run `/guya-deep-review` after fixes, then `/guya-optimize`.
 argument-hint: "<file-path or directory>"
 ---
 
@@ -130,3 +130,13 @@ Yield to Daniel only if one of these is true:
 - A prior turn explicitly told you to stop after review
 
 Otherwise, treat the review as a checkpoint, not a terminus, and keep going.
+
+## The Pre-Commit Chain
+
+This is **pass 1 of 3**. The gate requires all three, in order, within the same 30-minute window:
+
+1. `/guya-review` — structural risk (this skill)
+2. `/guya-deep-review` — logic, state, data integrity
+3. `/guya-optimize` — simplification and resource trade-offs
+
+Running them out of order resets the chain: the gate treats a re-run of an earlier pass as invalidating the later ones, because those passes examined a state the earlier one has since re-opened. If you're heading toward a commit, continue to `/guya-deep-review` rather than stopping here.

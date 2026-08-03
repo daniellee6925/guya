@@ -1,12 +1,14 @@
 ---
 name: guya-optimize
-description: Analyze code for simplification, performance, and resource efficiency opportunities. Reports findings only — no auto-fixes, because optimizations involve trade-offs that require judgment (readability vs speed, complexity vs throughput). Use when asked to "optimize", "find performance issues", or "simplify". Trigger proactively on code that looks algorithmically inefficient or resource-heavy.
+description: Analyze code for simplification, performance, and resource efficiency opportunities. Reports findings only — no auto-fixes, because optimizations involve trade-offs that require judgment (readability vs speed, complexity vs throughput). Use when asked to "optimize", "find performance issues", or "simplify". This is pass 3 of the 3-pass pre-commit gate — run it after `/guya-deep-review`. Trigger proactively on code that looks algorithmically inefficient or resource-heavy.
 argument-hint: "<file-path or directory>"
 ---
 
 # Optimize
 
 A report-only analysis of simplification and optimization opportunities. No fixes are applied — optimizations involve trade-offs that require Daniel's judgment before touching working code.
+
+This is also **pass 3 of the pre-commit gate**. Review and deep-review both hunt for defects — things that are wrong. Neither asks whether code that is *correct* should exist in that shape at all. This pass is where that question gets asked, which is why it runs last: simplification advice is only meaningful once the code is known to work.
 
 ## Step 1 — Read the Target
 
@@ -74,3 +76,14 @@ End with a **Priority Summary** — all findings ranked by impact (highest first
 1. [file:line] — [Title] | Impact: High | Effort: Trivial
 2. ...
 ```
+
+## Step 4 — Continue or Yield
+
+This skill stays report-only: it never edits code. But when it runs as the third pass of the pre-commit gate, it must not silently stall the commit either.
+
+After the Priority Summary, add a one-line **Recommendation**: which findings (if any) are worth taking before this commit, and which are follow-up work. Then:
+
+- **No findings, or all low-impact** — say so and continue the flow (the commit proceeds).
+- **Findings worth taking now** — apply them if Daniel has already approved the direction, or ask if the trade-off is genuinely his call. A High-impact finding with a real trade-off (readability vs speed, a redesign) is a yield.
+
+Recording this pass means "the simplification question was asked and the answer was consciously accepted" — not "the code was optimized". Shipping with known findings is a legitimate outcome; shipping without ever asking is what the gate exists to prevent. If you accept findings and move on, name them in one line so the decision is on the record rather than implied by silence.

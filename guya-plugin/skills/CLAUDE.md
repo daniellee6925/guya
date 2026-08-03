@@ -36,7 +36,7 @@ Staff-engineer-level decision harnesses. Each forces structured thinking before 
 | Directory | Skill | Purpose |
 |-----------|-------|---------|
 | `guya-decision-kickoff/` | guya-decision-kickoff | Project kickoff harness. Forces product and architecture thinking before writing any code. |
-| `guya-decision-feature/` | guya-decision-feature | Feature harness. Forces requirements, design, and test-plan thinking before implementation. |
+| `guya-decision-feature/` | guya-decision-feature | Feature harness. Four asked questions (problem+forcing function, full-shape+this-build+exclusions, done-criteria, non-obvious constraints); touch points, blast radius, patterns, and test strategy are **derived from the codebase** and shown to Daniel for correction rather than asked. Q2 deliberately asks for the finished shape before the slice and pushes back on under-scoping as well as scope creep — the old "what's the minimum viable version" framing biased toward fragments that needed rework. |
 | `guya-decision-bugfix/` | guya-decision-bugfix | Diagnosis & fix loop. Builds a deterministic feedback loop first, then reproduce → ranked hypotheses → instrument → fix + regression test → post-mortem (blast radius). |
 | `guya-decision-refactor/` | guya-decision-refactor | Refactor harness. Forces scoping, behavior-preservation contract, and rollback plan. |
 | `guya-distinguished-engineer/` | guya-distinguished-engineer | Project direction harness. Discusses what the program fundamentally IS, challenges drift against core beliefs, and maintains `context/core-beliefs.md` and `context/vision.md`. |
@@ -45,9 +45,11 @@ Staff-engineer-level decision harnesses. Each forces structured thinking before 
 
 | Directory | Skill | Purpose |
 |-----------|-------|---------|
-| `guya-review/` | guya-review | Focused code review: Karpathy principles, silent errors, scalability, security, race conditions. |
-| `guya-deep-review/` | guya-deep-review | Deep second-pass review after `guya-review` findings are fixed. Catches logic bugs, state management issues, data integrity gaps, and observability holes. |
-| `guya-optimize/` | guya-optimize | Analyze code for simplification, performance, and resource efficiency opportunities. Report only — no fixes applied. |
+| `guya-review/` | guya-review | **Gate pass 1.** Focused code review: Karpathy principles, silent errors, scalability, security, race conditions. |
+| `guya-deep-review/` | guya-deep-review | **Gate pass 2.** Deep second-pass review after `guya-review` findings are fixed. Catches logic bugs, state management issues, data integrity gaps, and observability holes. |
+| `guya-optimize/` | guya-optimize | **Gate pass 3.** Analyze code for simplification, performance, and resource efficiency opportunities. Report only — no fixes applied; recording the pass means the trade-offs were surfaced and consciously accepted. |
+
+The pre-commit gate requires all three passes, in that order, inside the same age window (default 30 min). Order is enforced, not just presence — re-running an earlier pass resets the chain. See ADR-027 and `hooks/review-evidence.mjs` (`REQUIRED_CHAIN`).
 | `guya-architecture/` | guya-architecture | Find deepening opportunities — turn shallow modules into deep ones for testability + AI-navigability. Explore → HTML before/after report → grilling loop → optional parallel interface design. Find-and-design; hands execution to `guya-decision-refactor`. Vocabulary in `LANGUAGE.md`. |
 
 ### Learning

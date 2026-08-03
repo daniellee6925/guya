@@ -92,7 +92,7 @@ describe('module constants', () => {
   });
 
   it('exports the frozen VALID_STEPS list', () => {
-    assert.deepEqual([...VALID_STEPS], ['initial', 'followup']);
+    assert.deepEqual([...VALID_STEPS], ['initial', 'followup', 'optimize']);
     assert.ok(Object.isFrozen(VALID_STEPS));
   });
 

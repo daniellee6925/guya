@@ -95,6 +95,7 @@ describe('validateForCommit: happy paths', () => {
     execSync('git add new.txt', { cwd: dir });
     appendStep(dir, 'initial', { now: () => 1_000_000 });
     appendStep(dir, 'followup', { now: () => 1_000_100 });
+    appendStep(dir, 'optimize', { now: () => 1_000_150 });
     const r = validateForCommit(dir, testConfig(), { now: () => 1_000_200 });
     assert.deepEqual(r, { valid: true });
   });
@@ -104,6 +105,7 @@ describe('validateForCommit: happy paths', () => {
     execSync('git add a.txt', { cwd: dir });
     appendStep(dir, 'initial', { now: () => 1_000_000 });
     appendStep(dir, 'followup', { now: () => 1_000_100 });
+    appendStep(dir, 'optimize', { now: () => 1_000_150 });
 
     // Small post-review change: add 2 lines to a new file
     writeFileSync(join(dir, 'b.txt'), 'line1\nline2\n');
@@ -118,11 +120,12 @@ describe('validateForCommit: happy paths', () => {
   it('valid when tree matches even after many steps', () => {
     writeFileSync(join(dir, 'a.txt'), 'content\n');
     execSync('git add a.txt', { cwd: dir });
-    // Repeat initial, then followup, then another followup
+    // Repeat initial, then followup, then another followup, then optimize
     appendStep(dir, 'initial', { now: () => 100 });
     appendStep(dir, 'initial', { now: () => 200 });
     appendStep(dir, 'followup', { now: () => 300 });
     appendStep(dir, 'followup', { now: () => 400 });
+    appendStep(dir, 'optimize', { now: () => 450 });
     const r = validateForCommit(dir, testConfig(), { now: () => 500 });
     assert.equal(r.valid, true);
   });
@@ -176,6 +179,7 @@ describe('validateForCommit: step presence + order failures', () => {
   it('blocks when initial runs after the latest followup (state reset)', () => {
     appendStep(dir, 'initial', { now: () => 100 });
     appendStep(dir, 'followup', { now: () => 200 });
+    appendStep(dir, 'optimize', { now: () => 250 });
     appendStep(dir, 'initial', { now: () => 300 }); // re-ran initial after followup
     const r = validateForCommit(dir, testConfig(), { now: () => 400 });
     assert.equal(r.valid, false);
@@ -189,6 +193,49 @@ describe('validateForCommit: step presence + order failures', () => {
     assert.equal(r.valid, false);
     assert.match(r.reason, /Initial review ran after followup/);
   });
+
+  it('blocks when the optimize pass is missing (initial + followup only)', () => {
+    // The pre-optimize contract: this exact evidence used to be a valid
+    // commit. It must now block — otherwise every repo carrying two-step
+    // evidence would sail through the new gate.
+    appendStep(dir, 'initial', { now: () => 100 });
+    appendStep(dir, 'followup', { now: () => 200 });
+    const r = validateForCommit(dir, testConfig(), { now: () => 300 });
+    assert.equal(r.valid, false);
+    assert.match(r.reason, /Missing optimize pass/);
+  });
+
+  it('blocks when optimize ran before the latest followup (chain reset)', () => {
+    appendStep(dir, 'initial', { now: () => 100 });
+    appendStep(dir, 'followup', { now: () => 200 });
+    appendStep(dir, 'optimize', { now: () => 250 });
+    appendStep(dir, 'followup', { now: () => 300 }); // re-ran deep review after optimize
+    const r = validateForCommit(dir, testConfig(), { now: () => 400 });
+    assert.equal(r.valid, false);
+    assert.match(r.reason, /Deep review ran after the optimize pass/);
+  });
+
+  it('blocks when optimize.timestamp equals followup.timestamp (tie → not-after)', () => {
+    appendStep(dir, 'initial', { now: () => 100 });
+    appendStep(dir, 'followup', { now: () => 200 });
+    appendStep(dir, 'optimize', { now: () => 200 });
+    const r = validateForCommit(dir, testConfig(), { now: () => 300 });
+    assert.equal(r.valid, false);
+    assert.match(r.reason, /Deep review ran after the optimize pass/);
+  });
+
+  it('reports the ordering violation, not the missing later step', () => {
+    // Interleaved presence+order check: a chain that reset at the followup
+    // link must name THAT, even though `optimize` is also absent. Reporting
+    // "Missing optimize pass" here would send the user to run the last pass
+    // on a state whose earlier pass has already been re-opened.
+    appendStep(dir, 'initial', { now: () => 100 });
+    appendStep(dir, 'followup', { now: () => 200 });
+    appendStep(dir, 'initial', { now: () => 300 });
+    const r = validateForCommit(dir, testConfig(), { now: () => 400 });
+    assert.equal(r.valid, false);
+    assert.match(r.reason, /Initial review ran after followup/);
+  });
 });
 
 describe('validateForCommit: age (stale evidence) failures', () => {
@@ -199,6 +246,7 @@ describe('validateForCommit: age (stale evidence) failures', () => {
   it('blocks when age exceeds gateMaxAgeMinutes', () => {
     appendStep(dir, 'initial', { now: () => 0 });
     appendStep(dir, 'followup', { now: () => 1000 });
+    appendStep(dir, 'optimize', { now: () => 1500 });
     const r = validateForCommit(dir, testConfig({ gateMaxAgeMinutes: 10 }), {
       now: () => 11 * 60 * 1000 + 1, // 11 minutes + 1ms
     });
@@ -211,6 +259,7 @@ describe('validateForCommit: age (stale evidence) failures', () => {
     execSync('git add a.txt', { cwd: dir });
     appendStep(dir, 'initial', { now: () => 0 });
     appendStep(dir, 'followup', { now: () => 100 });
+    appendStep(dir, 'optimize', { now: () => 150 });
     const r = validateForCommit(dir, testConfig({ gateMaxAgeMinutes: 10 }), {
       now: () => 10 * 60 * 1000, // exactly 10 minutes
     });
@@ -220,6 +269,7 @@ describe('validateForCommit: age (stale evidence) failures', () => {
   it('uses default 30 minutes when gateMaxAgeMinutes is missing', () => {
     appendStep(dir, 'initial', { now: () => 0 });
     appendStep(dir, 'followup', { now: () => 100 });
+    appendStep(dir, 'optimize', { now: () => 150 });
     const r = validateForCommit(dir, { smallChange: { maxLines: 10 } }, {
       now: () => 31 * 60 * 1000,
     });
@@ -238,6 +288,7 @@ describe('validateForCommit: tree mismatch + delta tolerance', () => {
     execSync('git add a.txt', { cwd: dir });
     appendStep(dir, 'initial', { now: () => 100 });
     appendStep(dir, 'followup', { now: () => 200 });
+    appendStep(dir, 'optimize', { now: () => 250 });
 
     // Add 50 lines after review
     writeFileSync(join(dir, 'big.txt'), 'line\n'.repeat(50));
@@ -254,6 +305,7 @@ describe('validateForCommit: tree mismatch + delta tolerance', () => {
     execSync('git add a.txt', { cwd: dir });
     appendStep(dir, 'initial', { now: () => 100 });
     appendStep(dir, 'followup', { now: () => 200 });
+    appendStep(dir, 'optimize', { now: () => 250 });
 
     writeFileSync(join(dir, 'b.txt'), 'line\n'.repeat(11));
     execSync('git add b.txt', { cwd: dir });
@@ -270,6 +322,7 @@ describe('validateForCommit: tree mismatch + delta tolerance', () => {
     execSync('git add a.txt', { cwd: dir });
     appendStep(dir, 'initial', { now: () => 100 });
     appendStep(dir, 'followup', { now: () => 200 });
+    appendStep(dir, 'optimize', { now: () => 250 });
 
     writeFileSync(join(dir, 'b.txt'), 'line\n'.repeat(10));
     execSync('git add b.txt', { cwd: dir });
@@ -288,6 +341,7 @@ describe('validateForCommit: tree mismatch + delta tolerance', () => {
     execSync('git add a.txt', { cwd: dir });
     appendStep(dir, 'initial', { now: () => 100 });
     appendStep(dir, 'followup', { now: () => 200 });
+    appendStep(dir, 'optimize', { now: () => 250 });
 
     writeFileSync(join(dir, 'a.txt'), 'b\n'.repeat(10));
     execSync('git add a.txt', { cwd: dir });
@@ -302,6 +356,7 @@ describe('validateForCommit: tree mismatch + delta tolerance', () => {
     execSync('git add a.txt', { cwd: dir });
     appendStep(dir, 'initial', { now: () => 100 });
     appendStep(dir, 'followup', { now: () => 200 });
+    appendStep(dir, 'optimize', { now: () => 250 });
 
     writeFileSync(join(dir, 'big.txt'), 'line\n'.repeat(11));
     execSync('git add big.txt', { cwd: dir });
@@ -323,12 +378,13 @@ describe('validateForCommit: zero-value config edge cases', () => {
     // this was silently clamped to the default via a `> 0` check.
     appendStep(dir, 'initial', { now: () => 1000 });
     appendStep(dir, 'followup', { now: () => 1100 });
+    appendStep(dir, 'optimize', { now: () => 1150 });
 
-    // 1ms after recording → already expired because maxAge is 0
+    // 1ms after the last step → already expired because maxAge is 0
     const r = validateForCommit(
       dir,
       { gateMaxAgeMinutes: 0, smallChange: { maxLines: 10 } },
-      { now: () => 1001 },
+      { now: () => 1151 },
     );
     assert.equal(r.valid, false);
     assert.match(r.reason, /Review expired/);
@@ -340,6 +396,7 @@ describe('validateForCommit: zero-value config edge cases', () => {
     execSync('git add a.txt', { cwd: dir });
     appendStep(dir, 'initial', { now: () => 100 });
     appendStep(dir, 'followup', { now: () => 200 });
+    appendStep(dir, 'optimize', { now: () => 250 });
 
     // Add even a single line after review → blocks because maxLines is 0
     writeFileSync(join(dir, 'b.txt'), 'one line\n');
@@ -358,6 +415,7 @@ describe('validateForCommit: zero-value config edge cases', () => {
   it('still falls back to defaults for negative or NaN config values', () => {
     appendStep(dir, 'initial', { now: () => 100 });
     appendStep(dir, 'followup', { now: () => 200 });
+    appendStep(dir, 'optimize', { now: () => 250 });
 
     // Negative gateMaxAgeMinutes should fall back to default 30
     const r1 = validateForCommit(
@@ -398,7 +456,7 @@ describe('validateForCommit: findLast-by-position semantics (pin test)', () => {
     execSync('git add a.txt', { cwd: dir });
     const tree = execSync('git write-tree', { cwd: dir, encoding: 'utf-8' }).trim();
 
-    // File order: initial@t=500, followup@t=1000, initial@t=200 (back in time)
+    // File order: initial@500, followup@1000, optimize@1500, initial@200 (back in time)
     // By file position:  latest initial = t=200, latest followup = t=1000
     // Order check:       1000 > 200 → PASS (followup "after" the last initial)
     // By timestamp sort: latest initial = t=500, latest followup = t=1000
@@ -410,6 +468,7 @@ describe('validateForCommit: findLast-by-position semantics (pin test)', () => {
       dir,
       JSON.stringify({ v: 1, step: 'initial', timestamp: 500, treeSha: tree }),
       JSON.stringify({ v: 1, step: 'followup', timestamp: 1000, treeSha: tree }),
+      JSON.stringify({ v: 1, step: 'optimize', timestamp: 1500, treeSha: tree }),
       JSON.stringify({ v: 1, step: 'initial', timestamp: 200, treeSha: tree }),
     );
 
@@ -456,6 +515,7 @@ describe('validateForCommit: defense-in-depth branches', () => {
   it('blocks with a safe reason when git write-tree fails via gitCmd injection', () => {
     appendStep(dir, 'initial', { now: () => 100 });
     appendStep(dir, 'followup', { now: () => 200 });
+    appendStep(dir, 'optimize', { now: () => 250 });
     const brokenGit = (args) => { throw new Error('boom'); };
     const r = validateForCommit(dir, testConfig(), { now: () => 300, gitCmd: brokenGit });
     assert.equal(r.valid, false);
@@ -465,6 +525,7 @@ describe('validateForCommit: defense-in-depth branches', () => {
   it('blocks when git write-tree returns a non-SHA string', () => {
     appendStep(dir, 'initial', { now: () => 100 });
     appendStep(dir, 'followup', { now: () => 200 });
+    appendStep(dir, 'optimize', { now: () => 250 });
     const r = validateForCommit(dir, testConfig(), {
       now: () => 300,
       gitCmd: (args) => (args === 'write-tree' ? 'not-a-sha' : ''),

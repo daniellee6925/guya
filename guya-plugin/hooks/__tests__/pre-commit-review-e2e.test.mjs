@@ -149,6 +149,37 @@ describe('pre-commit-review e2e: evidence recording via Skill calls', () => {
     assert.equal(entry.step, 'followup');
   });
 
+  it('guya-optimize skill call records an optimize step', () => {
+    const r = runHook(dir, {
+      tool_name: 'Skill',
+      tool_input: { skill: 'guya-optimize' },
+    });
+    assert.equal(r.status, 0);
+    const entry = JSON.parse(readFileSync(evidenceFile(dir), 'utf-8').trim());
+    assert.equal(entry.step, 'optimize');
+    assert.match(entry.treeSha, /^[0-9a-f]{40}$/);
+  });
+
+  it('an unrelated skill whose name merely contains "optimize" records nothing', () => {
+    // Fail-open guard: `optimize` is the LAST link in the chain, so a loose
+    // substring match would let any third-party `optimize-*` skill satisfy
+    // the final gate step after a real review + deep-review. Matchers are
+    // `guya-` anchored to prevent exactly this.
+    const r = runHook(dir, {
+      tool_name: 'Skill',
+      tool_input: { skill: 'bundler:optimize-images' },
+    });
+    assert.equal(r.status, 0);
+    assert.equal(existsSync(evidenceFile(dir)), false);
+  });
+
+  it('records the correct step for namespaced skill names (guya:guya-*)', () => {
+    // Real invocations arrive namespaced — pin that the matchers handle it.
+    runHook(dir, { tool_name: 'Skill', tool_input: { skill: 'guya:guya-deep-review' } });
+    const entry = JSON.parse(readFileSync(evidenceFile(dir), 'utf-8').trim());
+    assert.equal(entry.step, 'followup');
+  });
+
   it('non-review Skill call is a no-op', () => {
     const r = runHook(dir, {
       tool_name: 'Skill',
@@ -189,10 +220,11 @@ describe('pre-commit-review e2e: happy path and failure modes', () => {
     });
   }
 
-  it('happy path: stage → guya-review → guya-deep-review → commit allowed', () => {
+  it('happy path: stage → review → deep-review → optimize → commit allowed', () => {
     stageLargeChange();
     recordReview('guya-review');
     recordReview('guya-deep-review');
+    recordReview('guya-optimize');
     const r = attemptCommit();
     const decision = parseDecision(r.stdout);
     assert.ok(decision.continue, `expected continue:true, got ${r.stdout}`);
@@ -216,10 +248,23 @@ describe('pre-commit-review e2e: happy path and failure modes', () => {
     assert.match(decision.reason, /Missing followup/);
   });
 
+  it('blocks commit with initial + followup but no optimize pass', () => {
+    stageLargeChange();
+    recordReview('guya-review');
+    recordReview('guya-deep-review');
+    const r = attemptCommit();
+    const decision = parseDecision(r.stdout);
+    assert.equal(decision.decision, 'block');
+    assert.match(decision.reason, /Missing optimize pass/);
+    // The block text must walk the user through the full chain, in order.
+    assert.match(decision.reason, /Run \/guya-optimize on the staged files/);
+  });
+
   it('allows commit with small delta since followup (within threshold)', () => {
     stageLargeChange();
     recordReview('guya-review');
     recordReview('guya-deep-review');
+    recordReview('guya-optimize');
 
     // Add a tiny post-review fix: 3 new lines
     writeFileSync(join(dir, 'tiny.txt'), 'a\nb\nc\n');
@@ -236,6 +281,7 @@ describe('pre-commit-review e2e: happy path and failure modes', () => {
     stageLargeChange();
     recordReview('guya-review');
     recordReview('guya-deep-review');
+    recordReview('guya-optimize');
 
     // Add 30 lines of unreviewed content — above maxLines=10
     writeFileSync(join(dir, 'sneak.py'), 'x = 1\n'.repeat(30));
@@ -251,6 +297,7 @@ describe('pre-commit-review e2e: happy path and failure modes', () => {
     stageLargeChange();
     recordReview('guya-review');
     recordReview('guya-deep-review');
+    recordReview('guya-optimize');
     // Even with valid evidence, --no-verify is still blocked.
     const r = runHook(dir, {
       tool_name: 'Bash',
@@ -376,9 +423,10 @@ describe('pre-commit-review e2e: corrupt evidence lines are reported to stderr',
     // but keeps the block path clean).
     const tree = execSync('git write-tree', { cwd: dir, encoding: 'utf-8' }).trim();
     const entries = [
-      JSON.stringify({ v: 1, step: 'initial', timestamp: Date.now() - 1000, treeSha: tree }),
+      JSON.stringify({ v: 1, step: 'initial', timestamp: Date.now() - 2000, treeSha: tree }),
       '{not actually json', // corrupt line — must be reported
-      JSON.stringify({ v: 1, step: 'followup', timestamp: Date.now(), treeSha: tree }),
+      JSON.stringify({ v: 1, step: 'followup', timestamp: Date.now() - 1000, treeSha: tree }),
+      JSON.stringify({ v: 1, step: 'optimize', timestamp: Date.now(), treeSha: tree }),
     ];
     mkdirSync(join(dir, '.guya', 'evolution'), { recursive: true });
     writeFileSync(evidenceFile(dir), entries.join('\n') + '\n');
@@ -393,7 +441,7 @@ describe('pre-commit-review e2e: corrupt evidence lines are reported to stderr',
     assert.match(r.stderr, /invalid JSON/);
 
     // Validation itself should still proceed with the valid steps and
-    // pass (tree matches, both steps present) — the warning is
+    // pass (tree matches, all chain steps present) — the warning is
     // informational, not blocking.
     const decision = parseDecision(r.stdout);
     assert.ok(decision.continue, `expected continue:true, got ${r.stdout}`);
@@ -406,6 +454,7 @@ describe('pre-commit-review e2e: corrupt evidence lines are reported to stderr',
     // Use the real skill flow to populate evidence
     runHook(dir, { tool_name: 'Skill', tool_input: { skill: 'guya-review' } });
     runHook(dir, { tool_name: 'Skill', tool_input: { skill: 'guya-deep-review' } });
+    runHook(dir, { tool_name: 'Skill', tool_input: { skill: 'guya-optimize' } });
 
     const r = runHook(dir, {
       tool_name: 'Bash',

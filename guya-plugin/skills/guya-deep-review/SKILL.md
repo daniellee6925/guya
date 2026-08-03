@@ -1,12 +1,12 @@
 ---
 name: guya-deep-review
-description: Deep second-pass review after guya-review findings are fixed. Catches logic bugs, state corruption, data integrity issues, performance problems, and observability gaps that only surface once structural problems are resolved. Run after fixing guya-review findings — the pre-commit gate requires both passes. Trigger proactively after any guya-review is complete and findings are addressed.
+description: Deep second-pass review after guya-review findings are fixed. Catches logic bugs, state corruption, data integrity issues, performance problems, and observability gaps that only surface once structural problems are resolved. Run after fixing guya-review findings — this is pass 2 of the 3-pass pre-commit gate, followed by `/guya-optimize`. Trigger proactively after any guya-review is complete and findings are addressed.
 argument-hint: "<file-path or directory>"
 ---
 
 # Deep Review
 
-A second-pass review for catching bugs that are easier to miss when structural problems still exist. Run this after fixing everything guya-review found. The pre-commit gate requires both passes — this is the second one.
+A second-pass review for catching bugs that are easier to miss when structural problems still exist. Run this after fixing everything guya-review found. The pre-commit gate requires three passes in order — this is the second. `/guya-optimize` is the third.
 
 ## Step 1 — Read the Target
 
@@ -132,7 +132,7 @@ If undocumented public APIs or exports were found during review, offer to spawn 
 
 ## Step 6 — Continue or Yield
 
-This skill is often invoked mid-flow (between tasks in a multi-task phase, as the second pass of the pre-commit gate, inside a larger plan). After printing **Fixes Applied**, do NOT stop the turn by default — return control to the calling flow and proceed with the next task (e.g. the commit, the next task in the phase).
+This skill is often invoked mid-flow (between tasks in a multi-task phase, as the second pass of the pre-commit gate, inside a larger plan). After printing **Fixes Applied**, do NOT stop the turn by default — return control to the calling flow and proceed with the next task. If the flow is heading toward a commit, that next step is `/guya-optimize` — the gate blocks without it.
 
 Yield to Daniel only if one of these is true:
 - An `Action needed` item is unresolved and the next step genuinely requires his decision

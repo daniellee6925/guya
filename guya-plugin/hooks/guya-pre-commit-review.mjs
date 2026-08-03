@@ -8,7 +8,8 @@
  *   Output: { continue: true } or { decision: "block", reason: "..." }
  *
  *   Three jobs:
- *     1. On Skill call (guya-review / guya-deep-review) → record evidence
+ *     1. On Skill call (guya-review / guya-deep-review / guya-optimize)
+ *        → record the matching evidence step
  *     2. On git commit --no-verify → block
  *     3. On git commit → check exemptions, small change, evidence → allow or block
  *
@@ -160,18 +161,47 @@ function loadConfig(directory, userConfigPath = USER_CONFIG_PATH) {
 // spec. This file only wires user-facing skill detection into the module's
 // appendStep API.
 
-const REVIEW_SKILLS = ['guya-review', 'deep-review'];
+// Skill-name fragment → evidence step, matched by substring against the
+// invoked skill name (which arrives as `guya:guya-review`, `guya-review`,
+// or similar depending on invocation path).
+//
+// Every fragment is `guya-` prefixed ON PURPOSE. A loose fragment like
+// `optimize` would also match an unrelated third-party skill — and since
+// `optimize` is the LAST link in the chain, an unrelated `optimize-*` skill
+// run after a real review + deep-review would satisfy the gate and let an
+// un-optimized commit through. That is a fail-OPEN, the one direction this
+// module never accepts. Anchoring costs nothing: a legitimate invocation
+// that somehow arrived unprefixed would simply fail closed (gate blocks,
+// user re-runs), which is the safe direction.
+//
+// First match wins. With `guya-` prefixes the fragments are mutually
+// exclusive — `guya-deep-review` does not contain `guya-review` — so order
+// is no longer load-bearing; deep-review stays first as defence in depth.
+//
+// A skill matching no fragment is not a review skill at all (returns null),
+// which is what isReviewSkill keys off — replacing the old "in the list, so
+// default to initial" fallback that would have mislabelled /guya-optimize.
+const SKILL_STEP_MATCHERS = [
+  ['guya-deep-review', 'followup'],
+  ['guya-optimize', 'optimize'],
+  ['guya-review', 'initial'],
+];
+
+function matchSkillStep(toolInput) {
+  const skill = typeof toolInput === 'string' ? toolInput : (toolInput?.skill || toolInput?.name || '');
+  for (const [fragment, step] of SKILL_STEP_MATCHERS) {
+    if (skill.includes(fragment)) return step;
+  }
+  return null;
+}
 
 function isReviewSkill(toolName, toolInput) {
   if (toolName !== 'Skill' && toolName !== 'skill') return false;
-  const skill = typeof toolInput === 'string' ? toolInput : (toolInput?.skill || toolInput?.name || '');
-  return REVIEW_SKILLS.some(s => skill.includes(s));
+  return matchSkillStep(toolInput) !== null;
 }
 
 function getSkillStep(toolInput) {
-  const skill = typeof toolInput === 'string' ? toolInput : (toolInput?.skill || toolInput?.name || '');
-  if (skill.includes('deep-review')) return 'followup';
-  return 'initial';
+  return matchSkillStep(toolInput);
 }
 
 function recordReviewStep(directory, step) {
@@ -333,8 +363,11 @@ function formatReviewPrompt(stagedFiles, config) {
 2. Fix any issues found
 3. Run /guya-deep-review on the staged files
 4. Fix any issues found
-5. Retry the commit
+5. Run /guya-optimize on the staged files
+6. Apply the optimizations worth taking (it reports, it does not auto-fix)
+7. Retry the commit
 
+Run the passes in that order — the gate checks ordering, not just presence.
 The hook records evidence automatically when you run these skills.
 Review expires after ${maxAgeMinutes} minutes.
 

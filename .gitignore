@@ -16,6 +16,10 @@ guya-plugin/skills/.omc/
 # Agent replay logs (ephemeral)
 **/.omc/state/*.jsonl
 
+# Pre-commit review gate evidence (ephemeral — the post-commit scribe deletes
+# this after every successful commit, so a tracked copy is always stale state)
+**/.guya/evolution/review-evidence.jsonl
+
 # State markers
 .orphaned_at
 **/.orphaned_at

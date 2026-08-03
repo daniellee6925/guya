@@ -1,6 +1,6 @@
 # guya — Status
 
-> Last updated: 2026-06-09
+> Last updated: 2026-06-18
 
 ## Current Focus
 
@@ -46,6 +46,13 @@
 5. **nanoclaw#2 — take it or leave it.** Warm pipeline if taken now; cold restart of build+deploy if deferred.
 
 ## Recent Changes
+- [2026-06-18] `824ee8a` — chore(telos-scribe): A — T-030 same-day same-purpose dedup guard on assign_task/propose_task (nanoclaw 189b842)
+- [2026-06-12] `5c1b630` — docs(guya): task-origin feature decision doc + 2026-06-12 check-in reflection
+- [2026-06-11] `4d3e19d` — docs(adr): ADR-026 — one active session per channel + recurring-schedule carry-over on supersede
+- [2026-06-11] `214f915` — chore(telos-scribe): A — WORK tick orphan diagnosis + one-active-session fix (nanoclaw 6f432a6)
+- [2026-06-11] `7467249` — chore(telos-scribe): note constantia-dashboard launchd service on the Mini
+- [2026-06-09] `c76d12d` — chore(telos-scribe): A — reject_proposal MCP tool + morning-tick step 5(b) fix (T-024)
+- [2026-06-09] `580e4a7` — chore(scribe): record 2026-06-09 two-skill session (bugfix rebuild + guya-architecture)
 - [2026-06-09] `108a410` — feat(skills): add guya-architecture — deepening-opportunities harness
 - [2026-06-09] `ef2dde8` — feat(skills): replace guya-decision-bugfix planning harness with a diagnosis-&-fix loop
 - [2026-06-09] `d5afc8a` — chore(scribe): record 2026-06-09 pre-commit gate fixes

@@ -24,13 +24,25 @@
  * -------------------------
  * A commit is "reviewed" iff ALL of the following hold at commit time:
  *
- *   1. Both `/guya-review` and `/guya-deep-review` have been run in
- *      the current gate window (age-bounded by gateMaxAgeMinutes, default 30).
- *   2. Followup came after initial (timestamp order).
+ *   1. Every step in REQUIRED_CHAIN — `/guya-review`, `/guya-deep-review`,
+ *      and `/guya-optimize` — has been run in the current gate window
+ *      (age-bounded by gateMaxAgeMinutes, default 30).
+ *   2. They ran in chain order, each strictly after the previous one
+ *      (timestamp order): initial → followup → optimize.
  *   3. The current staged tree SHA either:
- *      (a) MATCHES the tree SHA captured at the most recent review step, OR
+ *      (a) MATCHES the tree SHA captured at the LAST chain step, OR
  *      (b) differs by at most `smallChange.maxLines` (same threshold as
  *          the existing small-change exemption — no new knob).
+ *
+ * Why `/guya-optimize` is in the chain: review and deep-review both hunt
+ * for defects — things that are wrong. Neither asks whether the code that
+ * is correct should exist in that shape at all. Optimize is the only pass
+ * that surfaces simplification, algorithmic, and resource trade-offs, and
+ * it is report-only by design (see its SKILL.md — optimizations trade
+ * readability against speed, so a human decides). Its evidence therefore
+ * means "the trade-offs were surfaced and consciously accepted", NOT
+ * "fixes were applied". A commit that skipped it is a commit where nobody
+ * asked the simplification question.
  *
  * Tree SHA = `git write-tree` output. Git's own canonical identity of the
  * current index state: two tree SHAs match iff every staged file is
@@ -51,10 +63,11 @@
  *
  *   {"v":1,"step":"initial","timestamp":1712345678900,"treeSha":"abc...40hex"}
  *   {"v":1,"step":"followup","timestamp":1712345679900,"treeSha":"def...40hex"}
+ *   {"v":1,"step":"optimize","timestamp":1712345680900,"treeSha":"012...40hex"}
  *
  * Fields:
  *   v         : schema version, currently 1
- *   step      : "initial" | "followup"
+ *   step      : "initial" | "followup" | "optimize"
  *   timestamp : ms since epoch (Date.now)
  *   treeSha   : 40-char hex, output of `git write-tree` at the time the
  *               step was recorded, captures the exact staged state that
@@ -99,10 +112,12 @@
  *   - Every line corrupt                 → "Evidence file unreadable: no valid entries"
  *   - Missing `initial` step             → "Missing initial review. Run /guya-review first."
  *   - Missing `followup` step            → "Missing followup review. Run /guya-deep-review after fixing issues."
- *   - Followup before initial            → "Followup must come after initial review."
+ *   - Missing `optimize` step            → "Missing optimize pass. Run /guya-optimize after the deep review."
+ *   - Followup not after initial         → "Initial review ran after followup. ..."
+ *   - Optimize not after followup        → "Deep review ran after the optimize pass. ..."
  *   - Stale (age > gateMaxAgeMinutes)    → "Review expired (Xmin ago, max Ymin)."
  *   - Missing treeSha on latest step     → "Evidence file pre-dates content-hash check. Re-run both review steps."
- *   - Tree mismatch, delta > threshold   → "X lines changed since review (max Y). Re-run /guya-deep-review or reduce scope."
+ *   - Tree mismatch, delta > threshold   → "X lines changed since review (max Y). Re-run <last chain step> or reduce scope."
  *   - Tree mismatch, delta ≤ threshold   → PASS (logs note, accepts as small post-review fix)
  *   - Tree match                         → PASS
  *
@@ -134,7 +149,60 @@ import { execSync } from 'child_process';
 export const SCHEMA_VERSION = 1;
 export const EVIDENCE_FILENAME = 'review-evidence.jsonl';
 export const OLD_EVIDENCE_FILENAME = 'review-evidence.json';
-export const VALID_STEPS = Object.freeze(['initial', 'followup']);
+
+// Adding `optimize` did NOT bump SCHEMA_VERSION: `v` gates the field SHAPE
+// (which keys exist, what types), and that is unchanged — only the `step`
+// enum grew. The degradation path is safe in the one direction that can
+// actually happen: a stale reader (e.g. an un-synced plugin cache copy)
+// rejects an `optimize` line as an unknown step, readEvidence tolerates it
+// as a corrupt line, and validateForCommit then blocks on "missing optimize".
+// Fail closed, with a message that names the fix. A version bump would
+// instead invalidate every existing line and block on "unknown schema
+// version", which is strictly less useful.
+export const VALID_STEPS = Object.freeze(['initial', 'followup', 'optimize']);
+
+/**
+ * The required review chain, in the order the steps must occur.
+ *
+ * This is the single source of truth for the gate contract: presence,
+ * ordering, and every user-facing block message derive from it. Adding or
+ * reordering a pass means editing this array — validateForCommit walks it
+ * generically and needs no change.
+ *
+ * Fields per link:
+ *   step       : the evidence `step` value the skill records
+ *   skill      : the slash command that records it (used in messages)
+ *   missing    : block reason when no entry for this step exists
+ *   outOfOrder : block reason when this step's latest entry is NOT strictly
+ *                after the previous link's latest entry. Non-null for every
+ *                link except the first, which has nothing to precede it.
+ */
+export const REQUIRED_CHAIN = Object.freeze([
+  Object.freeze({
+    step: 'initial',
+    skill: '/guya-review',
+    missing: 'Missing initial review. Run /guya-review first.',
+    outOfOrder: null,
+  }),
+  Object.freeze({
+    step: 'followup',
+    skill: '/guya-deep-review',
+    missing: 'Missing followup review. Run /guya-deep-review after fixing issues.',
+    outOfOrder: 'Initial review ran after followup. Re-run /guya-deep-review on the current state.',
+  }),
+  Object.freeze({
+    step: 'optimize',
+    skill: '/guya-optimize',
+    missing: 'Missing optimize pass. Run /guya-optimize after the deep review.',
+    outOfOrder: 'Deep review ran after the optimize pass. Re-run /guya-optimize on the current state.',
+  }),
+]);
+
+// The tree-identity check pins the LAST chain step, so that's the pass a
+// user must re-run when the staged state drifts past the delta tolerance.
+// Derived rather than hardcoded so reordering REQUIRED_CHAIN can't leave
+// the block messages pointing at a step that is no longer last.
+const LAST_CHAIN_SKILL = REQUIRED_CHAIN[REQUIRED_CHAIN.length - 1].skill;
 
 const SHA40_RE = /^[0-9a-f]{40}$/i;
 
@@ -388,35 +456,58 @@ export function validateForCommit(directory, config, options = {}) {
   }
 
   // --- Step presence + order ---
-
-  const latestInitial = read.steps.findLast((s) => s.step === 'initial');
-  const latestFollowup = read.steps.findLast((s) => s.step === 'followup');
-
-  if (!latestInitial) {
-    return { valid: false, reason: 'Missing initial review. Run /guya-review first.' };
+  //
+  // Walk REQUIRED_CHAIN in order, checking presence and ordering together
+  // rather than in two separate passes. Interleaving matters: with a
+  // presence-only pass first, a chain that reset (re-ran an earlier step)
+  // but never reached the last step would report the LAST missing step
+  // instead of the ordering violation that actually invalidated it —
+  // pointing the user at the wrong fix.
+  //
+  // Each link must be strictly after the previous one. Re-running an
+  // earlier step resets the "reviewed" invariant: the later passes were
+  // performed against a state the earlier pass has since re-opened.
+  const chain = [];
+  for (const link of REQUIRED_CHAIN) {
+    const entry = read.steps.findLast((s) => s.step === link.step);
+    if (!entry) {
+      return { valid: false, reason: link.missing };
+    }
+    const prev = chain[chain.length - 1];
+    if (prev && entry.timestamp <= prev.entry.timestamp) {
+      return { valid: false, reason: link.outOfOrder };
+    }
+    chain.push({ link, entry });
   }
-  if (!latestFollowup) {
+
+  // Defense in depth, and it matters more here than the usual "unreachable"
+  // guard: the CALLER (guya-pre-commit-review.mjs main()) wraps everything
+  // in a catch-all that returns `{ continue: true }` — deliberately, so a
+  // crashed hook never bricks committing. The consequence is that ANY
+  // exception thrown out of this function silently ALLOWS the commit. A
+  // fail-open is the one direction this module never accepts, so validation
+  // must not throw even on states that "cannot happen".
+  //
+  // An empty REQUIRED_CHAIN would leave `chain` empty and make the
+  // `chain[0].entry` deref below a TypeError — i.e. a gate bypass caused by
+  // a future edit to a constant three lines long. Fail closed instead.
+  if (chain.length === 0) {
     return {
       valid: false,
-      reason: 'Missing followup review. Run /guya-deep-review after fixing issues.',
+      reason: 'Review chain is misconfigured (no required steps). Gate cannot validate — fix REQUIRED_CHAIN.',
     };
   }
-  if (latestFollowup.timestamp <= latestInitial.timestamp) {
-    // Re-running initial after a followup resets the "reviewed" invariant —
-    // the followup no longer applies to the post-initial state.
-    return {
-      valid: false,
-      reason: 'Initial review ran after followup. Re-run /guya-deep-review on the current state.',
-    };
-  }
+
+  const firstStep = chain[0].entry;
+  const lastStep = chain[chain.length - 1].entry;
 
   // --- Age ---
   //
-  // Bound by the initial step timestamp (the earliest required step in the
-  // chain). "How long ago did this review cycle start" is the cleaner
-  // stale signal than "when was the last refresh." Re-running initial
-  // resets the clock because latestInitial advances.
-  const age = now() - latestInitial.timestamp;
+  // Bound by the FIRST chain step's timestamp (the earliest required step).
+  // "How long ago did this review cycle start" is the cleaner stale signal
+  // than "when was the last refresh." Re-running the first step resets the
+  // clock because its latest entry advances.
+  const age = now() - firstStep.timestamp;
   const maxAgeMs = maxAgeMinutes * 60 * 1000;
   if (age > maxAgeMs) {
     return {
@@ -427,11 +518,11 @@ export function validateForCommit(directory, config, options = {}) {
 
   // --- Content identity ---
   //
-  // The latest followup's treeSha is "what was reviewed" — the exact
-  // staged state at the most recent followup pass. We enforced above
-  // that followup.timestamp > initial.timestamp, so latestFollowup is
-  // also the most recent step overall.
-  const reviewedTreeSha = latestFollowup.treeSha;
+  // The LAST chain step's treeSha is "what was reviewed" — the exact staged
+  // state at the final pass. The strict ordering enforced above makes it
+  // the most recent chain step overall, so anything staged after it is
+  // unreviewed by definition.
+  const reviewedTreeSha = lastStep.treeSha;
   if (!reviewedTreeSha || !SHA40_RE.test(reviewedTreeSha)) {
     // Defense in depth — parseLine already rejects bad treeSha, so this
     // branch should be unreachable unless the schema changes. Fail closed.
@@ -480,7 +571,7 @@ export function validateForCommit(directory, config, options = {}) {
       if (added === '-' || removed === '-') {
         return {
           valid: false,
-          reason: 'Binary file changed since review. Re-run /guya-deep-review.',
+          reason: `Binary file changed since review. Re-run ${LAST_CHAIN_SKILL}.`,
         };
       }
       const a = parseInt(added, 10);
@@ -491,7 +582,7 @@ export function validateForCommit(directory, config, options = {}) {
   } catch (err) {
     return {
       valid: false,
-      reason: `Could not compute delta since review: ${err?.message || String(err)}. Re-run /guya-deep-review.`,
+      reason: `Could not compute delta since review: ${err?.message || String(err)}. Re-run ${LAST_CHAIN_SKILL}.`,
     };
   }
 
@@ -507,7 +598,7 @@ export function validateForCommit(directory, config, options = {}) {
 
   return {
     valid: false,
-    reason: `${deltaLines} lines changed since review (max ${maxDeltaLines}). Re-run /guya-deep-review or reduce scope.`,
+    reason: `${deltaLines} lines changed since review (max ${maxDeltaLines}). Re-run ${LAST_CHAIN_SKILL} or reduce scope.`,
   };
 }
 

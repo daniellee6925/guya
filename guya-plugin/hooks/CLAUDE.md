@@ -52,6 +52,8 @@ Single registered hook for `PreToolUse:Bash`. Reads stdin once, then invokes `gu
 ### guya-pre-commit-review.mjs
 Intercepts `git commit` Bash commands before they execute. Reads `.guya/evolution/review-evidence.jsonl` to confirm a review was performed this cycle. Blocks the commit with an explanatory message if evidence is missing or stale. The gate is reset by `guya-post-commit-scribe.mjs` after each successful commit. Invoked by the dispatcher on `PreToolUse:Bash`, and directly on `PreToolUse:Skill` (skill matcher does not collide with the dedup bug).
 
+**Three-pass chain (ADR-027).** The gate requires `/guya-review` → `/guya-deep-review` → `/guya-optimize`, in that order, inside the same age window. `SKILL_STEP_MATCHERS` maps skill-name fragments to evidence steps; first match wins, so `deep-review` is listed before `guya-review`. A skill matching no fragment is not a review skill — this replaced an older "in the list, so default to `initial`" fallback that would have recorded `/guya-optimize` as an initial review.
+
 **Per-repo opt-out (`config.disabled`).** A repo whose `.guya/pre-commit-config.json` sets `"disabled": true` short-circuits the gate (strict `=== true`) before any staged-file parsing — used by Constantia, a pure prose/data repo whose own `.git/hooks/pre-commit` validates frontmatter and where code review has nothing to check. Does NOT touch the user-wide default, so code repos stay gated.
 
 **Shell-expansion add-tokens (`isShellExpansion`).** `getStagedFiles` scrapes `git add` arguments out of the *raw, pre-shell* command string as a TOCTOU supplement. A token containing `$ \` * ? [ ] { }` is an unexpanded shell construct, not a literal path, and is dropped (the `git diff --cached` source covers the real staged state). Without this, `git add "$LOG" && git commit` counted the literal `$LOG` as a non-exempt file and false-blocked every variable-based commit — see Regression History.
@@ -94,6 +96,10 @@ Exports:
 
 ### review-evidence.mjs
 Shared utility (not a hook script). Reads and writes `.guya/evolution/review-evidence.jsonl`. Used by `guya-pre-commit-review.mjs` to check for evidence and by the review skills to record it.
+
+`REQUIRED_CHAIN` is the single source of truth for the gate contract — step order, which skill records each step, and every user-facing block message. `validateForCommit` walks it generically, so adding or reordering a pass means editing that array and nothing else. Presence and ordering are checked **interleaved**, link by link, not in two passes: a chain that reset at an early link must report that ordering violation rather than the last missing step, or the user gets sent to re-run the wrong pass. The tree-identity check pins the **last** chain step, and `LAST_CHAIN_SKILL` derives the "re-run this" message from the array so it can't go stale.
+
+Adding `optimize` did not bump `SCHEMA_VERSION` — `v` gates field shape, which is unchanged; only the `step` enum grew. A stale reader (un-synced plugin cache) rejects the unknown step as a corrupt line and then blocks on "missing optimize", which is the correct fail-closed direction.
 
 ### hook-utils.mjs
 Shared utilities used across multiple hooks:
