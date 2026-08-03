@@ -1,6 +1,6 @@
 # guya — Status
 
-> Last updated: 2026-08-02
+> Last updated: 2026-08-03
 
 ## Current Focus
 
@@ -46,6 +46,7 @@
 5. **nanoclaw#2 — take it or leave it.** Warm pipeline if taken now; cold restart of build+deploy if deferred.
 
 ## Recent Changes
+- [2026-08-03] `a7d7459` — feat(skills): add /guya-audit and /guya-resolve
 - [2026-08-02] `cb3200e` — fix(plugin): resolve plugin root through symlinked installs
 - [2026-08-02] `17993ad` — feat(gate): three-pass pre-commit chain + symlinked plugin install
 - [2026-06-18] `824ee8a` — chore(telos-scribe): A — T-030 same-day same-purpose dedup guard on assign_task/propose_task (nanoclaw 189b842)
