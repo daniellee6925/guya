@@ -46,6 +46,7 @@
 5. **nanoclaw#2 — take it or leave it.** Warm pipeline if taken now; cold restart of build+deploy if deferred.
 
 ## Recent Changes
+- [2026-08-03] `42a8212` — feat(guya-audit): add config, idempotency, persistence, observability angles
 - [2026-08-03] `0b80210` — chore(scribe): record angle-set revision
 - [2026-08-03] `67ffae3` — refactor(guya-audit): reframe scale as growth; add silent-failure angle
 - [2026-08-03] `41b7bc7` — chore(scribe): record guya-audit angle refactor
