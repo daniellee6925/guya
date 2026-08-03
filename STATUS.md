@@ -46,6 +46,7 @@
 5. **nanoclaw#2 — take it or leave it.** Warm pipeline if taken now; cold restart of build+deploy if deferred.
 
 ## Recent Changes
+- [2026-08-03] `1a0a7cf` — refactor(guya-audit): 11-angle agent fan-out; file via /guya-issue
 - [2026-08-03] `6cfc9c6` — chore(scribe): record /guya-audit + /guya-resolve session
 - [2026-08-03] `a7d7459` — feat(skills): add /guya-audit and /guya-resolve
 - [2026-08-02] `cb3200e` — fix(plugin): resolve plugin root through symlinked installs
